@@ -251,6 +251,36 @@ test('a name already claimed by a different clientId is rejected, whether new or
   );
 });
 
+test('a name held by an OUT_OF_SERVICE (abandoned) client can be reclaimed by a new registration', () => {
+  const { registry } = buildTestServices();
+  const abandoned = registerResource(registry, { clientId: 'old-uuid', name: 'lab-01', type: 'sw', labels: [] });
+  registry.markOutOfService(abandoned.id);
+
+  const { resourceId } = registry.registerAuto({ clientId: 'new-uuid', name: 'lab-01', type: 'hw', labels: ['x'] });
+
+  assert.equal(resourceId, abandoned.id); // took over the same row, not a duplicate
+  const reclaimed = registry.get(resourceId);
+  assert.equal(reclaimed.client_id, 'new-uuid');
+  assert.equal(reclaimed.type, 'hw');
+  assert.equal(reclaimed.status, RESOURCE_STATES.REGISTERED);
+  assert.equal(registry.list().length, 1);
+});
+
+test('a name held by an OUT_OF_SERVICE client can be reclaimed via a rename too, without duplicating the row', () => {
+  const { registry } = buildTestServices();
+  const abandoned = registerResource(registry, { clientId: 'old-uuid', name: 'lab-02', type: 'sw', labels: [] });
+  registry.markOutOfService(abandoned.id);
+  const renaming = registerResource(registry, { clientId: 'live-uuid', name: 'my-bench', type: 'sw', labels: [] });
+
+  const { resourceId } = registry.registerAuto({ clientId: 'live-uuid', name: 'lab-02', type: 'sw', labels: [] });
+
+  assert.equal(resourceId, renaming.id);
+  assert.equal(registry.get(renaming.id).name, 'lab-02');
+  // The abandoned row is still there (history preserved), just renamed out of the way.
+  assert.equal(registry.list().length, 2);
+  assert.equal(registry.get(abandoned.id).name, `lab-02__stale-${abandoned.id}`);
+});
+
 test('a legacy resource with no clientId (pre-dates the feature) is adopted by name on first registration', () => {
   const { db, registry } = buildTestServices();
   const resource = registerResource(registry, { clientId: 'will-be-overwritten', name: 'legacy-01', type: 'sw', labels: [] });

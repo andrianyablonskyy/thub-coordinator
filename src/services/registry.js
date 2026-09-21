@@ -61,9 +61,13 @@ function createRegistryService(db, { bus, events }) {
   //
   // A resource created before clientId existed (client_id IS NULL) is
   // adopted by name the first time its Client presents one, rather than
-  // rejected as a name conflict — but a name already claimed by a
-  // *different* clientId is a real conflict (409), whether that's the
-  // brand-new-resource path or a rename of an existing one.
+  // rejected as a name conflict. A name already claimed by a *different*,
+  // still-live clientId is a real conflict (409) — but if that claim is
+  // OUT_OF_SERVICE (no heartbeat in a while — e.g. its .client-id file was
+  // lost or its host is gone for good), it's abandoned, not squatted, and
+  // this registration is allowed to reclaim it. Anything else (IDLE, BUSY,
+  // MAINTENANCE, REGISTERED-but-just-created) means a process might still
+  // be actively using that identity, so it stays a hard conflict.
   function registerAuto({ clientId, name, type, labels = [], hostInfo }) {
     const resourceToken = generateToken('res');
     let existing = getByClientId(clientId);
@@ -71,18 +75,30 @@ function createRegistryService(db, { bus, events }) {
     if (!existing) {
       const nameOwner = getByName(name);
       if (nameOwner) {
-        if (nameOwner.client_id && nameOwner.client_id !== clientId) {
+        const abandoned = nameOwner.status === RESOURCE_STATES.OUT_OF_SERVICE;
+        if (nameOwner.client_id && nameOwner.client_id !== clientId && !abandoned) {
           throw Object.assign(
-            new Error(`Resource name "${name}" is already registered by a different client`),
+            new Error(
+              `Resource name "${name}" is already registered by a different client (status: ${nameOwner.status})`
+            ),
             { status: 409 }
           );
         }
-        existing = nameOwner; // legacy row (pre-dates client_id) — adopt it
+        existing = nameOwner; // legacy row, same client, or a reclaimed abandoned one
       }
     } else if (existing.name !== name) {
       const nameOwner = getByName(name);
       if (nameOwner && nameOwner.id !== existing.id) {
-        throw Object.assign(new Error(`Resource name "${name}" is already used by another client`), { status: 409 });
+        if (nameOwner.status !== RESOURCE_STATES.OUT_OF_SERVICE) {
+          throw Object.assign(
+            new Error(`Resource name "${name}" is already used by another client (status: ${nameOwner.status})`),
+            { status: 409 }
+          );
+        }
+        // nameOwner is a different, abandoned row squatting on the name
+        // `existing` wants to rename into — free it (not delete: keeps its
+        // job history intact) instead of hitting the UNIQUE constraint.
+        db.prepare('UPDATE resources SET name = ? WHERE id = ?').run(`${nameOwner.name}__stale-${nameOwner.id}`, nameOwner.id);
       }
     }
 
