@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { EventEmitter } = require('node:events');
 
 const { openDb } = require('../src/db');
-const { bus } = require('../src/services/bus');
 const { createEventsService } = require('../src/services/events');
 const { createRegistryService } = require('../src/services/registry');
 const { createAgentsService } = require('../src/services/agents');
@@ -19,6 +19,11 @@ const { JOB_STATES, RESOURCE_STATES } = require('@thub/shared');
 
 function buildTestServices(overrides = {}) {
   const db = openDb(':memory:');
+  // Own bus per test, not the module-level singleton (production's
+  // there's-only-one-Coordinator-process bus) — sharing it across every
+  // test in this file would pile up listeners test after test with no
+  // teardown, eventually tripping Node's MaxListenersExceededWarning.
+  const bus = new EventEmitter();
   const events = createEventsService(db);
   const registry = createRegistryService(db, { bus, events });
   const agents = createAgentsService(db, { events });
@@ -40,8 +45,8 @@ function buildTestServices(overrides = {}) {
   return { db, registry, agents, artifacts, jobs, scheduler, heartbeatMonitor, artifactsDir };
 }
 
-function registerResource(registry, { name, type, labels = [] }) {
-  const { resourceId } = registry.registerAuto({ name, type, labels });
+function registerResource(registry, { name, type, labels = [], clientId } = {}) {
+  const { resourceId } = registry.registerAuto({ clientId: clientId || `client-${name}`, name, type, labels });
   return registry.get(resourceId);
 }
 
@@ -191,7 +196,12 @@ test('resource re-registration overwrites type/labels/status and marks its stale
   assert.equal(registry.get(resource.id).status, RESOURCE_STATES.BUSY);
 
   // Simulate the daemon crashing and restarting with a changed config.
-  const { resourceId } = registry.registerAuto({ name: 'lab-hw-01', type: 'sw', labels: ['board:b'] });
+  const { resourceId } = registry.registerAuto({
+    clientId: 'client-lab-hw-01',
+    name: 'lab-hw-01',
+    type: 'sw',
+    labels: ['board:b'],
+  });
   assert.equal(resourceId, resource.id);
 
   const reregistered = registry.get(resource.id);
@@ -210,7 +220,46 @@ test('resource re-registration does not clear an admin-set MAINTENANCE status', 
   registry.heartbeat(resource.id, { state: 'idle' });
   registry.setMaintenance(resource.id, true);
 
-  registry.registerAuto({ name: 'lab-sw-02', type: 'sw', labels: [] });
+  registry.registerAuto({ clientId: 'client-lab-sw-02', name: 'lab-sw-02', type: 'sw', labels: [] });
 
   assert.equal(registry.get(resource.id).status, RESOURCE_STATES.MAINTENANCE);
+});
+
+test('renaming a Client (same clientId, new name) updates the same resource in place', () => {
+  const { registry } = buildTestServices();
+  const resource = registerResource(registry, { clientId: 'stable-uuid-1', name: 'old-name', type: 'sw', labels: [] });
+
+  const { resourceId } = registry.registerAuto({ clientId: 'stable-uuid-1', name: 'new-name', type: 'sw', labels: [] });
+
+  assert.equal(resourceId, resource.id);
+  assert.equal(registry.get(resource.id).name, 'new-name');
+  assert.equal(registry.list().length, 1); // not a second resource
+});
+
+test('a name already claimed by a different clientId is rejected, whether new or a rename', () => {
+  const { registry } = buildTestServices();
+  registerResource(registry, { clientId: 'uuid-a', name: 'shared-name', type: 'sw', labels: [] });
+  registerResource(registry, { clientId: 'uuid-b', name: 'other-name', type: 'sw', labels: [] });
+
+  assert.throws(
+    () => registry.registerAuto({ clientId: 'uuid-c', name: 'shared-name', type: 'sw', labels: [] }),
+    /already registered by a different client/
+  );
+  assert.throws(
+    () => registry.registerAuto({ clientId: 'uuid-b', name: 'shared-name', type: 'sw', labels: [] }),
+    /already used by another client/
+  );
+});
+
+test('a legacy resource with no clientId (pre-dates the feature) is adopted by name on first registration', () => {
+  const { db, registry } = buildTestServices();
+  const resource = registerResource(registry, { clientId: 'will-be-overwritten', name: 'legacy-01', type: 'sw', labels: [] });
+  // Simulate a pre-migration row: no client_id yet.
+  db.prepare('UPDATE resources SET client_id = NULL WHERE id = ?').run(resource.id);
+
+  const { resourceId } = registry.registerAuto({ clientId: 'brand-new-uuid', name: 'legacy-01', type: 'sw', labels: ['x'] });
+
+  assert.equal(resourceId, resource.id); // adopted, not duplicated
+  assert.equal(registry.get(resource.id).client_id, 'brand-new-uuid');
+  assert.equal(registry.list().length, 1);
 });

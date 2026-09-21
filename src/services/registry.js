@@ -22,6 +22,10 @@ function createRegistryService(db, { bus, events }) {
     return rowToResource(db.prepare('SELECT * FROM resources WHERE name = ?').get(name));
   }
 
+  function getByClientId(clientId) {
+    return rowToResource(db.prepare('SELECT * FROM resources WHERE client_id = ?').get(clientId));
+  }
+
   function getByTokenHash(tokenHash) {
     return rowToResource(db.prepare('SELECT * FROM resources WHERE token_hash = ?').get(tokenHash));
   }
@@ -42,21 +46,45 @@ function createRegistryService(db, { bus, events }) {
   }
 
   // Self-service registration: gated by the shared client join key (checked
-  // by the caller), not by an admin having pre-created the resource. A
-  // Client declares its own name/type/labels; the Coordinator upserts by
-  // name so a restarted Client (or one that lost its token file) can just
-  // register again and pick up where it left off.
+  // by the caller), not by an admin having pre-created the resource.
   //
-  // On every (re)registration — i.e. every Client start/restart — type,
-  // labels and host_info are fully overwritten (not merged) from what the
-  // Client declares right now, since the Client is the source of truth for
-  // its own current identity/capabilities, and status is reset to
-  // REGISTERED (clearing any stale BUSY/OUT_OF_SERVICE left over from a
-  // crashed previous process) unless an admin had explicitly put it in
-  // MAINTENANCE, which re-registering doesn't override.
-  function registerAuto({ name, type, labels = [], hostInfo }) {
+  // Identity is `clientId` — a UUID the Client generates once and persists
+  // in its own .client-id file (§5.1/§8.6) — not `name`. That's what makes
+  // this a genuine update-in-place rather than a rename-creates-a-new-
+  // resource operation: name, type, labels and host_info are all fully
+  // overwritten (not merged) from what the Client declares *this* time,
+  // since the Client is the source of truth for its own current identity/
+  // capabilities, and status resets to REGISTERED (clearing any stale
+  // BUSY/OUT_OF_SERVICE left over from a crashed previous process) unless
+  // an admin had explicitly put it in MAINTENANCE, which re-registering
+  // doesn't override.
+  //
+  // A resource created before clientId existed (client_id IS NULL) is
+  // adopted by name the first time its Client presents one, rather than
+  // rejected as a name conflict — but a name already claimed by a
+  // *different* clientId is a real conflict (409), whether that's the
+  // brand-new-resource path or a rename of an existing one.
+  function registerAuto({ clientId, name, type, labels = [], hostInfo }) {
     const resourceToken = generateToken('res');
-    const existing = getByName(name);
+    let existing = getByClientId(clientId);
+
+    if (!existing) {
+      const nameOwner = getByName(name);
+      if (nameOwner) {
+        if (nameOwner.client_id && nameOwner.client_id !== clientId) {
+          throw Object.assign(
+            new Error(`Resource name "${name}" is already registered by a different client`),
+            { status: 409 }
+          );
+        }
+        existing = nameOwner; // legacy row (pre-dates client_id) — adopt it
+      }
+    } else if (existing.name !== name) {
+      const nameOwner = getByName(name);
+      if (nameOwner && nameOwner.id !== existing.id) {
+        throw Object.assign(new Error(`Resource name "${name}" is already used by another client`), { status: 409 });
+      }
+    }
 
     if (existing) {
       // A fresh process registering is a definitive signal that whatever
@@ -71,13 +99,23 @@ function createRegistryService(db, { bus, events }) {
 
       db.prepare(
         `UPDATE resources
-         SET token_hash = ?, type = ?, labels = ?, host_info = ?,
+         SET token_hash = ?, client_id = ?, name = ?, type = ?, labels = ?, host_info = ?,
              status = ?, busy_source = NULL, busy_reason = NULL
          WHERE id = ?`
-      ).run(hashToken(resourceToken), type, JSON.stringify(labels), JSON.stringify(hostInfo || {}), nextStatus, existing.id);
+      ).run(
+        hashToken(resourceToken),
+        clientId,
+        name,
+        type,
+        JSON.stringify(labels),
+        JSON.stringify(hostInfo || {}),
+        nextStatus,
+        existing.id
+      );
 
       events.record('resource', existing.id, 'resource.registered', {
         hostInfo,
+        name,
         type,
         labels,
         reregistered: true,
@@ -87,8 +125,8 @@ function createRegistryService(db, { bus, events }) {
 
     const id = `res_${uuid()}`;
     db.prepare(
-      `INSERT INTO resources (id, name, type, status, labels, host_info, token_hash, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO resources (id, name, type, status, labels, host_info, token_hash, client_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       name,
@@ -97,6 +135,7 @@ function createRegistryService(db, { bus, events }) {
       JSON.stringify(labels),
       JSON.stringify(hostInfo || {}),
       hashToken(resourceToken),
+      clientId,
       new Date().toISOString()
     );
 
@@ -228,6 +267,7 @@ function createRegistryService(db, { bus, events }) {
   return {
     get,
     getByName,
+    getByClientId,
     getByTokenHash,
     list,
     registerAuto,

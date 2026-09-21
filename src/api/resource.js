@@ -36,11 +36,15 @@ function createResourceRouter({ services, config }) {
   // the resource by name (see registry.registerAuto).
   router.post('/resources/register', requireJoinKey(config), (req, res, next) => {
     try {
-      const { name, type, labels, hostInfo, capabilities } = req.body;
+      const { clientId, name, type, labels, hostInfo, capabilities } = req.body;
+      if (!clientId) {
+        return res.status(400).json({ error: 'clientId is required (persisted in the Client\'s .client-id file)' });
+      }
       if (!name || !['hw', 'sw'].includes(type)) {
         return res.status(400).json({ error: 'name and type (hw|sw) are required' });
       }
       const { resourceId, resourceToken } = services.registry.registerAuto({
+        clientId,
         name,
         type,
         labels: labels || capabilities?.labels || [],
