@@ -1,0 +1,53 @@
+extends ../layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-3
+    h1.h4.mb-0 Agents (CI / developers)
+    button.btn.btn-primary.btn-sm(type="button" data-bs-toggle="modal" data-bs-target="#addAgentModal") Register agent
+
+  if newToken
+    .alert.alert-warning
+      strong Token (shown once):
+      |
+      code= newToken
+
+  table.table.table-hover.align-middle
+    thead
+      tr
+        th Name
+        th Kind
+        th Created
+        th Last used
+        th Status
+        th
+    tbody
+      each a in agents
+        tr(class=a.revoked_at ? 'opacity-50' : '')
+          td= a.name
+          td.text-uppercase= a.kind
+          td= new Date(a.created_at).toLocaleString()
+          td= a.last_used_at ? new Date(a.last_used_at).toLocaleString() : 'never'
+          td= a.revoked_at ? 'revoked' : 'active'
+          td
+            if !a.revoked_at
+              form(method="post" action=`/admin/agents/${a.id}/revoke` onsubmit="return confirm('Revoke this agent token?')")
+                button.btn.btn-sm.btn-outline-danger(type="submit") Revoke
+
+  .modal(tabindex="-1" id="addAgentModal")
+    .modal-dialog
+      .modal-content
+        form(method="post" action="/admin/agents")
+          .modal-header
+            h5.modal-title Register agent
+            button.btn-close(type="button" data-bs-dismiss="modal")
+          .modal-body
+            .mb-3
+              label.form-label Name
+              input.form-control(type="text" name="name" placeholder="ci-firmware or jane.dev" required)
+            .mb-3
+              label.form-label Kind
+              select.form-select(name="kind")
+                option(value="ci") ci
+                option(value="cli") cli
+          .modal-footer
+            button.btn.btn-primary(type="submit") Create

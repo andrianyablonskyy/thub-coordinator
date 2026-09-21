@@ -1,0 +1,81 @@
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+// Defaults mirror README.md §13 (/srv/thub/coordinator.json).
+const DEFAULTS = {
+  listen: '127.0.0.1:8080',
+  publicUrl: 'http://localhost:8080',
+  dataDir: path.join(process.cwd(), '.data'),
+  sessionSecret: 'dev-only-change-me',
+  // Shared secret Clients present to self-register (see api/resource.js).
+  // null disables auto-registration entirely — set it explicitly to turn it on.
+  clientJoinKey: null,
+  heartbeat: {
+    intervalSec: 10,
+    missedLimit: 3,
+    sweepIntervalSec: 5,
+  },
+  scheduler: {
+    assignAckTimeoutSec: 15,
+    requeueOnLost: true,
+    maxQueuedPerAgent: 20,
+    tickIntervalSec: 10,
+  },
+  jobs: {
+    defaultTimeoutSec: 1800,
+    maxTimeoutSec: 14400,
+  },
+  retention: {
+    logRetentionDays: 14,
+    artifactRetentionDays: 30,
+  },
+  artifacts: {
+    maxUploadMb: 512,
+    linkTtlHours: 168,
+  },
+};
+
+function deepMerge(base, override) {
+  if (!override) return base;
+  const out = { ...base };
+  for (const [k, v] of Object.entries(override)) {
+    out[k] = v && typeof v === 'object' && !Array.isArray(v) ? deepMerge(base[k] || {}, v) : v;
+  }
+  return out;
+}
+
+// Bundled with the package so the Coordinator has something sane to run
+// with out of the box; a real deployment overrides it with
+// THUB_COORDINATOR_CONFIG or /srv/thub/coordinator.json (§13).
+const PACKAGE_DEFAULT_CONFIG_PATH = path.join(__dirname, '..', 'config.json');
+
+function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG) {
+  const candidate = [configPath, PACKAGE_DEFAULT_CONFIG_PATH].find(
+    (p) => p && fs.existsSync(p)
+  );
+  const fileConfig = candidate ? JSON.parse(fs.readFileSync(candidate, 'utf8')) || {} : {};
+  const config = deepMerge(DEFAULTS, fileConfig);
+
+  // Environment overrides for the bits you don't want in a committed file.
+  if (process.env.THUB_LISTEN) config.listen = process.env.THUB_LISTEN;
+  if (process.env.THUB_PUBLIC_URL) config.publicUrl = process.env.THUB_PUBLIC_URL;
+  if (process.env.THUB_DATA_DIR) config.dataDir = process.env.THUB_DATA_DIR;
+  if (process.env.THUB_SESSION_SECRET) config.sessionSecret = process.env.THUB_SESSION_SECRET;
+  if (process.env.THUB_CLIENT_JOIN_KEY) config.clientJoinKey = process.env.THUB_CLIENT_JOIN_KEY;
+
+  const [host, port] = config.listen.split(':');
+  config.host = host;
+  config.port = Number(port);
+  config.dbPath = path.join(config.dataDir, 'thub.db');
+  config.artifactsDir = path.join(config.dataDir, 'artifacts');
+  config.workDir = path.join(config.dataDir, 'work');
+
+  fs.mkdirSync(config.dataDir, { recursive: true });
+  fs.mkdirSync(config.artifactsDir, { recursive: true });
+
+  return config;
+}
+
+module.exports = { loadConfig, DEFAULTS };

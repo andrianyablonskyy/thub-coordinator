@@ -1,0 +1,23 @@
+{
+  "name": "@thub/coordinator",
+  "version": "1.0.0",
+  "description": "TestHub Coordinator — job queue, resource registry, scheduler, heartbeat monitor, log/artifact store and web dashboard",
+  "main": "src/server.js",
+  "bin": {
+    "thub-admin": "./bin/thub-admin.js"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@thub/shared": "*",
+    "better-sqlite3": "^12.4.1",
+    "express": "^5.1.0",
+    "express-session": "^1.18.2",
+    "js-yaml": "^4.1.0",
+    "multer": "^2.0.2",
+    "pug": "^3.0.3",
+    "uuid": "^11.1.0"
+  }
+}

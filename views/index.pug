@@ -1,0 +1,37 @@
+extends layout
+include mixins/status-badge
+
+block content
+  h1.h4.mb-2 Overview
+
+  .row.g-3.mb-4
+    .col-md-4
+      .card
+        .card-body
+          h6.card-subtitle.mb-2.text-body-secondary Queue length
+          p.display-6= queueLength
+    .col-md-4
+      .card
+        .card-body
+          h6.card-subtitle.mb-2.text-body-secondary Jobs in last 24h
+          p.display-6= jobsLast24h
+    .col-md-4
+      .card
+        .card-body
+          h6.card-subtitle.mb-2.text-body-secondary Resources online
+          p.display-6= `${onlineCount} / ${resources.length}`
+
+  .row.g-3
+    each r in resources
+      .col-sm-6.col-md-4.col-lg-3
+        .card.h-100(class=`border-${{IDLE:'success',BUSY:'primary',OUT_OF_SERVICE:'danger',MAINTENANCE:'secondary',REGISTERED:'secondary'}[r.status] || 'secondary'}`)
+          .card-body
+            h5.card-title= r.name
+            p.card-text.mb-1
+              +resourceBadge(r.status)
+              |
+              = ' ' + r.type.toUpperCase()
+            if r.busy_source
+              p.card-text.small.text-body-secondary busy: #{r.busy_source} #{r.busy_reason ? '— ' + r.busy_reason : ''}
+            p.card-text.small.text-body-secondary
+              | heartbeat: #{r.last_heartbeat_at ? new Date(r.last_heartbeat_at).toLocaleString() : 'never'}

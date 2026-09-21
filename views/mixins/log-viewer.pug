@@ -1,0 +1,10 @@
+mixin logViewer(jobId)
+  .mb-2
+    select#stream-filter.form-select.form-select-sm.w-auto.d-inline-block
+      option(value="") all streams
+      option(value="uart") uart
+      option(value="runner") runner
+      option(value="flash") flash
+      option(value="emulator") emulator
+  pre#log-viewer.bg-body-tertiary.p-3.rounded(style="height: 420px; overflow-y: auto;" data-job-id=jobId)
+  script(src="/js/log-viewer.js")

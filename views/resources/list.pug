@@ -1,0 +1,37 @@
+extends ../layout
+include ../mixins/status-badge
+
+block content
+  h1.h4.mb-3 Resources
+  p.text-body-secondary.small.
+    Resources register themselves — start a Client with the shared join key and it appears here.
+
+  table.table.table-hover.align-middle
+    thead
+      tr
+        th Name
+        th Type
+        th Status
+        th Labels
+        th Busy source / reason
+        th Last heartbeat
+        if user.role === 'admin'
+          th Actions
+    tbody
+      each r in resources
+        tr
+          td= r.name
+          td.text-uppercase= r.type
+          td: +resourceBadge(r.status)
+          td
+            each l in r.labels
+              span.badge.text-bg-light.border.me-1= l
+          td= r.busy_source ? `${r.busy_source}${r.busy_reason ? ' — ' + r.busy_reason : ''}` : '—'
+          td= r.last_heartbeat_at ? new Date(r.last_heartbeat_at).toLocaleString() : 'never'
+          if user.role === 'admin'
+            td
+              form.d-inline(method="post" action=`/resources/${r.id}/maintenance`)
+                input(type="hidden" name="enabled" value=r.status === 'MAINTENANCE' ? '0' : '1')
+                button.btn.btn-sm.btn-outline-secondary(type="submit")= r.status === 'MAINTENANCE' ? 'Enable' : 'Disable'
+              form.d-inline.ms-1(method="post" action=`/resources/${r.id}/rotate-token` onsubmit="return confirm('Rotate token? The Client will need the new one.')")
+                button.btn.btn-sm.btn-outline-warning(type="submit") Rotate token

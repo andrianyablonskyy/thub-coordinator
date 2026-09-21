@@ -1,0 +1,30 @@
+{
+  "listen": "127.0.0.1:8000",
+  "publicUrl": "http://localhost",
+  "dataDir": "./tmp/srv/thub",
+  "sessionSecret": "change-me-to-a-long-random-string",
+  "clientJoinKey": "change-me-to-a-long-random-string",
+  "heartbeat": {
+    "intervalSec": 10,
+    "missedLimit": 3,
+    "sweepIntervalSec": 5
+  },
+  "scheduler": {
+    "assignAckTimeoutSec": 15,
+    "requeueOnLost": true,
+    "maxQueuedPerAgent": 20,
+    "tickIntervalSec": 10
+  },
+  "jobs": {
+    "defaultTimeoutSec": 1800,
+    "maxTimeoutSec": 14400
+  },
+  "retention": {
+    "logRetentionDays": 14,
+    "artifactRetentionDays": 30
+  },
+  "artifacts": {
+    "maxUploadMb": 512,
+    "linkTtlHours": 168
+  }
+}

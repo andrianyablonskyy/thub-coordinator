@@ -1,0 +1,7 @@
+mixin resourceBadge(status)
+  - const map = { IDLE: 'success', BUSY: 'primary', OUT_OF_SERVICE: 'danger', MAINTENANCE: 'secondary', REGISTERED: 'secondary' }
+  span.badge(class=`text-bg-${map[status] || 'secondary'}`)= status
+
+mixin jobBadge(state)
+  - const map = { QUEUED: 'secondary', ASSIGNED: 'info', PREPARING: 'info', RUNNING: 'primary', PASSED: 'success', FAILED: 'danger', ERROR: 'danger', TIMEOUT: 'warning', CANCELED: 'secondary', LOST: 'danger' }
+  span.badge(class=`text-bg-${map[state] || 'secondary'}`)= state

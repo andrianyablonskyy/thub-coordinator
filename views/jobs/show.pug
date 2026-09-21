@@ -1,0 +1,39 @@
+extends ../layout
+include ../mixins/status-badge
+include ../mixins/log-viewer
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-3
+    h1.h4.mb-0
+      = job.id
+      |
+      +jobBadge(job.state)
+    if canCancel
+      form(method="post" action=`/jobs/${job.id}/cancel`)
+        button.btn.btn-outline-danger.btn-sm(type="submit") Cancel
+
+  dl.row
+    dt.col-sm-2 Source
+    dd.col-sm-10.text-uppercase= job.source
+    dt.col-sm-2 Resource
+    dd.col-sm-10= job.resource ? job.resource.name : '—'
+    dt.col-sm-2 Target
+    dd.col-sm-10= `${job.spec.target.type} — ${(job.spec.target.labels || []).join(', ')}`
+    dt.col-sm-2 Created
+    dd.col-sm-10= new Date(job.created_at).toLocaleString()
+    if job.message
+      dt.col-sm-2 Message
+      dd.col-sm-10= job.message
+
+  h2.h6.mt-4 Log
+  +logViewer(job.id)
+
+  h2.h6.mt-4#artifacts Artifacts
+  if artifacts.length
+    ul.list-group
+      each a in artifacts
+        li.list-group-item.d-flex.justify-content-between
+          span= a.name
+          a(href=a.url) download
+  else
+    p.text-body-secondary No artifacts yet.

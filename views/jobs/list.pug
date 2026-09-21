@@ -1,0 +1,36 @@
+extends ../layout
+include ../mixins/status-badge
+
+block content
+  h1.h4.mb-3 Jobs
+
+  form.row.g-2.mb-3(method="get")
+    .col-auto
+      select.form-select.form-select-sm(name="state" onchange="this.form.submit()")
+        option(value="") any state
+        each s in ['QUEUED','ASSIGNED','PREPARING','RUNNING','PASSED','FAILED','ERROR','TIMEOUT','CANCELED','LOST']
+          option(value=s selected=filters.state === s)= s
+    .col-auto
+      select.form-select.form-select-sm(name="source" onchange="this.form.submit()")
+        option(value="") any source
+        option(value="ci" selected=filters.source === 'ci') ci
+        option(value="cli" selected=filters.source === 'cli') cli
+
+  table.table.table-hover.align-middle
+    thead
+      tr
+        th Job
+        th Source
+        th State
+        th Resource
+        th Created
+        th Finished
+    tbody
+      each j in jobs
+        tr
+          td: a(href=`/jobs/${j.id}`)= j.id
+          td.text-uppercase= j.source
+          td: +jobBadge(j.state)
+          td= j.resource ? j.resource.name : '—'
+          td= new Date(j.created_at).toLocaleString()
+          td= j.finished_at ? new Date(j.finished_at).toLocaleString() : '—'
