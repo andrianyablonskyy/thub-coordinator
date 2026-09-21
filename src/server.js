@@ -10,6 +10,7 @@ const { bus } = require('./services/bus');
 const { createEventsService } = require('./services/events');
 const { createRegistryService } = require('./services/registry');
 const { createAgentsService } = require('./services/agents');
+const { createGroupsService } = require('./services/groups');
 const { createAdminUsersService } = require('./services/admin-users');
 const { createJobsService } = require('./services/jobs');
 const { createScheduler } = require('./services/scheduler');
@@ -29,6 +30,7 @@ function buildServices(config) {
   const events = createEventsService(db);
   const registry = createRegistryService(db, { bus, events });
   const agents = createAgentsService(db, { events });
+  const groups = createGroupsService(db, { events, registry });
   const adminUsers = createAdminUsersService(db);
   const commands = createCommandsService({ bus });
   const logs = createLogsService(db, { bus });
@@ -52,6 +54,7 @@ function buildServices(config) {
     events,
     registry,
     agents,
+    groups,
     adminUsers,
     commands,
     jobs,

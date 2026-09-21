@@ -74,10 +74,11 @@ function createJobsService(db, { bus, events, registry, artifacts, config }) {
     }
     spec.source = source;
 
-    if (!registry.everSatisfiable(spec.target.type, spec.target.labels)) {
+    if (!registry.everSatisfiable(spec.target.type, spec.target.labels, spec.target.group)) {
       throw Object.assign(
         new Error(
-          `No registered resource can ever satisfy type=${spec.target.type} labels=${spec.target.labels.join(',')}`
+          `No registered resource can ever satisfy type=${spec.target.type} labels=${spec.target.labels.join(',')}` +
+            (spec.target.group ? ` group=${spec.target.group}` : '')
         ),
         { status: 422 }
       );

@@ -13,6 +13,7 @@ block content
         th Type
         th Status
         th Labels
+        th Groups
         th Busy source / reason
         th Last heartbeat
         if user.role === 'admin'
@@ -26,6 +27,12 @@ block content
           td
             each l in r.labels
               span.badge.text-bg-light.border.me-1= l
+          td
+            if r.group_ids.length
+              each gid in r.group_ids
+                span.badge.text-bg-info.me-1(title=gid)= groupsById[gid] ? groupsById[gid].name : `(unknown: ${gid})`
+            else
+              span.text-body-secondary —
           td= r.busy_source ? `${r.busy_source}${r.busy_reason ? ' — ' + r.busy_reason : ''}` : '—'
           td= r.last_heartbeat_at ? new Date(r.last_heartbeat_at).toLocaleString() : 'never'
           if user.role === 'admin'

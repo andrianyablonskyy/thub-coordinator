@@ -11,6 +11,7 @@ const { openDb } = require('../src/db');
 const { createEventsService } = require('../src/services/events');
 const { createRegistryService } = require('../src/services/registry');
 const { createAgentsService } = require('../src/services/agents');
+const { createGroupsService } = require('../src/services/groups');
 const { createArtifactsService } = require('../src/services/artifacts');
 const { createJobsService } = require('../src/services/jobs');
 const { createScheduler } = require('../src/services/scheduler');
@@ -27,6 +28,7 @@ function buildTestServices(overrides = {}) {
   const events = createEventsService(db);
   const registry = createRegistryService(db, { bus, events });
   const agents = createAgentsService(db, { events });
+  const groups = createGroupsService(db, { events, registry });
   const artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'thub-test-artifacts-'));
   const config = {
     scheduler: { assignAckTimeoutSec: 15, requeueOnLost: true, maxQueuedPerAgent: 20, tickIntervalSec: 3600 },
@@ -42,11 +44,11 @@ function buildTestServices(overrides = {}) {
   const jobs = createJobsService(db, { bus, events, registry, artifacts, config });
   const scheduler = createScheduler(db, { bus, events, registry, config });
   const heartbeatMonitor = createHeartbeatMonitor(db, { bus, events, registry, jobs, config });
-  return { db, registry, agents, artifacts, jobs, scheduler, heartbeatMonitor, artifactsDir };
+  return { db, registry, agents, groups, artifacts, jobs, scheduler, heartbeatMonitor, artifactsDir };
 }
 
-function registerResource(registry, { name, type, labels = [], clientId } = {}) {
-  const { resourceId } = registry.registerAuto({ clientId: clientId || `client-${name}`, name, type, labels });
+function registerResource(registry, { name, type, labels = [], groups = [], clientId } = {}) {
+  const { resourceId } = registry.registerAuto({ clientId: clientId || `client-${name}`, name, type, labels, groups });
   return registry.get(resourceId);
 }
 
@@ -292,4 +294,69 @@ test('a legacy resource with no clientId (pre-dates the feature) is adopted by n
   assert.equal(resourceId, resource.id); // adopted, not duplicated
   assert.equal(registry.get(resource.id).client_id, 'brand-new-uuid');
   assert.equal(registry.list().length, 1);
+});
+
+test('a job with target.group only schedules onto resources that are members of that group', () => {
+  const { registry, agents, groups, jobs, scheduler } = buildTestServices();
+  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
+  const groupA = groups.create({ name: 'group-a' });
+  const groupB = groups.create({ name: 'group-b' });
+
+  const inGroupA = registerResource(registry, { name: 'lab-a', type: 'sw', groups: [groupA.id] });
+  const inGroupB = registerResource(registry, { name: 'lab-b', type: 'sw', groups: [groupB.id] });
+  registry.heartbeat(inGroupA.id, { state: 'idle' });
+  registry.heartbeat(inGroupB.id, { state: 'idle' });
+
+  const job = jobs.create({
+    agentId: agent.id,
+    source: 'cli',
+    spec: makeSpec({ target: { type: 'sw', labels: [], group: groupA.id } }),
+  });
+  scheduler.runPass();
+
+  const assigned = jobs.get(job.id);
+  assert.equal(assigned.state, JOB_STATES.ASSIGNED);
+  assert.equal(assigned.resource_id, inGroupA.id); // not inGroupB, despite being IDLE and type-matching
+});
+
+test('a job with target.group is rejected (422) when no resource is ever a member of that group', () => {
+  const { registry, agents, groups, jobs } = buildTestServices();
+  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
+  const group = groups.create({ name: 'empty-group' });
+  registerResource(registry, { name: 'lab-01', type: 'sw', groups: [] }); // exists, but not a member
+
+  assert.throws(
+    () =>
+      jobs.create({
+        agentId: agent.id,
+        source: 'cli',
+        spec: makeSpec({ target: { type: 'sw', labels: [], group: group.id } }),
+      }),
+    /No registered resource/
+  );
+});
+
+test('a resource can belong to several groups at once', () => {
+  const { registry, groups } = buildTestServices();
+  const g1 = groups.create({ name: 'g1' });
+  const g2 = groups.create({ name: 'g2' });
+
+  const resource = registerResource(registry, { name: 'multi-group', type: 'sw', groups: [g1.id, g2.id] });
+
+  assert.deepEqual(registry.get(resource.id).group_ids, [g1.id, g2.id]);
+});
+
+test('deleting a group strips it from every resource that listed it, without touching the resource otherwise', () => {
+  const { registry, groups } = buildTestServices();
+  const g1 = groups.create({ name: 'to-delete' });
+  const g2 = groups.create({ name: 'keep-me' });
+  const resource = registerResource(registry, { name: 'lab-01', type: 'sw', labels: ['x'], groups: [g1.id, g2.id] });
+
+  groups.remove(g1.id);
+
+  const after = registry.get(resource.id);
+  assert.deepEqual(after.group_ids, [g2.id]);
+  assert.deepEqual(after.labels, ['x']); // untouched
+  assert.equal(groups.get(g1.id), undefined);
+  assert.ok(groups.get(g2.id));
 });

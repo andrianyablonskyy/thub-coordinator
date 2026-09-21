@@ -21,6 +21,8 @@ html(lang="en" data-bs-theme="auto")
               li.nav-item
                 a.nav-link(href="/resources" class=active === 'resources' ? 'active' : '') Resources
               li.nav-item
+                a.nav-link(href="/groups" class=active === 'groups' ? 'active' : '') Groups
+              li.nav-item
                 a.nav-link(href="/jobs" class=active === 'jobs' ? 'active' : '') Jobs
               if user.role === 'admin'
                 li.nav-item
@@ -55,4 +57,5 @@ html(lang="en" data-bs-theme="auto")
     script(src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js")
     script(src="/js/theme.js")
     script(src="/js/tooltips.js")
+    script(src="/js/copy-to-clipboard.js")
     block scripts

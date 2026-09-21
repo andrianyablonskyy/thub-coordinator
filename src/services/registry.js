@@ -9,6 +9,7 @@ function rowToResource(row) {
   return {
     ...row,
     labels: JSON.parse(row.labels || '[]'),
+    group_ids: JSON.parse(row.group_ids || '[]'),
     host_info: row.host_info ? JSON.parse(row.host_info) : null,
   };
 }
@@ -68,7 +69,7 @@ function createRegistryService(db, { bus, events }) {
   // this registration is allowed to reclaim it. Anything else (IDLE, BUSY,
   // MAINTENANCE, REGISTERED-but-just-created) means a process might still
   // be actively using that identity, so it stays a hard conflict.
-  function registerAuto({ clientId, name, type, labels = [], hostInfo }) {
+  function registerAuto({ clientId, name, type, labels = [], groups = [], hostInfo }) {
     const resourceToken = generateToken('res');
     let existing = getByClientId(clientId);
 
@@ -115,7 +116,7 @@ function createRegistryService(db, { bus, events }) {
 
       db.prepare(
         `UPDATE resources
-         SET token_hash = ?, client_id = ?, name = ?, type = ?, labels = ?, host_info = ?,
+         SET token_hash = ?, client_id = ?, name = ?, type = ?, labels = ?, group_ids = ?, host_info = ?,
              status = ?, busy_source = NULL, busy_reason = NULL
          WHERE id = ?`
       ).run(
@@ -124,6 +125,7 @@ function createRegistryService(db, { bus, events }) {
         name,
         type,
         JSON.stringify(labels),
+        JSON.stringify(groups),
         JSON.stringify(hostInfo || {}),
         nextStatus,
         existing.id
@@ -134,6 +136,7 @@ function createRegistryService(db, { bus, events }) {
         name,
         type,
         labels,
+        groups,
         reregistered: true,
       });
       return { resourceId: existing.id, resourceToken };
@@ -141,22 +144,28 @@ function createRegistryService(db, { bus, events }) {
 
     const id = `res_${uuid()}`;
     db.prepare(
-      `INSERT INTO resources (id, name, type, status, labels, host_info, token_hash, client_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO resources (id, name, type, status, labels, group_ids, host_info, token_hash, client_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       name,
       type,
       RESOURCE_STATES.REGISTERED,
       JSON.stringify(labels),
+      JSON.stringify(groups),
       JSON.stringify(hostInfo || {}),
       hashToken(resourceToken),
       clientId,
       new Date().toISOString()
     );
 
-    events.record('resource', id, 'resource.registered', { name, type, hostInfo, reregistered: false });
+    events.record('resource', id, 'resource.registered', { name, type, hostInfo, groups, reregistered: false });
     return { resourceId: id, resourceToken };
+  }
+
+  function setGroups(resourceId, groupIds) {
+    db.prepare('UPDATE resources SET group_ids = ? WHERE id = ?').run(JSON.stringify(groupIds), resourceId);
+    return get(resourceId);
   }
 
   // Reconcile status from a heartbeat's self-reported state (§5.1).
@@ -267,17 +276,21 @@ function createRegistryService(db, { bus, events }) {
     );
   }
 
-  function findIdleCandidates(type, labels) {
+  function findIdleCandidates(type, labels, groupId) {
     const rows = db
       .prepare("SELECT * FROM resources WHERE status = ? AND type = ?")
       .all(RESOURCE_STATES.IDLE, type)
       .map(rowToResource);
-    return rows.filter((r) => labels.every((l) => r.labels.includes(l)));
+    return rows.filter(
+      (r) => labels.every((l) => r.labels.includes(l)) && (!groupId || r.group_ids.includes(groupId))
+    );
   }
 
-  function everSatisfiable(type, labels) {
+  function everSatisfiable(type, labels, groupId) {
     const rows = db.prepare('SELECT * FROM resources WHERE type = ?').all(type).map(rowToResource);
-    return rows.some((r) => labels.every((l) => r.labels.includes(l)));
+    return rows.some(
+      (r) => labels.every((l) => r.labels.includes(l)) && (!groupId || r.group_ids.includes(groupId))
+    );
   }
 
   return {
@@ -287,6 +300,7 @@ function createRegistryService(db, { bus, events }) {
     getByTokenHash,
     list,
     registerAuto,
+    setGroups,
     heartbeat,
     setLocalLock,
     markOutOfService,

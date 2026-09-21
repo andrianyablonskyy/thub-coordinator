@@ -14,6 +14,7 @@ const { bus } = require('../src/services/bus');
 const { createEventsService } = require('../src/services/events');
 const { createRegistryService } = require('../src/services/registry');
 const { createAgentsService } = require('../src/services/agents');
+const { createGroupsService } = require('../src/services/groups');
 const { createAdminUsersService } = require('../src/services/admin-users');
 const { createArtifactsService } = require('../src/services/artifacts');
 const { createJobsService } = require('../src/services/jobs');
@@ -27,6 +28,9 @@ function usage() {
   thub-admin resource maintenance <resourceId> --on|--off
   thub-admin jobs reset --yes     Cancel every queued/assigned/preparing/running job
   thub-admin jobs clean --yes     Permanently delete finished jobs, logs and artifacts
+  thub-admin group add <name> [--comment <text>]
+  thub-admin group list
+  thub-admin group remove <groupId>
 `);
 }
 
@@ -66,6 +70,7 @@ function main() {
   const adminUsers = createAdminUsersService(db);
   const artifacts = createArtifactsService(db, { config });
   const jobs = createJobsService(db, { bus, events, registry, artifacts, config });
+  const groups = createGroupsService(db, { events, registry });
 
   if (cmd === 'create-admin') {
     const { positional, flags } = parseFlags([sub, ...rest].filter(Boolean));
@@ -121,6 +126,31 @@ function main() {
     }
     const deleted = jobs.cleanHistory();
     console.log(`Deleted ${deleted} finished job(s) and their logs/artifacts.`);
+    return;
+  }
+
+  if (cmd === 'group' && sub === 'add') {
+    const { positional, flags } = parseFlags(rest);
+    const [name] = positional;
+    if (!name) return usage(), process.exit(4);
+    const group = groups.create({ name, comment: flags.comment });
+    console.log(`Group ${group.id} created ("${group.name}"). Use it with: thub run --group ${group.id}`);
+    return;
+  }
+
+  if (cmd === 'group' && sub === 'list') {
+    for (const g of groups.list()) {
+      console.log(`${g.id}  ${g.name}${g.comment ? '  — ' + g.comment : ''}`);
+    }
+    return;
+  }
+
+  if (cmd === 'group' && sub === 'remove') {
+    const { positional } = parseFlags(rest);
+    const [groupId] = positional;
+    if (!groupId) return usage(), process.exit(4);
+    groups.remove(groupId);
+    console.log(`Group ${groupId} removed.`);
     return;
   }
 

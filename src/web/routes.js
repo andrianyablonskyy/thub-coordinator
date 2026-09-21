@@ -54,7 +54,13 @@ function createWebRouter({ services, config }) {
   });
 
   router.get('/resources', (req, res) => {
-    res.render('resources/list', { title: 'Resources', active: 'resources', resources: services.registry.list() });
+    const groupsById = Object.fromEntries(services.groups.list().map((g) => [g.id, g]));
+    res.render('resources/list', {
+      title: 'Resources',
+      active: 'resources',
+      resources: services.registry.list(),
+      groupsById,
+    });
   });
 
   router.post('/resources/:id/maintenance', requireAdminRole, (req, res) => {
@@ -131,6 +137,39 @@ function createWebRouter({ services, config }) {
 
   router.get('/jobs/:id/stream', (req, res) => {
     attachJobStream(req, res, { jobId: req.params.id, services, config });
+  });
+
+  // Resource groups (§13.1) — their own page since they're a distinct
+  // concept from both Resources (which declare membership in their own
+  // Client config) and Agents. Viewable by anyone logged in; only admins
+  // can create/rename/delete.
+  router.get('/groups', (req, res) => {
+    const groups = services.groups.list().map((g) => ({
+      ...g,
+      resourceCount: services.registry.list().filter((r) => r.group_ids.includes(g.id)).length,
+    }));
+    res.render('groups/list', {
+      title: 'Groups',
+      active: 'groups',
+      groups,
+      canManage: req.session.user.role === 'admin',
+    });
+  });
+
+  router.post('/groups', requireAdminRole, (req, res) => {
+    services.groups.create({ name: req.body.name, comment: req.body.comment });
+    res.redirect('/groups');
+  });
+
+  router.post('/groups/:id', requireAdminRole, (req, res) => {
+    services.groups.update(req.params.id, { name: req.body.name, comment: req.body.comment });
+    res.redirect('/groups');
+  });
+
+  router.post('/groups/:id/delete', requireAdminRole, (req, res) => {
+    services.groups.remove(req.params.id);
+    flash(req, 'warning', 'Group deleted; any resource that listed it just stopped matching on it.');
+    res.redirect('/groups');
   });
 
   router.get('/admin/agents', requireAdminRole, (req, res) => {

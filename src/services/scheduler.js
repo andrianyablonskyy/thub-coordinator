@@ -25,7 +25,7 @@ function createScheduler(db, { bus, events, registry, config }) {
 
       for (const job of queued) {
         const candidates = registry
-          .findIdleCandidates(job.spec.target.type, job.spec.target.labels || [])
+          .findIdleCandidates(job.spec.target.type, job.spec.target.labels || [], job.spec.target.group)
           .filter((r) => !claimedResourceIds.has(r.id));
         if (candidates.length === 0) continue;
 

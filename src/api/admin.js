@@ -57,6 +57,36 @@ function createAdminRouter({ services }) {
     res.json({ deleted });
   });
 
+  // Resource groups (§13.1) — membership itself is declared by each
+  // Client's own config (`groups: [...]`), not managed here.
+  router.get('/groups', (req, res) => {
+    res.json({ groups: services.groups.list() });
+  });
+
+  router.post('/groups', (req, res, next) => {
+    try {
+      const { name, comment } = req.body;
+      if (!name) return res.status(400).json({ error: 'name is required' });
+      res.status(201).json(services.groups.create({ name, comment }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/groups/:id', (req, res, next) => {
+    try {
+      const { name, comment } = req.body;
+      res.json(services.groups.update(req.params.id, { name, comment }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete('/groups/:id', (req, res) => {
+    services.groups.remove(req.params.id);
+    res.status(204).end();
+  });
+
   return router;
 }
 

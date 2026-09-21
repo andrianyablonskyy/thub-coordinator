@@ -1,0 +1,94 @@
+extends ../layout
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-3
+    h1.h4.mb-0 Groups
+    if canManage
+      button.btn.btn-primary.btn-sm(type="button" data-bs-toggle="modal" data-bs-target="#addGroupModal") Add group
+
+  p.text-body-secondary.small.
+    A job can be constrained to run only on resources in a group with `thub run --group &lt;id&gt;` (§13.1).
+    A resource joins a group by listing its id under `groups` in the Client's own config — membership isn't set here.
+
+  if groups.length
+    table.table.table-hover.align-middle
+      thead
+        tr
+          th Name
+          th ID
+          th Comment
+          th Resources
+          th Created
+          if canManage
+            th Actions
+      tbody
+        each g in groups
+          tr
+            td= g.name
+            td
+              code.small.me-1= g.id
+              button.btn.btn-sm.btn-outline-secondary.copy-btn(
+                type="button"
+                aria-label="Copy group ID to clipboard"
+                data-bs-toggle="tooltip"
+                data-bs-title="Copy to clipboard"
+                data-copy=g.id
+              )
+                i.bi.bi-clipboard
+            td= g.comment || '—'
+            td= g.resourceCount
+            td= new Date(g.created_at).toLocaleString()
+            if canManage
+              td
+                button.btn.btn-sm.btn-outline-secondary(type="button" data-bs-toggle="modal" data-bs-target=`#editGroupModal-${g.id}`) Edit
+                form.d-inline.ms-1(method="post" action=`/groups/${g.id}/delete` onsubmit="return confirm('Delete this group? Any resource listing it will just stop matching on it.')")
+                  button.btn.btn-sm.btn-outline-danger(type="submit") Delete
+
+              .modal(tabindex="-1" id=`editGroupModal-${g.id}`)
+                .modal-dialog
+                  .modal-content
+                    form(method="post" action=`/groups/${g.id}`)
+                      .modal-header
+                        h5.modal-title Edit group
+                        button.btn-close(type="button" data-bs-dismiss="modal")
+                      .modal-body
+                        .mb-3
+                          label.form-label Name
+                          input.form-control(type="text" name="name" value=g.name required)
+                        .mb-3
+                          label.form-label Comment
+                          textarea.form-control(name="comment" rows="2")= g.comment || ''
+                        p.text-body-secondary.small.mb-0
+                          | ID:
+                          code.me-1= g.id
+                          button.btn.btn-sm.btn-outline-secondary.copy-btn(
+                            type="button"
+                            aria-label="Copy group ID to clipboard"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Copy to clipboard"
+                            data-copy=g.id
+                          )
+                            i.bi.bi-clipboard
+                      .modal-footer
+                        button.btn.btn-primary(type="submit") Save
+  else
+    p.text-body-secondary No groups yet.
+
+  if canManage
+    .modal(tabindex="-1" id="addGroupModal")
+      .modal-dialog
+        .modal-content
+          form(method="post" action="/groups")
+            .modal-header
+              h5.modal-title Add group
+              button.btn-close(type="button" data-bs-dismiss="modal")
+            .modal-body
+              .mb-3
+                label.form-label Name
+                input.form-control(type="text" name="name" placeholder="ci-nightly" required)
+              .mb-3
+                label.form-label Comment
+                textarea.form-control(name="comment" rows="2" placeholder="Optional")
+              p.text-body-secondary.small.mb-0 The group's id (a UUID) is generated once it's created.
+            .modal-footer
+              button.btn.btn-primary(type="submit") Create
