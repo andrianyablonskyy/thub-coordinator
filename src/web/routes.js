@@ -106,18 +106,27 @@ function createWebRouter({ services, config }) {
     if (!job) return res.status(404).send('Not found');
     job.resource = job.resource_id ? services.registry.get(job.resource_id) : null;
     const artifacts = services.artifacts.listForJob(job.id).map((a) => ({ ...a, url: services.artifacts.signedUrl(a) }));
+    const jobActive = ACTIVE_JOB_STATES.has(job.state);
     res.render('jobs/show', {
       title: job.id,
       active: 'jobs',
       job,
       artifacts,
-      canCancel: req.session.user.role === 'admin' && ACTIVE_JOB_STATES.has(job.state),
+      jobActive,
+      canCancel: req.session.user.role === 'admin' && jobActive,
     });
   });
 
   router.post('/jobs/:id/cancel', requireAdminRole, (req, res) => {
     services.jobs.cancel(req.params.id, { isAdmin: true });
     res.redirect(`/jobs/${req.params.id}`);
+  });
+
+  // Plain, one-shot fetch — used by the log viewer for a job that's
+  // already finished, so it doesn't open a live connection (§SSE) for
+  // output that will never change again.
+  router.get('/jobs/:id/logs', (req, res) => {
+    res.json({ lines: services.logs.listSince(req.params.id, 0) });
   });
 
   router.get('/jobs/:id/stream', (req, res) => {

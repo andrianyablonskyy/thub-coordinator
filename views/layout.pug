@@ -5,6 +5,7 @@ html(lang="en" data-bs-theme="auto")
     meta(name="viewport" content="width=device-width, initial-scale=1")
     title= title ? `${title} · TestHub` : 'TestHub'
     link(rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css")
+    link(rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css")
     link(rel="stylesheet" href="/css/thub.css")
   body
     nav.navbar.navbar-expand-lg.bg-body-tertiary.border-bottom
@@ -26,12 +27,26 @@ html(lang="en" data-bs-theme="auto")
                   a.nav-link(href="/admin/agents" class=active === 'agents' ? 'active' : '') Agents
           ul.navbar-nav
             li.nav-item.d-flex.align-items-center.me-3
-              button#theme-toggle.btn.btn-sm.btn-outline-secondary(type="button") Toggle theme
+              button#theme-toggle.btn.btn-sm.btn-outline-secondary(
+                type="button"
+                aria-label="Toggle theme"
+                data-bs-toggle="tooltip"
+                data-bs-placement="bottom"
+                data-bs-title="Switch between light and dark theme"
+              )
+                i.bi.bi-circle-half
             if user
               li.nav-item.navbar-text.me-3= `${user.username} (${user.role})`
-              li.nav-item
+              li.nav-item.d-flex.align-items-center
                 form(action="/logout" method="post")
-                  button.btn.btn-sm.btn-outline-danger(type="submit") Log out
+                  button.btn.btn-sm.btn-outline-danger(
+                    type="submit"
+                    aria-label="Log out"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    data-bs-title="Sign out of the dashboard"
+                  )
+                    i.bi.bi-box-arrow-right
     main.container.py-4
       if messages && messages.length
         each m in messages
@@ -39,4 +54,5 @@ html(lang="en" data-bs-theme="auto")
       block content
     script(src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js")
     script(src="/js/theme.js")
+    script(src="/js/tooltips.js")
     block scripts

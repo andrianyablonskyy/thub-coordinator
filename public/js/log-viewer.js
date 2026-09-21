@@ -2,6 +2,7 @@
   const pre = document.getElementById('log-viewer');
   if (!pre) return;
   const jobId = pre.dataset.jobId;
+  const jobActive = pre.dataset.jobActive === 'true';
   const filter = document.getElementById('stream-filter');
   const lines = [];
 
@@ -12,6 +13,25 @@
       .map((l) => `[${l.ts}] [${l.stream}] ${l.line}`)
       .join('\n');
     pre.scrollTop = pre.scrollHeight;
+  }
+
+  filter.addEventListener('change', render);
+
+  // Already finished when the page loaded: the output will never change
+  // again, so just fetch it once — no EventSource, no live connection, no
+  // reload. (Opening a stream here used to trigger an auto-reload once it
+  // immediately got the job's "end" event, which reloaded the page, which
+  // re-opened the stream, which reloaded again — an infinite loop for
+  // anyone viewing a finished job.)
+  if (!jobActive) {
+    fetch(`/jobs/${jobId}/logs`)
+      .then((r) => r.json())
+      .then(({ lines: fetched }) => {
+        lines.push(...fetched);
+        render();
+      })
+      .catch(() => {});
+    return;
   }
 
   const source = new EventSource(`/jobs/${jobId}/stream`);
@@ -29,11 +49,11 @@
     lines.push({ ts: new Date().toISOString(), stream: 'state', line: `job finished: ${state}` });
     render();
     source.close();
+    // The job was active when we opened this page and just finished —
+    // reload once to pick up the now-final badge/artifacts list.
     setTimeout(() => window.location.reload(), 1500);
   });
   source.onerror = () => {
     // EventSource auto-reconnects; nothing to do here.
   };
-
-  filter.addEventListener('change', render);
 })();

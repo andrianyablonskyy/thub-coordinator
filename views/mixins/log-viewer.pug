@@ -1,4 +1,4 @@
-mixin logViewer(jobId)
+mixin logViewer(jobId, jobActive)
   .mb-2
     select#stream-filter.form-select.form-select-sm.w-auto.d-inline-block
       option(value="") all streams
@@ -6,5 +6,9 @@ mixin logViewer(jobId)
       option(value="runner") runner
       option(value="flash") flash
       option(value="emulator") emulator
-  pre#log-viewer.bg-body-tertiary.p-3.rounded(style="height: 420px; overflow-y: auto;" data-job-id=jobId)
+  pre#log-viewer.bg-body-tertiary.p-3.rounded(
+    style="height: 420px; overflow-y: auto;"
+    data-job-id=jobId
+    data-job-active=jobActive ? 'true' : 'false'
+  )
   script(src="/js/log-viewer.js")

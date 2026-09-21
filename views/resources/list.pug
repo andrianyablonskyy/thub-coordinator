@@ -32,6 +32,27 @@ block content
             td
               form.d-inline(method="post" action=`/resources/${r.id}/maintenance`)
                 input(type="hidden" name="enabled" value=r.status === 'MAINTENANCE' ? '0' : '1')
-                button.btn.btn-sm.btn-outline-secondary(type="submit")= r.status === 'MAINTENANCE' ? 'Enable' : 'Disable'
+                if r.status === 'MAINTENANCE'
+                  button.btn.btn-sm.btn-outline-secondary(
+                    type="submit"
+                    aria-label="Enable"
+                    data-bs-toggle="tooltip"
+                    data-bs-title="Bring this resource back into rotation so the scheduler can assign it jobs again"
+                  )
+                    i.bi.bi-play-circle
+                else
+                  button.btn.btn-sm.btn-outline-secondary(
+                    type="submit"
+                    aria-label="Disable"
+                    data-bs-toggle="tooltip"
+                    data-bs-title="Take this resource out of rotation for maintenance — the scheduler will skip it"
+                  )
+                    i.bi.bi-tools
               form.d-inline.ms-1(method="post" action=`/resources/${r.id}/rotate-token` onsubmit="return confirm('Rotate token? The Client will need the new one.')")
-                button.btn.btn-sm.btn-outline-warning(type="submit") Rotate token
+                button.btn.btn-sm.btn-outline-warning(
+                  type="submit"
+                  aria-label="Rotate token"
+                  data-bs-toggle="tooltip"
+                  data-bs-title="Invalidate the current resource token and issue a new one — the Client won't reconnect until it has it"
+                )
+                  i.bi.bi-arrow-repeat
