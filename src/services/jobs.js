@@ -11,17 +11,26 @@ function rowToJob(row) {
   };
 }
 
-function nextJobId(db) {
+// A-00001.. for CI/CD jobs, M-00001.. for manual `thub run` jobs from a
+// developer's own machine — separate series (each own counter row) rather
+// than a shared counter with just a different letter, so e.g. A-00042
+// doesn't imply 41 manual runs happened first.
+const JOB_ID_PREFIXES = { ci: 'A', cli: 'M' };
+
+function nextJobId(db, source) {
+  const prefix = JOB_ID_PREFIXES[source];
+  if (!prefix) throw new Error(`Unknown job source "${source}"`);
+  const counterName = `job_id_${prefix.toLowerCase()}`;
   const run = db.transaction(() => {
-    db.prepare("UPDATE counters SET value = value + 1 WHERE name = 'job_id'").run();
-    const { value } = db.prepare("SELECT value FROM counters WHERE name = 'job_id'").get();
+    db.prepare('UPDATE counters SET value = value + 1 WHERE name = ?').run(counterName);
+    const { value } = db.prepare('SELECT value FROM counters WHERE name = ?').get(counterName);
     return value;
   });
   const n = run();
-  return `J-${String(n).padStart(6, '0')}`;
+  return `${prefix}-${String(n).padStart(5, '0')}`;
 }
 
-function createJobsService(db, { bus, events, registry, config }) {
+function createJobsService(db, { bus, events, registry, artifacts, config }) {
   function get(id) {
     return rowToJob(db.prepare('SELECT * FROM jobs WHERE id = ?').get(id));
   }
@@ -82,7 +91,7 @@ function createJobsService(db, { bus, events, registry, config }) {
       spec.timeoutSec || config.jobs.defaultTimeoutSec,
       config.jobs.maxTimeoutSec
     );
-    const id = nextJobId(db);
+    const id = nextJobId(db, source);
     const now = new Date().toISOString();
 
     db.prepare(
@@ -242,6 +251,52 @@ function createJobsService(db, { bus, events, registry, config }) {
     for (const { id } of stuck) requeueUnacked(id);
   }
 
+  // Admin: "reset the queue" — cancel every job that's currently queued,
+  // assigned or running. Each cancel() already notifies the resource
+  // holding a job (if any) via the usual cancel-job command.
+  function resetQueue() {
+    const placeholders = [...ACTIVE_JOB_STATES].map(() => '?').join(',');
+    const active = db.prepare(`SELECT id FROM jobs WHERE state IN (${placeholders})`).all(...ACTIVE_JOB_STATES);
+    for (const { id } of active) cancel(id, { isAdmin: true });
+    return active.length;
+  }
+
+  // Admin: "clean the queue" — permanently delete finished jobs (and their
+  // logs/artifacts, on disk and in the DB), for when the history itself,
+  // not just active work, needs clearing out. Unlike the nightly retention
+  // sweep (§9), this runs on demand and isn't limited to old jobs.
+  function cleanHistory() {
+    const placeholders = [...TERMINAL_JOB_STATES].map(() => '?').join(',');
+    const rows = db.prepare(`SELECT id FROM jobs WHERE state IN (${placeholders})`).all(...TERMINAL_JOB_STATES);
+    const ids = rows.map((r) => r.id);
+    if (ids.length === 0) return 0;
+
+    const tx = db.transaction(() => {
+      for (const id of ids) {
+        artifacts.deleteJobArtifacts(id);
+        db.prepare('DELETE FROM artifacts WHERE job_id = ?').run(id);
+        db.prepare('DELETE FROM job_logs WHERE job_id = ?').run(id);
+        db.prepare("DELETE FROM events WHERE entity = 'job' AND entity_id = ?").run(id);
+        db.prepare('DELETE FROM jobs WHERE id = ?').run(id);
+      }
+    });
+    tx();
+    events.record('job', 'bulk', 'jobs.cleaned', { count: ids.length });
+    return ids.length;
+  }
+
+  // A Client re-registering (fresh process, §5.1) is a definitive signal
+  // that whatever the previous process was doing is abandoned — mark any
+  // job still pointing at that resource LOST instead of leaving it
+  // orphaned until the heartbeat sweeper eventually notices.
+  bus.on('resource.reregistered', ({ resourceId }) => {
+    const placeholders = [...ACTIVE_JOB_STATES].map(() => '?').join(',');
+    const stale = db
+      .prepare(`SELECT id FROM jobs WHERE resource_id = ? AND state IN (${placeholders})`)
+      .all(resourceId, ...ACTIVE_JOB_STATES);
+    for (const { id } of stale) markLost(id);
+  });
+
   return {
     get,
     list,
@@ -254,6 +309,8 @@ function createJobsService(db, { bus, events, registry, config }) {
     checkTimeouts,
     checkAssignAcks,
     reconcileOnStartup,
+    resetQueue,
+    cleanHistory,
   };
 }
 

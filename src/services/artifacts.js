@@ -90,6 +90,13 @@ function createArtifactsService(db, { config }) {
     return `${config.publicUrl}/artifacts/download/${sign(artifact.id)}`;
   }
 
+  // Removes a job's artifact files from disk (not the DB rows — the
+  // caller, jobs.js's cleanHistory, deletes those as part of the same
+  // transaction that also deletes the job itself).
+  function deleteJobArtifacts(jobId) {
+    fs.rmSync(path.join(config.artifactsDir, jobId), { recursive: true, force: true });
+  }
+
   function purgeOlderThan(days) {
     const cutoff = new Date(Date.now() - days * 86400 * 1000).toISOString();
     const stale = db
@@ -104,7 +111,18 @@ function createArtifactsService(db, { config }) {
     }
   }
 
-  return { storeUploaded, storeGenerated, get, listForJob, sign, verify, signedUrl, purgeOlderThan, jobDir };
+  return {
+    storeUploaded,
+    storeGenerated,
+    get,
+    listForJob,
+    sign,
+    verify,
+    signedUrl,
+    purgeOlderThan,
+    deleteJobArtifacts,
+    jobDir,
+  };
 }
 
 module.exports = { createArtifactsService };

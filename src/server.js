@@ -31,9 +31,9 @@ function buildServices(config) {
   const agents = createAgentsService(db, { events });
   const adminUsers = createAdminUsersService(db);
   const commands = createCommandsService({ bus });
-  const jobs = createJobsService(db, { bus, events, registry, config });
   const logs = createLogsService(db, { bus });
   const artifacts = createArtifactsService(db, { config });
+  const jobs = createJobsService(db, { bus, events, registry, artifacts, config });
   const scheduler = createScheduler(db, { bus, events, registry, config });
   const heartbeatMonitor = createHeartbeatMonitor(db, { bus, events, registry, jobs, config });
   const retention = createRetentionService(db, { bus, logs, artifacts, config });

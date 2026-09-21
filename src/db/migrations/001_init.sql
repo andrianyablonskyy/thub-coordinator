@@ -92,6 +92,8 @@ CREATE TABLE counters (
   name TEXT PRIMARY KEY,
   value INTEGER NOT NULL DEFAULT 0
 );
+-- Unused: job IDs are now A-00001../M-00001.. (see migration 003 and
+-- jobs.js's nextJobId), split by source rather than one shared sequence.
 INSERT INTO counters (name, value) VALUES ('job_id', 0);
 
 CREATE INDEX idx_jobs_scheduler ON jobs(state, priority DESC, created_at);

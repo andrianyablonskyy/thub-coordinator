@@ -46,25 +46,42 @@ function createRegistryService(db, { bus, events }) {
   // Client declares its own name/type/labels; the Coordinator upserts by
   // name so a restarted Client (or one that lost its token file) can just
   // register again and pick up where it left off.
+  //
+  // On every (re)registration — i.e. every Client start/restart — type,
+  // labels and host_info are fully overwritten (not merged) from what the
+  // Client declares right now, since the Client is the source of truth for
+  // its own current identity/capabilities, and status is reset to
+  // REGISTERED (clearing any stale BUSY/OUT_OF_SERVICE left over from a
+  // crashed previous process) unless an admin had explicitly put it in
+  // MAINTENANCE, which re-registering doesn't override.
   function registerAuto({ name, type, labels = [], hostInfo }) {
     const resourceToken = generateToken('res');
     const existing = getByName(name);
 
     if (existing) {
-      if (existing.type !== type) {
-        throw Object.assign(
-          new Error(`Resource "${name}" is already registered as type ${existing.type}, not ${type}`),
-          { status: 409 }
-        );
-      }
-      const mergedLabels = Array.from(new Set([...existing.labels, ...labels]));
-      db.prepare('UPDATE resources SET token_hash = ?, host_info = ?, labels = ? WHERE id = ?').run(
-        hashToken(resourceToken),
-        JSON.stringify(hostInfo || {}),
-        JSON.stringify(mergedLabels),
-        existing.id
-      );
-      events.record('resource', existing.id, 'resource.registered', { hostInfo, reregistered: true });
+      // A fresh process registering is a definitive signal that whatever
+      // the previous process was doing is abandoned — tell jobs.js (via
+      // the bus, to avoid a registry<->jobs circular dependency) so any
+      // job still pointing at this resource is marked LOST now, instead
+      // of sitting orphaned until the heartbeat sweeper eventually notices.
+      bus.emit('resource.reregistered', { resourceId: existing.id });
+
+      const nextStatus =
+        existing.status === RESOURCE_STATES.MAINTENANCE ? RESOURCE_STATES.MAINTENANCE : RESOURCE_STATES.REGISTERED;
+
+      db.prepare(
+        `UPDATE resources
+         SET token_hash = ?, type = ?, labels = ?, host_info = ?,
+             status = ?, busy_source = NULL, busy_reason = NULL
+         WHERE id = ?`
+      ).run(hashToken(resourceToken), type, JSON.stringify(labels), JSON.stringify(hostInfo || {}), nextStatus, existing.id);
+
+      events.record('resource', existing.id, 'resource.registered', {
+        hostInfo,
+        type,
+        labels,
+        reregistered: true,
+      });
       return { resourceId: existing.id, resourceToken };
     }
 
