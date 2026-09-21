@@ -2,7 +2,14 @@ extends ../layout
 include ../mixins/status-badge
 
 block content
-  h1.h4.mb-3 Jobs
+  .d-flex.justify-content-between.align-items-center.mb-3
+    h1.h4.mb-0 Jobs
+    if canManage
+      .btn-group
+        form(method="post" action="/jobs/reset-queue" onsubmit="return confirm('Cancel every queued/assigned/preparing/running job? This stops in-flight work.')")
+          button.btn.btn-sm.btn-outline-warning(type="submit") Reset queue
+        form.ms-1(method="post" action="/jobs/clean-history" onsubmit="return confirm('Permanently delete all finished jobs and their logs/artifacts? This cannot be undone.')")
+          button.btn.btn-sm.btn-outline-danger(type="submit") Clean history
 
   form.row.g-2.mb-3(method="get")
     .col-auto

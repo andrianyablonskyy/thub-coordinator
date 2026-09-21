@@ -45,6 +45,18 @@ function createAdminRouter({ services }) {
     res.json({ resourceToken: token });
   });
 
+  // Cancels every QUEUED/ASSIGNED/PREPARING/RUNNING job (§13.1).
+  router.post('/jobs/reset-queue', (req, res) => {
+    const canceled = services.jobs.resetQueue();
+    res.json({ canceled });
+  });
+
+  // Permanently deletes finished jobs and their logs/artifacts (§13.1).
+  router.post('/jobs/clean-history', (req, res) => {
+    const deleted = services.jobs.cleanHistory();
+    res.json({ deleted });
+  });
+
   return router;
 }
 

@@ -15,6 +15,8 @@ const { createEventsService } = require('../src/services/events');
 const { createRegistryService } = require('../src/services/registry');
 const { createAgentsService } = require('../src/services/agents');
 const { createAdminUsersService } = require('../src/services/admin-users');
+const { createArtifactsService } = require('../src/services/artifacts');
+const { createJobsService } = require('../src/services/jobs');
 const { generateToken } = require('../src/services/tokens');
 
 function usage() {
@@ -23,6 +25,8 @@ function usage() {
   thub-admin agent add <name> --kind ci|cli
   thub-admin join-key generate
   thub-admin resource maintenance <resourceId> --on|--off
+  thub-admin jobs reset --yes     Cancel every queued/assigned/preparing/running job
+  thub-admin jobs clean --yes     Permanently delete finished jobs, logs and artifacts
 `);
 }
 
@@ -40,6 +44,8 @@ function parseFlags(args) {
         flags.on = true;
       } else if (key === 'off') {
         flags.on = false;
+      } else if (key === 'yes') {
+        flags.yes = true;
       } else {
         flags[key] = args[++i];
       }
@@ -58,6 +64,8 @@ function main() {
   const registry = createRegistryService(db, { bus, events });
   const agents = createAgentsService(db, { events });
   const adminUsers = createAdminUsersService(db);
+  const artifacts = createArtifactsService(db, { config });
+  const jobs = createJobsService(db, { bus, events, registry, artifacts, config });
 
   if (cmd === 'create-admin') {
     const { positional, flags } = parseFlags([sub, ...rest].filter(Boolean));
@@ -91,6 +99,28 @@ function main() {
     if (!resourceId || flags.on === undefined) return usage(), process.exit(4);
     registry.setMaintenance(resourceId, flags.on);
     console.log(`Resource ${resourceId} maintenance ${flags.on ? 'enabled' : 'disabled'}`);
+    return;
+  }
+
+  if (cmd === 'jobs' && sub === 'reset') {
+    const { flags } = parseFlags(rest);
+    if (!flags.yes) {
+      console.error('This cancels every queued/assigned/preparing/running job. Re-run with --yes to confirm.');
+      process.exit(4);
+    }
+    const canceled = jobs.resetQueue();
+    console.log(`Canceled ${canceled} active job(s).`);
+    return;
+  }
+
+  if (cmd === 'jobs' && sub === 'clean') {
+    const { flags } = parseFlags(rest);
+    if (!flags.yes) {
+      console.error('This permanently deletes finished jobs and their logs/artifacts. Re-run with --yes to confirm.');
+      process.exit(4);
+    }
+    const deleted = jobs.cleanHistory();
+    console.log(`Deleted ${deleted} finished job(s) and their logs/artifacts.`);
     return;
   }
 

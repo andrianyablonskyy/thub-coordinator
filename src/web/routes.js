@@ -77,7 +77,28 @@ function createWebRouter({ services, config }) {
       ...j,
       resource: j.resource_id ? services.registry.get(j.resource_id) : null,
     }));
-    res.render('jobs/list', { title: 'Jobs', active: 'jobs', jobs, filters });
+    res.render('jobs/list', {
+      title: 'Jobs',
+      active: 'jobs',
+      jobs,
+      filters,
+      canManage: req.session.user.role === 'admin',
+    });
+  });
+
+  // "Reset" the queue: cancel everything active. "Clean": delete finished
+  // job history. Two distinct, deliberately separate destructive actions
+  // (§13.1) — reset stops in-flight work, clean clears past work.
+  router.post('/jobs/reset-queue', requireAdminRole, (req, res) => {
+    const canceled = services.jobs.resetQueue();
+    flash(req, 'warning', `Canceled ${canceled} active job(s).`);
+    res.redirect('/jobs');
+  });
+
+  router.post('/jobs/clean-history', requireAdminRole, (req, res) => {
+    const deleted = services.jobs.cleanHistory();
+    flash(req, 'warning', `Deleted ${deleted} finished job(s) and their logs/artifacts.`);
+    res.redirect('/jobs');
   });
 
   router.get('/jobs/:id', (req, res) => {
