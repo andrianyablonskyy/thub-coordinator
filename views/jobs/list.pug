@@ -39,5 +39,5 @@ block content
           td.text-uppercase= j.source
           td: +jobBadge(j.state)
           td= j.resource ? j.resource.name : '—'
-          td= new Date(j.created_at).toLocaleString()
-          td= j.finished_at ? new Date(j.finished_at).toLocaleString() : '—'
+          td= fmtDate(j.created_at)
+          td= fmtDate(j.finished_at)

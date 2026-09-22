@@ -20,7 +20,7 @@ block content
     dt.col-sm-2 Target
     dd.col-sm-10= `${job.spec.target.type} — ${(job.spec.target.labels || []).join(', ')}`
     dt.col-sm-2 Created
-    dd.col-sm-10= new Date(job.created_at).toLocaleString()
+    dd.col-sm-10= fmtDate(job.created_at)
     if job.message
       dt.col-sm-2 Message
       dd.col-sm-10= job.message

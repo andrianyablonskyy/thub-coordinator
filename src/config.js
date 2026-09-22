@@ -16,7 +16,9 @@
 const fs = require('node:fs'),
   path = require('node:path');
 
-// Defaults mirror README.md §13 (/srv/thub/coordinator.json).
+// Defaults mirror README.md §13. Unlike the Client (config.js there), there
+// is no FHS-path fallback here — a real deployment must set
+// THUB_COORDINATOR_CONFIG explicitly to override the bundled default below.
 const DEFAULTS = {
   listen: '127.0.0.1:8080',
   publicUrl: 'http://localhost:8080',
@@ -96,9 +98,11 @@ function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
   config.dbPath = path.join(config.dataDir, 'thub.db');
   config.artifactsDir = path.join(config.dataDir, 'artifacts');
   config.workDir = path.join(config.dataDir, 'work');
+  config.avatarsDir = path.join(config.dataDir, 'avatars');
 
   fs.mkdirSync(config.dataDir, { recursive: true });
   fs.mkdirSync(config.artifactsDir, { recursive: true });
+  fs.mkdirSync(config.avatarsDir, { recursive: true });
 
   return config;
 }

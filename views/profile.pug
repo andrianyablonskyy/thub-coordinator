@@ -1,0 +1,77 @@
+extends layout
+
+block content
+  h1.h4.mb-3 Profile settings
+
+  .row
+    .col-md-6
+      form(method="post" action="/profile" enctype="multipart/form-data")
+        .d-flex.align-items-center.mb-3
+          if user.avatarPath
+            img.rounded-circle.me-3(src=user.avatarPath width="64" height="64" style="object-fit: cover;")
+          else
+            span.rounded-circle.bg-secondary.text-white.d-inline-flex.align-items-center.justify-content-center.me-3(style="width: 64px; height: 64px; font-size: 24px;")
+              = ((user.firstName ? user.firstName[0] : user.username[0]) + (user.lastName ? user.lastName[0] : '')).toUpperCase()
+          div
+            label.form-label.mb-1(for="avatar") Avatar
+            input#avatar.form-control.form-control-sm(type="file" name="avatar" accept="image/png,image/jpeg,image/gif,image/webp")
+            .form-text PNG, JPEG, GIF or WebP, up to 2MB.
+
+        .mb-3
+          label.form-label(for="username") Username
+          input#username.form-control(type="text" name="username" value=user.username required)
+
+        .row
+          .col-6.mb-3
+            label.form-label(for="firstName") First name
+            input#firstName.form-control(type="text" name="firstName" value=user.firstName || '')
+          .col-6.mb-3
+            label.form-label(for="lastName") Last name
+            input#lastName.form-control(type="text" name="lastName" value=user.lastName || '')
+
+        .mb-3
+          label.form-label(for="timezone") Timezone
+          select#timezone.form-select(name="timezone" required)
+            each tz in timezones
+              option(value=tz selected=tz === user.timezone)= tz
+          .form-text Used to render every timestamp in the dashboard.
+
+        .mb-3
+          label.form-label(for="sessionTimeoutMin") Session timeout (idle)
+          select#sessionTimeoutMin.form-select(name="sessionTimeoutMin" required)
+            each min in sessionTimeoutOptions
+              option(value=min selected=min === user.sessionTimeoutMin)= min < 60 ? `${min} minutes` : `${min / 60} hour${min === 60 ? '' : 's'}`
+          .form-text You'll be signed out after this long without activity.
+
+        button.btn.btn-primary(type="submit") Save
+
+    .col-md-6
+      .card.mb-3
+        .card-body
+          h6.card-subtitle.mb-2.text-body-secondary Theme
+          p.small.text-body-secondary.mb-2 Synced to your account — the same on every device you sign in from.
+          .btn-group(role="group" aria-label="Theme")
+            each t in ['auto', 'light', 'dark']
+              button.btn.btn-sm(
+                type="button"
+                class=user.theme === t ? 'btn-primary' : 'btn-outline-secondary'
+                data-set-theme=t
+              )= t.charAt(0).toUpperCase() + t.slice(1)
+
+      .card
+        .card-body
+          h6.card-subtitle.mb-3.text-body-secondary Change password
+          form(method="post" action="/profile/password")
+            .mb-3
+              label.form-label(for="currentPassword") Current password
+              input#currentPassword.form-control(type="password" name="currentPassword" autocomplete="current-password" required)
+            .mb-3
+              label.form-label(for="newPassword") New password
+              input#newPassword.form-control(type="password" name="newPassword" autocomplete="new-password" required)
+            .mb-3
+              label.form-label(for="confirmPassword") Confirm new password
+              input#confirmPassword.form-control(type="password" name="confirmPassword" autocomplete="new-password" required)
+            button.btn.btn-primary(type="submit") Change password
+
+block scripts
+  script(src="/js/profile-theme.js")

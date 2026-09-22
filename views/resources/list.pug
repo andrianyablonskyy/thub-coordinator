@@ -34,7 +34,7 @@ block content
             else
               span.text-body-secondary —
           td= r.busy_source ? `${r.busy_source}${r.busy_reason ? ' — ' + r.busy_reason : ''}` : '—'
-          td= r.last_heartbeat_at ? new Date(r.last_heartbeat_at).toLocaleString() : 'never'
+          td= fmtDate(r.last_heartbeat_at, 'never')
           if user.role === 'admin'
             td
               form.d-inline(method="post" action=`/resources/${r.id}/maintenance`)

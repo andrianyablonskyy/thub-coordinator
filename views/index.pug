@@ -34,4 +34,4 @@ block content
             if r.busy_source
               p.card-text.small.text-body-secondary busy: #{r.busy_source} #{r.busy_reason ? '— ' + r.busy_reason : ''}
             p.card-text.small.text-body-secondary
-              | heartbeat: #{r.last_heartbeat_at ? new Date(r.last_heartbeat_at).toLocaleString() : 'never'}
+              | heartbeat: #{fmtDate(r.last_heartbeat_at, 'never')}

@@ -25,8 +25,8 @@ block content
         tr(class=a.revoked_at ? 'opacity-50' : '')
           td= a.name
           td.text-uppercase= a.kind
-          td= new Date(a.created_at).toLocaleString()
-          td= a.last_used_at ? new Date(a.last_used_at).toLocaleString() : 'never'
+          td= fmtDate(a.created_at)
+          td= fmtDate(a.last_used_at, 'never')
           td= a.revoked_at ? 'revoked' : 'active'
           td
             if !a.revoked_at

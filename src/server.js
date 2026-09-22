@@ -92,10 +92,17 @@ function createApp(config, services){
       secret: config.sessionSecret,
       resave: false,
       saveUninitialized: false,
+      // Idle timeout, not a fixed one (§10.1): `rolling` re-sends a fresh
+      // Set-Cookie on every response, so the session survives as long as
+      // the user stays active and only actually expires `sessionTimeoutMin`
+      // (routes.js) after their *last* request. Each user's own preference
+      // is applied per-request in web/routes.js, since it isn't known here.
+      rolling: true,
       cookie: { httpOnly: true, sameSite: 'lax' }
     })
   );
   app.use(express.static(path.join(__dirname, '..', 'public')));
+  app.use('/avatars', express.static(config.avatarsDir));
 
   app.use('/api/v1', createAgentRouter({ services, config }));
   app.use('/api/v1', createResourceRouter({ services, config }));
@@ -142,21 +149,27 @@ function start(configPath){
   return { app, server, services, config };
 }
 
+// THUB_BOOTSTRAP_ADMIN_PASSWORD is an exceptional password reset, not just
+// a first-run convenience (README §13.1): whenever it's set, it wins over
+// whatever's in the DB for THUB_BOOTSTRAP_ADMIN_USER (or "admin") — reset
+// that user's password if the account exists, or create it fresh as admin
+// if it doesn't — on *every* startup, not only when admin_users is empty.
+// Unset it again once you're back in; otherwise every restart re-applies
+// it. With it unset, login uses whatever's already in the DB, as normal.
 function ensureBootstrapAdmin(services){
-  if (services.adminUsers.count() > 0){
-    return;
-  }
-  const username = process.env.THUB_BOOTSTRAP_ADMIN_USER || 'admin',
-    password = process.env.THUB_BOOTSTRAP_ADMIN_PASSWORD;
+  const password = process.env.THUB_BOOTSTRAP_ADMIN_PASSWORD;
   if (!password){
-    console.warn(
-      'No admin_users exist and THUB_BOOTSTRAP_ADMIN_PASSWORD is not set — ' +
-        'create one with: node packages/coordinator/bin/thub-admin.js create-admin <user> <password>'
-    );
+    if (services.adminUsers.count() === 0){
+      console.warn(
+        'No admin_users exist and THUB_BOOTSTRAP_ADMIN_PASSWORD is not set — ' +
+          'create one with: node packages/coordinator/bin/thub-admin.js create-admin <user> <password>'
+      );
+    }
     return;
   }
-  services.adminUsers.create({ username, password, role: 'admin' });
-  console.log(`Bootstrapped admin user "${username}" from THUB_BOOTSTRAP_ADMIN_PASSWORD`);
+  const username = process.env.THUB_BOOTSTRAP_ADMIN_USER || 'admin';
+  services.adminUsers.resetPassword({ username, password });
+  console.log(`Reset password for admin user "${username}" from THUB_BOOTSTRAP_ADMIN_PASSWORD`);
 }
 
 if (require.main === module){

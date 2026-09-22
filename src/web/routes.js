@@ -1,6 +1,6 @@
 /**
  * @file        packages/coordinator/src/web/routes.js
- * @description Dashboard (Pug) routes: overview, resources, groups, jobs, agents pages (README §10)
+ * @description Dashboard (Pug) routes: overview, resources, groups, jobs, agents, profile pages (README §10)
  *
  * @author      Andrian Yablonskyy
  * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
@@ -13,10 +13,26 @@
 
 'use strict';
 
-const express = require('express'),
+const fs = require('node:fs'),
+  os = require('node:os'),
+  path = require('node:path'),
+  express = require('express'),
+  multer = require('multer'),
   { requireAdminSession, requireAdminRole } = require('../auth'),
   { attachJobStream } = require('../api/sse'),
   { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
+
+// §10.1: avatar uploads are small, single images — a hard size cap and an
+// allow-list of image mimetypes, same spirit as the join-key/token checks
+// elsewhere (reject outright rather than trying to sanitize).
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024,
+  AVATAR_EXT_BY_MIMETYPE = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif',
+    'image/webp': 'webp'
+  },
+  avatarUpload = multer({ dest: os.tmpdir(), limits: { fileSize: AVATAR_MAX_BYTES } });
 
 // §10 Web dashboard: server-rendered Pug + Bootstrap 5.3, with the live
 // views hitting the same kind of SSE stream the Agent uses (§6.4), just
@@ -30,11 +46,28 @@ function createWebRouter({ services, config }){
   }
 
   router.use((req, res, next) => {
-    res.locals.user = req.session?.user || null;
+    const user = req.session?.user || null;
+    res.locals.user = user;
     res.locals.messages = req.session?.flash || [];
     if (req.session){
       req.session.flash = [];
     }
+
+    // Every dashboard timestamp is rendered here on the server (Pug), so
+    // without this every user would see the *server's* local time — not
+    // their own (§10.1). Falls back to UTC for the (rare) pre-login page.
+    const tz = user?.timezone || 'UTC';
+    res.locals.fmtDate = (iso, fallback = '—') =>
+      iso ? new Date(iso).toLocaleString('en-US', { timeZone: tz }) : fallback;
+
+    // Idle timeout (§10.1): re-applied on every request (not just login)
+    // so a mid-session profile change takes effect immediately, and so
+    // `rolling: true` (server.js) actually extends by *this* user's chosen
+    // duration each time, not whatever the session happened to start with.
+    if (req.session && user){
+      req.session.cookie.maxAge = user.sessionTimeoutMin * 60 * 1000;
+    }
+
     next();
   });
 
@@ -52,6 +85,7 @@ function createWebRouter({ services, config }){
       return res.status(401).render('login', { title: 'Sign in', error: 'Invalid credentials' });
     }
     req.session.user = user;
+    req.session.cookie.maxAge = user.sessionTimeoutMin * 60 * 1000;
     res.redirect('/');
   });
 
@@ -60,6 +94,102 @@ function createWebRouter({ services, config }){
   });
 
   router.use(requireAdminSession);
+
+  // §10.1: every logged-in user (admin or viewer) manages their own
+  // profile — display name, avatar, timezone, theme and idle session
+  // timeout. Not gated by requireAdminRole: this only ever touches the
+  // caller's own account (req.session.user.id), never another user's.
+  router.get('/profile', (req, res) => {
+    res.render('profile', {
+      title: 'Profile',
+      timezones: Intl.supportedValuesOf('timeZone'),
+      sessionTimeoutOptions: services.adminUsers.SESSION_TIMEOUT_OPTIONS_MIN
+    });
+  });
+
+  router.post('/profile', (req, res) => {
+    avatarUpload.single('avatar')(req, res, (uploadErr) => {
+      if (uploadErr){
+        flash(
+          req,
+          'danger',
+          uploadErr.code === 'LIMIT_FILE_SIZE'
+            ? `Avatar image must be under ${AVATAR_MAX_BYTES / (1024 * 1024)}MB.`
+            : uploadErr.message
+        );
+        return res.redirect('/profile');
+      }
+
+      const userId = req.session.user.id,
+        fields = {
+          username: req.body.username,
+          firstName: req.body.firstName || null,
+          lastName: req.body.lastName || null,
+          timezone: req.body.timezone,
+          sessionTimeoutMin: Number(req.body.sessionTimeoutMin)
+        };
+
+      if (req.file){
+        const ext = AVATAR_EXT_BY_MIMETYPE[req.file.mimetype];
+        if (!ext){
+          fs.rmSync(req.file.path, { force: true });
+          flash(req, 'danger', `Unsupported image type "${req.file.mimetype}" — use PNG, JPEG, GIF or WebP.`);
+        }
+        else {
+          // Clear any previous avatar under a different extension so
+          // switching PNG -> JPEG doesn't leave the old file behind.
+          for (const e of Object.values(AVATAR_EXT_BY_MIMETYPE)){
+            fs.rmSync(path.join(config.avatarsDir, `${userId}.${e}`), { force: true });
+          }
+          fs.renameSync(req.file.path, path.join(config.avatarsDir, `${userId}.${ext}`));
+          fields.avatarPath = `/avatars/${userId}.${ext}`;
+        }
+      }
+
+      try {
+        req.session.user = services.adminUsers.updateProfile(userId, fields);
+        flash(req, 'success', 'Profile updated.');
+      }
+      catch (err){
+        flash(req, 'danger', err.message);
+      }
+      res.redirect('/profile');
+    });
+  });
+
+  // Quick theme toggle (navbar button, §10.1) — a separate, minimal
+  // endpoint so switching theme doesn't require resubmitting the whole
+  // profile form. Persists per-account so it's the same on every device,
+  // not just the browser that clicked it (public/js/theme.js).
+  router.post('/profile/theme', (req, res) => {
+    try {
+      req.session.user = services.adminUsers.updateProfile(req.session.user.id, { theme: req.body.theme });
+      res.json({ ok: true, theme: req.session.user.theme });
+    }
+    catch (err){
+      res.status(err.status || 400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Self-service password change (§10.1) — separate from the rest of the
+  // profile form since it needs the *current* password re-entered, and a
+  // mismatch between newPassword/confirmPassword is a form-level check
+  // that has nothing to do with the other fields.
+  router.post('/profile/password', (req, res) => {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    if (newPassword !== confirmPassword){
+      flash(req, 'danger', 'New password and confirmation do not match.');
+      return res.redirect('/profile');
+    }
+    try {
+      services.adminUsers.changePassword(req.session.user.id, currentPassword, newPassword);
+      flash(req, 'success', 'Password changed.');
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect('/profile');
+  });
 
   router.get('/', (req, res) => {
     const resources = services.registry.list(),

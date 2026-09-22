@@ -1,5 +1,5 @@
 doctype html
-html(lang="en" data-bs-theme="auto")
+html(lang="en" data-bs-theme=(user && user.theme) || "auto")
   head
     meta(charset="utf-8")
     meta(name="viewport" content="width=device-width, initial-scale=1")
@@ -38,7 +38,19 @@ html(lang="en" data-bs-theme="auto")
               )
                 i.bi.bi-circle-half
             if user
-              li.nav-item.navbar-text.me-3= `${user.username} (${user.role})`
+              li.nav-item.d-flex.align-items-center.me-3
+                a.nav-link.d-flex.align-items-center.p-0(
+                  href="/profile"
+                  data-bs-toggle="tooltip"
+                  data-bs-placement="bottom"
+                  data-bs-title=`Profile settings (${user.role})`
+                )
+                  if user.avatarPath
+                    img.rounded-circle.me-2(src=user.avatarPath width="24" height="24" style="object-fit: cover;")
+                  else
+                    span.rounded-circle.bg-secondary.text-white.d-inline-flex.align-items-center.justify-content-center.me-2(style="width: 24px; height: 24px; font-size: 12px;")
+                      = ((user.firstName ? user.firstName[0] : user.username[0]) + (user.lastName ? user.lastName[0] : '')).toUpperCase()
+                  span= user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.username
               li.nav-item.d-flex.align-items-center
                 form(action="/logout" method="post")
                   button.btn.btn-sm.btn-outline-danger(

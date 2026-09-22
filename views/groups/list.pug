@@ -37,7 +37,7 @@ block content
                 i.bi.bi-clipboard
             td= g.comment || '—'
             td= g.resourceCount
-            td= new Date(g.created_at).toLocaleString()
+            td= fmtDate(g.created_at)
             if canManage
               td
                 button.btn.btn-sm.btn-outline-secondary(type="button" data-bs-toggle="modal" data-bs-target=`#editGroupModal-${g.id}`) Edit
