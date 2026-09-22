@@ -28,6 +28,7 @@ block content
       tr
         th Job
         th Source
+        th User
         th State
         th Resource
         th Created
@@ -37,6 +38,7 @@ block content
         tr
           td: a(href=`/jobs/${j.id}`)= j.id
           td.text-uppercase= j.source
+          td= j.spec.user || '—'
           td: +jobBadge(j.state)
           td= j.resource ? j.resource.name : '—'
           td= fmtDate(j.created_at)

@@ -15,6 +15,9 @@ block content
   dl.row
     dt.col-sm-2 Source
     dd.col-sm-10.text-uppercase= job.source
+    if job.spec.user
+      dt.col-sm-2 User
+      dd.col-sm-10= job.spec.user
     dt.col-sm-2 Resource
     dd.col-sm-10= job.resource ? job.resource.name : '—'
     dt.col-sm-2 Target
