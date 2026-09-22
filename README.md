@@ -33,6 +33,8 @@ The Coordinator loads a plain **JSON** config file (no YAML support). Resolution
 
 `sessionSecret` signs the dashboard's session cookie and the HMAC on artifact download links; `clientJoinKey` is the shared secret Clients self-register with — omit or leave `null` to disable auto-registration entirely. Individual `THUB_LISTEN` / `THUB_PUBLIC_URL` / `THUB_DATA_DIR` / `THUB_SESSION_SECRET` / `THUB_CLIENT_JOIN_KEY` env vars override whatever the file set.
 
+`npm install -g` creates `~/.config/thub/coordinator.json` for you if it doesn't already exist, with a home-anchored `dataDir` and a freshly generated random `sessionSecret` (not the placeholder above) — a re-install never overwrites it or regenerates the secret. Set `publicUrl` and `clientJoinKey` yourself before relying on auto-registration.
+
 ## Running it
 
 ```bash

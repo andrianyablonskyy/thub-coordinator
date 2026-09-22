@@ -11,6 +11,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test test/*.test.js",
+    "postinstall": "node scripts/install-default-config.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
