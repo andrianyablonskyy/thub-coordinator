@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 /**
  * @file        packages/coordinator/src/server.js
  * @description Coordinator entry point: wires services, mounts routes, and starts the HTTP server
@@ -162,7 +164,7 @@ function ensureBootstrapAdmin(services){
     if (services.adminUsers.count() === 0){
       console.warn(
         'No admin_users exist and THUB_BOOTSTRAP_ADMIN_PASSWORD is not set — ' +
-          'create one with: node bin/thub-admin.js create-admin <user> <password>'
+          'create one with: thub-admin create-admin <user> <password> (or node bin/thub-admin.js ... from a checkout)'
       );
     }
     return;

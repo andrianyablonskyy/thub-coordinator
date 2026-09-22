@@ -4,7 +4,8 @@
   "description": "TestHub Coordinator — job queue, resource registry, scheduler, heartbeat monitor, log/artifact store and web dashboard",
   "main": "src/server.js",
   "bin": {
-    "thub-admin": "./bin/thub-admin.js"
+    "thub-admin": "./bin/thub-admin.js",
+    "thub-coordinator": "./src/server.js"
   },
   "scripts": {
     "start": "node src/server.js",

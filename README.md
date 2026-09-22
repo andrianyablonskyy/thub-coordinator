@@ -7,10 +7,10 @@ See the [main TestHub repo](https://github.com/andrianyablonskyy/thub) for the f
 ## Install
 
 ```bash
-npm install @andrian.yablonskyy/thub-coordinator
+npm install -g @andrian.yablonskyy/thub-coordinator
 ```
 
-Or clone this repo directly and run it from source (see below).
+This gives you two global commands: `thub-coordinator` (the server itself) and `thub-admin` (the local operator CLI, below). Or clone this repo directly and run it from source (see below).
 
 ## Configuration
 
@@ -40,46 +40,46 @@ The Coordinator loads a plain **JSON** config file (no YAML support). Resolution
 # password (creates user "admin") or use thub-admin afterwards.
 THUB_COORDINATOR_CONFIG=/etc/thub/coordinator.json \
 THUB_BOOTSTRAP_ADMIN_PASSWORD=correct-horse-battery-staple \
-node src/server.js
+thub-coordinator
 # -> Reset password for admin user "admin" from THUB_BOOTSTRAP_ADMIN_PASSWORD
 # -> TestHub Coordinator listening on http://127.0.0.1:8080
 ```
 
-`THUB_BOOTSTRAP_ADMIN_PASSWORD` is more than a first-run convenience — it's an **exceptional password reset**, checked on every startup, not only when `admin_users` is empty. Whenever it's set, the named account (`THUB_BOOTSTRAP_ADMIN_USER`, default `admin`) has its password forced to it — creating that user as `admin` if it doesn't exist yet, or just resetting the password (never the role) if it does. With it unset, login uses whatever's already in the DB, as normal — unset it again once you're back in, or every subsequent restart re-applies it.
+`thub-coordinator` is the global command from `npm install -g`; from a local checkout of this repo it's `node src/server.js` or `npm start`/`npm run dev` (auto-restart on change) — all equivalent, all reading config the same way (above).
 
-Or just `npm start` / `npm run dev` (auto-restart on change) against the bundled `config.json` default for local development.
+`THUB_BOOTSTRAP_ADMIN_PASSWORD` is more than a first-run convenience — it's an **exceptional password reset**, checked on every startup, not only when `admin_users` is empty. Whenever it's set, the named account (`THUB_BOOTSTRAP_ADMIN_USER`, default `admin`) has its password forced to it — creating that user as `admin` if it doesn't exist yet, or just resetting the password (never the role) if it does. With it unset, login uses whatever's already in the DB, as normal — unset it again once you're back in, or every subsequent restart re-applies it.
 
 ## `thub-admin` — the local operator CLI
 
-Talks to the Coordinator's SQLite database directly — no running server required, and no HTTP auth of its own, so it's meant to be run on the Coordinator host itself:
+Talks to the Coordinator's SQLite database directly — no running server required, and no HTTP auth of its own, so it's meant to be run on the Coordinator host itself. `thub-admin` is the global command from `npm install -g`; from a local checkout it's `node bin/thub-admin.js`:
 
 ```bash
 # Create additional dashboard users (first one can also come from
 # THUB_BOOTSTRAP_ADMIN_PASSWORD above).
-node bin/thub-admin.js create-admin alice s3cret --role admin
+thub-admin create-admin alice s3cret --role admin
 
 # Register a CI or developer identity — the only credential still issued
 # by an admin; the token is shown once.
-node bin/thub-admin.js agent add ci-firmware --kind ci
+thub-admin agent add ci-firmware --kind ci
 # -> Agent agt_... created. Token (shown once): agt_...
 
 # Mint the shared secret Clients use to self-register, and put it in both
 # the Coordinator's clientJoinKey and every Client's joinKey.
-node bin/thub-admin.js join-key generate
+thub-admin join-key generate
 
 # Take a resource out of rotation without an active job (or bring it back).
-node bin/thub-admin.js resource maintenance res_abc123 --on
+thub-admin resource maintenance res_abc123 --on
 
 # Cancel every queued/assigned/preparing/running job.
-node bin/thub-admin.js jobs reset --yes
+thub-admin jobs reset --yes
 
 # Permanently delete every finished job, plus its logs and artifacts on disk.
-node bin/thub-admin.js jobs clean --yes
+thub-admin jobs clean --yes
 
 # Resource groups: constrain which resources a job can schedule onto.
-node bin/thub-admin.js group add ci-nightly --comment "shared CI pool"
-node bin/thub-admin.js group list
-node bin/thub-admin.js group remove <groupId>
+thub-admin group add ci-nightly --comment "shared CI pool"
+thub-admin group list
+thub-admin group remove <groupId>
 ```
 
 Both `jobs reset` and `jobs clean` refuse to run without `--yes` — there's no undo for either, especially `clean`.
