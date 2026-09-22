@@ -14,11 +14,10 @@
 'use strict';
 
 const fs = require('node:fs'),
+  os = require('node:os'),
   path = require('node:path');
 
-// Defaults mirror README.md §13. Unlike the Client (config.js there), there
-// is no FHS-path fallback here — a real deployment must set
-// THUB_COORDINATOR_CONFIG explicitly to override the bundled default below.
+// Defaults mirror README.md §13.
 const DEFAULTS = {
   listen: '127.0.0.1:8080',
   publicUrl: 'http://localhost:8080',
@@ -63,13 +62,17 @@ function deepMerge(base, override){
   return out;
 }
 
-// Bundled with the package so the Coordinator has something sane to run
-// with out of the box; a real deployment overrides it with
-// THUB_COORDINATOR_CONFIG or /srv/thub/coordinator.json (§13).
-const PACKAGE_DEFAULT_CONFIG_PATH = path.join(__dirname, '..', 'config.json');
+// User-level default (§13) — consulted when THUB_COORDINATOR_CONFIG isn't
+// set, before falling back to the bundled default below.
+const USER_CONFIG_PATH = path.join(os.homedir(), '.config', 'thub', 'coordinator.json'),
+
+  // Bundled with the package so the Coordinator has something sane to run
+  // with out of the box; a real deployment overrides it with
+  // THUB_COORDINATOR_CONFIG or ~/.config/thub/coordinator.json (§13).
+  PACKAGE_DEFAULT_CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 
 function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
-  const candidate = [configPath, PACKAGE_DEFAULT_CONFIG_PATH].find(
+  const candidate = [configPath, USER_CONFIG_PATH, PACKAGE_DEFAULT_CONFIG_PATH].find(
       (p) => p && fs.existsSync(p)
     ),
     fileConfig = candidate ? JSON.parse(fs.readFileSync(candidate, 'utf8')) || {} : {},

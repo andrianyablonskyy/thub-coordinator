@@ -14,7 +14,7 @@ Or clone this repo directly and run it from source (see below).
 
 ## Configuration
 
-The Coordinator loads a plain **JSON** config file (no YAML support). Resolution order, first match wins: `THUB_COORDINATOR_CONFIG` env var path → the bundled `config.json` default. There is no other automatic fallback path — a real deployment always sets `THUB_COORDINATOR_CONFIG` explicitly.
+The Coordinator loads a plain **JSON** config file (no YAML support). Resolution order, first match wins: `THUB_COORDINATOR_CONFIG` env var path → `~/.config/thub/coordinator.json` → the bundled `config.json` default.
 
 ```json
 {
