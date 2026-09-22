@@ -7,7 +7,7 @@ See the [main TestHub repo](https://github.com/andrianyablonskyy/thub) for the f
 ## Install
 
 ```bash
-npm install -g @andrian.yablonskyy/thub-coordinator
+npm i -g @andrian.yablonskyy/thub-coordinator
 ```
 
 This gives you two global commands: `thub-coordinator` (the server itself) and `thub-admin` (the local operator CLI, below). Or clone this repo directly and run it from source (see below).
