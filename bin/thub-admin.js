@@ -1,4 +1,18 @@
 #!/usr/bin/env node
+
+/**
+ * @file        packages/coordinator/bin/thub-admin.js
+ * @description Local operator CLI: admin/agent/resource/group/job management, talks to SQLite directly (README §13.1)
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
 // Local admin tool: operates directly on the Coordinator's SQLite database.

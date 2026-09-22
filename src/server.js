@@ -1,3 +1,16 @@
+/**
+ * @file        packages/coordinator/src/server.js
+ * @description Coordinator entry point: wires services, mounts routes, and starts the HTTP server
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
 const path = require('node:path');

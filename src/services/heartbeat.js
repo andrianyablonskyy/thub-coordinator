@@ -1,6 +1,19 @@
+/**
+ * @file        packages/coordinator/src/services/heartbeat.js
+ * @description Heartbeat sweeper: marks silent resources OUT_OF_SERVICE and requeues their jobs
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
-const { RESOURCE_STATES, ACTIVE_JOB_STATES } = require('@thub/shared');
+const { RESOURCE_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
 
 // §5.1 sweeper: runs every sweepIntervalSec, marks resources OUT_OF_SERVICE
 // after missedLimit missed heartbeats and moves any active job to LOST.

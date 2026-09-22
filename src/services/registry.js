@@ -1,7 +1,20 @@
+/**
+ * @file        packages/coordinator/src/services/registry.js
+ * @description Resource registry: registration, identity matching by clientId, and lookup for scheduling (README §5.1)
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
 const { v4: uuid } = require('uuid');
-const { RESOURCE_STATES, BUSY_SOURCES } = require('@thub/shared');
+const { RESOURCE_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/test-hub');
 const { generateToken, hashToken } = require('./tokens');
 
 function rowToResource(row) {

@@ -1,3 +1,16 @@
+/**
+ * @file        packages/coordinator/src/services/events.js
+ * @description Audit log service: records every state change to the events table (README §12)
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
 // §12 Audit: "All state changes are written to the events table and

@@ -1,3 +1,16 @@
+/**
+ * @file        packages/coordinator/src/services/logs.js
+ * @description Job log service: stores batched log lines with a per-job sequence and fans them out (README §3.1)
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
 // §3.1 Log service: accepts batched log lines, assigns a monotonically

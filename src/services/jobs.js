@@ -1,6 +1,19 @@
+/**
+ * @file        packages/coordinator/src/services/jobs.js
+ * @description Job lifecycle service: creation, state transitions, and validation against the job spec
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
-const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES } = require('@thub/shared');
+const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
 
 function rowToJob(row) {
   if (!row) return row;

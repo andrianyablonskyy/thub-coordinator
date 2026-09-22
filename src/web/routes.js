@@ -1,9 +1,22 @@
+/**
+ * @file        packages/coordinator/src/web/routes.js
+ * @description Dashboard (Pug) routes: overview, resources, groups, jobs, agents pages (README §10)
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
 const express = require('express');
 const { requireAdminSession, requireAdminRole } = require('../auth');
 const { attachJobStream } = require('../api/sse');
-const { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES } = require('@thub/shared');
+const { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
 
 // §10 Web dashboard: server-rendered Pug + Bootstrap 5.3, with the live
 // views hitting the same kind of SSE stream the Agent uses (§6.4), just

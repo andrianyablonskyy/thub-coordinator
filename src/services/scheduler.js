@@ -1,6 +1,19 @@
+/**
+ * @file        packages/coordinator/src/services/scheduler.js
+ * @description Scheduler: matches queued jobs to idle resources by type/labels/group (README §5.4)
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
-const { JOB_STATES, BUSY_SOURCES } = require('@thub/shared');
+const { JOB_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/test-hub');
 
 function rowToJob(row) {
   return { ...row, spec: JSON.parse(row.spec) };

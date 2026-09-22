@@ -1,6 +1,19 @@
+/**
+ * @file        packages/coordinator/src/api/sse.js
+ * @description Server-Sent Events helper: streams a job's log/state/end events, resumable by seq (README §6.4)
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
-const { TERMINAL_JOB_STATES } = require('@thub/shared');
+const { TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
 
 // §6.4: log / state / end events, resumable via Last-Event-ID (§7: "the
 // Agent reconnects with exponential backoff and resumes from the last seq").

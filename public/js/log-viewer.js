@@ -1,3 +1,16 @@
+/**
+ * @file        packages/coordinator/public/js/log-viewer.js
+ * @description Dashboard: streams or fetches a job's log output into the log viewer pane
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 (function () {
   const pre = document.getElementById('log-viewer');
   if (!pre) return;

@@ -1,3 +1,16 @@
+/**
+ * @file        packages/coordinator/test/scheduler.test.js
+ * @description Tests: scheduler, registry, groups, job id allocation, and admin queue operations
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
 const test = require('node:test');
@@ -16,7 +29,7 @@ const { createArtifactsService } = require('../src/services/artifacts');
 const { createJobsService } = require('../src/services/jobs');
 const { createScheduler } = require('../src/services/scheduler');
 const { createHeartbeatMonitor } = require('../src/services/heartbeat');
-const { JOB_STATES, RESOURCE_STATES } = require('@thub/shared');
+const { JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/test-hub');
 
 function buildTestServices(overrides = {}) {
   const db = openDb(':memory:');

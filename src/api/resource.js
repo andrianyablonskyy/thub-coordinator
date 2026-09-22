@@ -1,9 +1,22 @@
+/**
+ * @file        packages/coordinator/src/api/resource.js
+ * @description Resource (Client) API routes: register, heartbeat, job long-poll, result/log upload (README §6.2)
+ *
+ * @author      Andrian Yablonskyy
+ * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
+ *
+ * This file is part of TestHub and is proprietary and confidential.
+ * Unauthorized copying, modification, distribution, or use of this file,
+ * via any medium, is strictly prohibited without prior written permission
+ * from AdSystem.PRO.
+ */
+
 'use strict';
 
 const express = require('express');
 const multer = require('multer');
 const { requireRole, requireJoinKey } = require('../auth');
-const { JOB_STATES } = require('@thub/shared');
+const { JOB_STATES } = require('@andrian.yablonskyy/test-hub');
 
 const upload = multer({ dest: require('node:os').tmpdir() });
 
