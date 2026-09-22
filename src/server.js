@@ -162,7 +162,7 @@ function ensureBootstrapAdmin(services){
     if (services.adminUsers.count() === 0){
       console.warn(
         'No admin_users exist and THUB_BOOTSTRAP_ADMIN_PASSWORD is not set — ' +
-          'create one with: node packages/coordinator/bin/thub-admin.js create-admin <user> <password>'
+          'create one with: node bin/thub-admin.js create-admin <user> <password>'
       );
     }
     return;
