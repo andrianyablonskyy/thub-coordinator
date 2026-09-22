@@ -14,7 +14,7 @@
 'use strict';
 
 const { v4: uuid } = require('uuid'),
-  { RESOURCE_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/test-hub'),
+  { RESOURCE_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/thub-common'),
   { generateToken, hashToken } = require('./tokens');
 
 function rowToResource(row){

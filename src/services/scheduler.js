@@ -13,7 +13,7 @@
 
 'use strict';
 
-const { JOB_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/test-hub');
+const { JOB_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/thub-common');
 
 function rowToJob(row){
   return { ...row, spec: JSON.parse(row.spec) };

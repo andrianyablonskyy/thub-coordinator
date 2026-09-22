@@ -29,7 +29,7 @@ const test = require('node:test'),
   { createJobsService } = require('../src/services/jobs'),
   { createScheduler } = require('../src/services/scheduler'),
   { createHeartbeatMonitor } = require('../src/services/heartbeat'),
-  { JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/test-hub');
+  { JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/thub-common');
 
 function buildTestServices(overrides = {}){
   const db = openDb(':memory:'),

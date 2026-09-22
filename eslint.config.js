@@ -1,6 +1,6 @@
 /**
  * @file        eslint.config.js
- * @description ESLint flat config for @thub/coordinator: stylistic/promise rules plus Node globals
+ * @description ESLint flat config for @andrian.yablonskyy/thub-coordinator: stylistic/promise rules plus Node globals
  *              for server code and browser globals for the dashboard's public/js scripts.
  *
  * @author      Andrian Yablonskyy

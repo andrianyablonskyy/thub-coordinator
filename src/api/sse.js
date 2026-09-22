@@ -13,7 +13,7 @@
 
 'use strict';
 
-const { TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
+const { TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/thub-common');
 
 // §6.4: log / state / end events, resumable via Last-Event-ID (§7: "the
 // Agent reconnects with exponential backoff and resumes from the last seq").

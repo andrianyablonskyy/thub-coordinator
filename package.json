@@ -1,5 +1,5 @@
 {
-  "name": "@thub/coordinator",
+  "name": "@andrian.yablonskyy/thub-coordinator",
   "version": "1.0.0",
   "description": "TestHub Coordinator — job queue, resource registry, scheduler, heartbeat monitor, log/artifact store and web dashboard",
   "main": "src/server.js",
@@ -14,7 +14,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@andrian.yablonskyy/test-hub": "*",
+    "@andrian.yablonskyy/thub-common": "*",
     "better-sqlite3": "^12.4.1",
     "express": "^5.1.0",
     "express-session": "^1.18.2",

@@ -16,7 +16,7 @@
 const express = require('express'),
   multer = require('multer'),
   { requireRole, requireJoinKey } = require('../auth'),
-  { JOB_STATES } = require('@andrian.yablonskyy/test-hub');
+  { JOB_STATES } = require('@andrian.yablonskyy/thub-common');
 
 const upload = multer({ dest: require('node:os').tmpdir() });
 

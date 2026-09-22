@@ -13,7 +13,7 @@
 
 'use strict';
 
-const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
+const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/thub-common');
 
 function rowToJob(row){
   if (!row){

@@ -13,7 +13,7 @@
 
 'use strict';
 
-const { RESOURCE_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
+const { RESOURCE_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/thub-common');
 
 // §5.1 sweeper: runs every sweepIntervalSec, marks resources OUT_OF_SERVICE
 // after missedLimit missed heartbeats and moves any active job to LOST.

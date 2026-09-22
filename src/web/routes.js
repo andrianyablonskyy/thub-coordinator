@@ -20,7 +20,7 @@ const fs = require('node:fs'),
   multer = require('multer'),
   { requireAdminSession, requireAdminRole } = require('../auth'),
   { attachJobStream } = require('../api/sse'),
-  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
+  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/thub-common');
 
 // §10.1: avatar uploads are small, single images — a hard size cap and an
 // allow-list of image mimetypes, same spirit as the join-key/token checks

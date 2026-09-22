@@ -1,4 +1,4 @@
-# @thub/coordinator
+# @andrian.yablonskyy/thub-coordinator
 
 The Coordinator component of [TestHub](https://github.com/andrianyablonskyy/thub) — a self-hosted job network that lets CI/CD pipelines and individual developers run firmware tests on real hardware or emulators in a private lab. The Coordinator owns the job queue, the resource registry, the scheduler, log/artifact storage and the web dashboard. It's the one component you self-host on a reachable server; the [Agent](https://github.com/andrianyablonskyy/thub-agent) and [Client](https://github.com/andrianyablonskyy/thub-client) both talk to it over HTTPS and don't need to be anywhere near it.
 
@@ -7,7 +7,7 @@ See the [main TestHub repo](https://github.com/andrianyablonskyy/thub) for the f
 ## Install
 
 ```bash
-npm install @thub/coordinator
+npm install @andrian.yablonskyy/thub-coordinator
 ```
 
 Or clone this repo directly and run it from source (see below).
