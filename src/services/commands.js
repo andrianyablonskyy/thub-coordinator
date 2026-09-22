@@ -17,21 +17,23 @@
 // Coordinator talks to a Client without an inbound connection." Pending
 // commands are cheap and short-lived, so an in-memory queue per resource
 // is enough — consistent with the single-process design (§3.1).
-function createCommandsService({ bus }) {
+function createCommandsService({ bus }){
   const pending = new Map(); // resourceId -> [{command, jobId?, ...}]
 
   bus.on('command', ({ resourceId, ...command }) => {
-    if (!pending.has(resourceId)) pending.set(resourceId, []);
+    if (!pending.has(resourceId)){
+      pending.set(resourceId, []);
+    }
     pending.get(resourceId).push(command);
   });
 
-  function drain(resourceId) {
+  function drain(resourceId){
     const commands = pending.get(resourceId) || [];
     pending.delete(resourceId);
     return commands;
   }
 
-  function push(resourceId, command) {
+  function push(resourceId, command){
     bus.emit('command', { resourceId, ...command });
   }
 

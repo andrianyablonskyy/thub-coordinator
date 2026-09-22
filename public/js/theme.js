@@ -11,16 +11,20 @@
  * from AdSystem.PRO.
  */
 
-(function () {
-  const root = document.documentElement;
-  const key = 'thub-theme';
+'use strict';
 
-  function apply(theme) {
+(function (){
+  const root = document.documentElement,
+    key = 'thub-theme';
+
+  function apply(theme){
     root.setAttribute('data-bs-theme', theme);
   }
 
   const stored = localStorage.getItem(key);
-  if (stored) apply(stored);
+  if (stored){
+    apply(stored);
+  }
 
   document.getElementById('theme-toggle')?.addEventListener('click', () => {
     const next = root.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';

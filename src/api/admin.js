@@ -13,25 +13,26 @@
 
 'use strict';
 
-const express = require('express');
-const { requireAdminSession, requireAdminRole } = require('../auth');
-const { generateToken, hashToken } = require('../services/tokens');
+const express = require('express'),
+  { requireAdminSession, requireAdminRole } = require('../auth'),
+  { generateToken, hashToken } = require('../services/tokens');
 
 // §6.3 Admin endpoints. Authenticated via the dashboard session (§10),
 // not an API bearer token.
-function createAdminRouter({ services }) {
+function createAdminRouter({ services }){
   const router = express.Router();
   router.use(requireAdminSession, requireAdminRole);
 
   router.post('/agents', (req, res, next) => {
     try {
       const { name, kind } = req.body;
-      if (!name || !['ci', 'cli'].includes(kind)) {
+      if (!name || !['ci', 'cli'].includes(kind)){
         return res.status(400).json({ error: 'name and kind (ci|cli) are required' });
       }
       const { agent, token } = services.agents.create({ name, kind });
       res.status(201).json({ agent, token });
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
@@ -45,7 +46,8 @@ function createAdminRouter({ services }) {
     try {
       const resource = services.registry.setMaintenance(req.params.id, !!req.body.enabled);
       res.json(resource);
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
@@ -79,9 +81,12 @@ function createAdminRouter({ services }) {
   router.post('/groups', (req, res, next) => {
     try {
       const { name, comment } = req.body;
-      if (!name) return res.status(400).json({ error: 'name is required' });
+      if (!name){
+        return res.status(400).json({ error: 'name is required' });
+      }
       res.status(201).json(services.groups.create({ name, comment }));
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
@@ -90,7 +95,8 @@ function createAdminRouter({ services }) {
     try {
       const { name, comment } = req.body;
       res.json(services.groups.update(req.params.id, { name, comment }));
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });

@@ -13,18 +13,18 @@
 
 'use strict';
 
-const express = require('express');
-const { requireAdminSession, requireAdminRole } = require('../auth');
-const { attachJobStream } = require('../api/sse');
-const { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
+const express = require('express'),
+  { requireAdminSession, requireAdminRole } = require('../auth'),
+  { attachJobStream } = require('../api/sse'),
+  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
 
 // §10 Web dashboard: server-rendered Pug + Bootstrap 5.3, with the live
 // views hitting the same kind of SSE stream the Agent uses (§6.4), just
 // authenticated by session cookie instead of a bearer token.
-function createWebRouter({ services, config }) {
+function createWebRouter({ services, config }){
   const router = express.Router();
 
-  function flash(req, type, text) {
+  function flash(req, type, text){
     req.session.flash = req.session.flash || [];
     req.session.flash.push({ type, text });
   }
@@ -32,19 +32,25 @@ function createWebRouter({ services, config }) {
   router.use((req, res, next) => {
     res.locals.user = req.session?.user || null;
     res.locals.messages = req.session?.flash || [];
-    if (req.session) req.session.flash = [];
+    if (req.session){
+      req.session.flash = [];
+    }
     next();
   });
 
   router.get('/login', (req, res) => {
-    if (req.session.user) return res.redirect('/');
+    if (req.session.user){
+      return res.redirect('/');
+    }
     res.render('login', { title: 'Sign in' });
   });
 
   router.post('/login', (req, res) => {
-    const { username, password } = req.body;
-    const user = services.adminUsers.verify(username, password);
-    if (!user) return res.status(401).render('login', { title: 'Sign in', error: 'Invalid credentials' });
+    const { username, password } = req.body,
+      user = services.adminUsers.verify(username, password);
+    if (!user){
+      return res.status(401).render('login', { title: 'Sign in', error: 'Invalid credentials' });
+    }
     req.session.user = user;
     res.redirect('/');
   });
@@ -56,13 +62,13 @@ function createWebRouter({ services, config }) {
   router.use(requireAdminSession);
 
   router.get('/', (req, res) => {
-    const resources = services.registry.list();
-    const queueLength = services.jobs.list({ state: JOB_STATES.QUEUED, limit: 1000 }).length;
-    const dayAgo = new Date(Date.now() - 86400 * 1000).toISOString();
-    const jobsLast24h = services.jobs
-      .list({ limit: 1000 })
-      .filter((j) => j.created_at >= dayAgo).length;
-    const onlineCount = resources.filter((r) => r.status !== RESOURCE_STATES.OUT_OF_SERVICE && r.status !== RESOURCE_STATES.REGISTERED).length;
+    const resources = services.registry.list(),
+      queueLength = services.jobs.list({ state: JOB_STATES.QUEUED, limit: 1000 }).length,
+      dayAgo = new Date(Date.now() - 86400 * 1000).toISOString(),
+      jobsLast24h = services.jobs
+        .list({ limit: 1000 })
+        .filter((j) => j.created_at >= dayAgo).length,
+      onlineCount = resources.filter((r) => r.status !== RESOURCE_STATES.OUT_OF_SERVICE && r.status !== RESOURCE_STATES.REGISTERED).length;
     res.render('index', { title: 'Overview', active: 'overview', resources, queueLength, jobsLast24h, onlineCount });
   });
 
@@ -72,7 +78,7 @@ function createWebRouter({ services, config }) {
       title: 'Resources',
       active: 'resources',
       resources: services.registry.list(),
-      groupsById,
+      groupsById
     });
   });
 
@@ -91,17 +97,17 @@ function createWebRouter({ services, config }) {
   });
 
   router.get('/jobs', (req, res) => {
-    const filters = { state: req.query.state || undefined, source: req.query.source || undefined };
-    const jobs = services.jobs.list({ ...filters, limit: 200 }).map((j) => ({
-      ...j,
-      resource: j.resource_id ? services.registry.get(j.resource_id) : null,
-    }));
+    const filters = { state: req.query.state || undefined, source: req.query.source || undefined },
+      jobs = services.jobs.list({ ...filters, limit: 200 }).map((j) => ({
+        ...j,
+        resource: j.resource_id ? services.registry.get(j.resource_id) : null
+      }));
     res.render('jobs/list', {
       title: 'Jobs',
       active: 'jobs',
       jobs,
       filters,
-      canManage: req.session.user.role === 'admin',
+      canManage: req.session.user.role === 'admin'
     });
   });
 
@@ -122,17 +128,19 @@ function createWebRouter({ services, config }) {
 
   router.get('/jobs/:id', (req, res) => {
     const job = services.jobs.get(req.params.id);
-    if (!job) return res.status(404).send('Not found');
+    if (!job){
+      return res.status(404).send('Not found');
+    }
     job.resource = job.resource_id ? services.registry.get(job.resource_id) : null;
-    const artifacts = services.artifacts.listForJob(job.id).map((a) => ({ ...a, url: services.artifacts.signedUrl(a) }));
-    const jobActive = ACTIVE_JOB_STATES.has(job.state);
+    const artifacts = services.artifacts.listForJob(job.id).map((a) => ({ ...a, url: services.artifacts.signedUrl(a) })),
+      jobActive = ACTIVE_JOB_STATES.has(job.state);
     res.render('jobs/show', {
       title: job.id,
       active: 'jobs',
       job,
       artifacts,
       jobActive,
-      canCancel: req.session.user.role === 'admin' && jobActive,
+      canCancel: req.session.user.role === 'admin' && jobActive
     });
   });
 
@@ -159,13 +167,13 @@ function createWebRouter({ services, config }) {
   router.get('/groups', (req, res) => {
     const groups = services.groups.list().map((g) => ({
       ...g,
-      resourceCount: services.registry.list().filter((r) => r.group_ids.includes(g.id)).length,
+      resourceCount: services.registry.list().filter((r) => r.group_ids.includes(g.id)).length
     }));
     res.render('groups/list', {
       title: 'Groups',
       active: 'groups',
       groups,
-      canManage: req.session.user.role === 'admin',
+      canManage: req.session.user.role === 'admin'
     });
   });
 

@@ -13,71 +13,71 @@
 
 'use strict';
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { EventEmitter } = require('node:events');
+const test = require('node:test'),
+  assert = require('node:assert/strict'),
+  fs = require('node:fs'),
+  os = require('node:os'),
+  path = require('node:path'),
+  { EventEmitter } = require('node:events'),
 
-const { openDb } = require('../src/db');
-const { createEventsService } = require('../src/services/events');
-const { createRegistryService } = require('../src/services/registry');
-const { createAgentsService } = require('../src/services/agents');
-const { createGroupsService } = require('../src/services/groups');
-const { createArtifactsService } = require('../src/services/artifacts');
-const { createJobsService } = require('../src/services/jobs');
-const { createScheduler } = require('../src/services/scheduler');
-const { createHeartbeatMonitor } = require('../src/services/heartbeat');
-const { JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/test-hub');
+  { openDb } = require('../src/db'),
+  { createEventsService } = require('../src/services/events'),
+  { createRegistryService } = require('../src/services/registry'),
+  { createAgentsService } = require('../src/services/agents'),
+  { createGroupsService } = require('../src/services/groups'),
+  { createArtifactsService } = require('../src/services/artifacts'),
+  { createJobsService } = require('../src/services/jobs'),
+  { createScheduler } = require('../src/services/scheduler'),
+  { createHeartbeatMonitor } = require('../src/services/heartbeat'),
+  { JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/test-hub');
 
-function buildTestServices(overrides = {}) {
-  const db = openDb(':memory:');
-  // Own bus per test, not the module-level singleton (production's
-  // there's-only-one-Coordinator-process bus) — sharing it across every
-  // test in this file would pile up listeners test after test with no
-  // teardown, eventually tripping Node's MaxListenersExceededWarning.
-  const bus = new EventEmitter();
-  const events = createEventsService(db);
-  const registry = createRegistryService(db, { bus, events });
-  const agents = createAgentsService(db, { events });
-  const groups = createGroupsService(db, { events, registry });
-  const artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'thub-test-artifacts-'));
-  const config = {
-    scheduler: { assignAckTimeoutSec: 15, requeueOnLost: true, maxQueuedPerAgent: 20, tickIntervalSec: 3600 },
-    jobs: { defaultTimeoutSec: 1800, maxTimeoutSec: 14400 },
-    heartbeat: { intervalSec: 10, missedLimit: 3, sweepIntervalSec: 3600 },
-    artifactsDir,
-    sessionSecret: 'test-secret',
-    publicUrl: 'http://localhost:8080',
-    artifacts: { linkTtlHours: 1 },
-    ...overrides,
-  };
-  const artifacts = createArtifactsService(db, { config });
-  const jobs = createJobsService(db, { bus, events, registry, artifacts, config });
-  const scheduler = createScheduler(db, { bus, events, registry, config });
-  const heartbeatMonitor = createHeartbeatMonitor(db, { bus, events, registry, jobs, config });
+function buildTestServices(overrides = {}){
+  const db = openDb(':memory:'),
+    // Own bus per test, not the module-level singleton (production's
+    // there's-only-one-Coordinator-process bus) — sharing it across every
+    // test in this file would pile up listeners test after test with no
+    // teardown, eventually tripping Node's MaxListenersExceededWarning.
+    bus = new EventEmitter(),
+    events = createEventsService(db),
+    registry = createRegistryService(db, { bus, events }),
+    agents = createAgentsService(db, { events }),
+    groups = createGroupsService(db, { events, registry }),
+    artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'thub-test-artifacts-')),
+    config = {
+      scheduler: { assignAckTimeoutSec: 15, requeueOnLost: true, maxQueuedPerAgent: 20, tickIntervalSec: 3600 },
+      jobs: { defaultTimeoutSec: 1800, maxTimeoutSec: 14400 },
+      heartbeat: { intervalSec: 10, missedLimit: 3, sweepIntervalSec: 3600 },
+      artifactsDir,
+      sessionSecret: 'test-secret',
+      publicUrl: 'http://localhost:8080',
+      artifacts: { linkTtlHours: 1 },
+      ...overrides
+    },
+    artifacts = createArtifactsService(db, { config }),
+    jobs = createJobsService(db, { bus, events, registry, artifacts, config }),
+    scheduler = createScheduler(db, { bus, events, registry, config }),
+    heartbeatMonitor = createHeartbeatMonitor(db, { bus, events, registry, jobs, config });
   return { db, registry, agents, groups, artifacts, jobs, scheduler, heartbeatMonitor, artifactsDir };
 }
 
-function registerResource(registry, { name, type, labels = [], groups = [], clientId } = {}) {
+function registerResource(registry, { name, type, labels = [], groups = [], clientId } = {}){
   const { resourceId } = registry.registerAuto({ clientId: clientId || `client-${name}`, name, type, labels, groups });
   return registry.get(resourceId);
 }
 
-function makeSpec(overrides = {}) {
+function makeSpec(overrides = {}){
   return {
     target: { type: 'sw', labels: [] },
     firmware: { url: 'https://x/app.bin' },
     tests: { url: 'https://x/tests.tar.gz' },
-    ...overrides,
+    ...overrides
   };
 }
 
 test('scheduler assigns a queued job to a matching idle resource', () => {
-  const { registry, agents, jobs, scheduler } = buildTestServices();
-  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
-  const resource = registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: [] });
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    resource = registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: [] });
   registry.heartbeat(resource.id, { state: 'idle' });
 
   const job = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
@@ -92,8 +92,8 @@ test('scheduler assigns a queued job to a matching idle resource', () => {
 });
 
 test('job submission is rejected (422) when no resource could ever satisfy its labels', () => {
-  const { registry, agents, jobs } = buildTestServices();
-  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
+  const { registry, agents, jobs } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' });
   registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: ['board:a'] });
 
   assert.throws(
@@ -101,20 +101,20 @@ test('job submission is rejected (422) when no resource could ever satisfy its l
       jobs.create({
         agentId: agent.id,
         source: 'cli',
-        spec: makeSpec({ target: { type: 'sw', labels: ['board:b'] } }),
+        spec: makeSpec({ target: { type: 'sw', labels: ['board:b'] } })
       }),
     /No registered resource/
   );
 });
 
 test('a job stays QUEUED while its only matching resource is busy', () => {
-  const { registry, agents, jobs, scheduler } = buildTestServices();
-  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
-  const resource = registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: ['board:a'] });
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    resource = registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: ['board:a'] });
   registry.heartbeat(resource.id, { state: 'idle' });
 
-  const first = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', labels: ['board:a'] } }) });
-  const second = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', labels: ['board:a'] } }) });
+  const first = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', labels: ['board:a'] } }) }),
+    second = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', labels: ['board:a'] } }) });
   scheduler.runPass();
 
   assert.equal(jobs.get(first.id).state, JOB_STATES.ASSIGNED);
@@ -122,9 +122,9 @@ test('a job stays QUEUED while its only matching resource is busy', () => {
 });
 
 test('heartbeat sweeper marks a silent resource OUT_OF_SERVICE and requeues its active job', () => {
-  const { db, registry, agents, jobs, scheduler, heartbeatMonitor } = buildTestServices();
-  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
-  const resource = registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: [] });
+  const { db, registry, agents, jobs, scheduler, heartbeatMonitor } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    resource = registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: [] });
   registry.heartbeat(resource.id, { state: 'idle' });
 
   const job = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
@@ -143,13 +143,13 @@ test('heartbeat sweeper marks a silent resource OUT_OF_SERVICE and requeues its 
 });
 
 test('job ids are split by source: A-##### for ci, M-##### for cli', () => {
-  const { registry, agents, jobs } = buildTestServices();
-  const { agent } = agents.create({ name: 'mixed', kind: 'ci' });
+  const { registry, agents, jobs } = buildTestServices(),
+    { agent } = agents.create({ name: 'mixed', kind: 'ci' });
   registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: [] });
 
-  const ciJob = jobs.create({ agentId: agent.id, source: 'ci', spec: makeSpec() });
-  const cliJob = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
-  const ciJob2 = jobs.create({ agentId: agent.id, source: 'ci', spec: makeSpec() });
+  const ciJob = jobs.create({ agentId: agent.id, source: 'ci', spec: makeSpec() }),
+    cliJob = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() }),
+    ciJob2 = jobs.create({ agentId: agent.id, source: 'ci', spec: makeSpec() });
 
   assert.match(ciJob.id, /^A-\d{5}$/);
   assert.match(cliJob.id, /^M-\d{5}$/);
@@ -158,17 +158,17 @@ test('job ids are split by source: A-##### for ci, M-##### for cli', () => {
 });
 
 test('admin resetQueue cancels every active job and leaves finished ones alone', () => {
-  const { registry, agents, jobs, scheduler } = buildTestServices();
-  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
-  const resource = registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: [] });
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    resource = registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: [] });
   registry.heartbeat(resource.id, { state: 'idle' });
 
   const assigned = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
   scheduler.runPass();
   assert.equal(jobs.get(assigned.id).state, JOB_STATES.ASSIGNED);
 
-  const queued = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
-  const finished = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
+  const queued = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() }),
+    finished = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
   jobs.setState(finished.id, JOB_STATES.PASSED);
 
   const canceled = jobs.resetQueue();
@@ -180,8 +180,8 @@ test('admin resetQueue cancels every active job and leaves finished ones alone',
 });
 
 test('admin cleanHistory deletes finished jobs, their artifacts on disk, and leaves active jobs alone', () => {
-  const { registry, agents, artifacts, jobs, artifactsDir } = buildTestServices();
-  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
+  const { registry, agents, artifacts, jobs, artifactsDir } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' });
   registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: [] });
 
   const finished = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
@@ -189,9 +189,9 @@ test('admin cleanHistory deletes finished jobs, their artifacts on disk, and lea
   artifacts.storeGenerated(finished.id, 'console.log', Buffer.from('hello'), 'text/plain');
   assert.ok(fs.existsSync(path.join(artifactsDir, finished.id)));
 
-  const active = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
+  const active = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() }),
 
-  const deleted = jobs.cleanHistory();
+    deleted = jobs.cleanHistory();
 
   assert.equal(deleted, 1);
   assert.equal(jobs.get(finished.id), undefined);
@@ -200,9 +200,9 @@ test('admin cleanHistory deletes finished jobs, their artifacts on disk, and lea
 });
 
 test('resource re-registration overwrites type/labels/status and marks its stale active job LOST', () => {
-  const { registry, agents, jobs, scheduler } = buildTestServices();
-  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
-  const resource = registerResource(registry, { name: 'lab-hw-01', type: 'hw', labels: ['board:a'] });
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    resource = registerResource(registry, { name: 'lab-hw-01', type: 'hw', labels: ['board:a'] });
   registry.heartbeat(resource.id, { state: 'idle' });
 
   const job = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'hw', labels: ['board:a'] } }) });
@@ -215,7 +215,7 @@ test('resource re-registration overwrites type/labels/status and marks its stale
     clientId: 'client-lab-hw-01',
     name: 'lab-hw-01',
     type: 'sw',
-    labels: ['board:b'],
+    labels: ['board:b']
   });
   assert.equal(resourceId, resource.id);
 
@@ -230,8 +230,8 @@ test('resource re-registration overwrites type/labels/status and marks its stale
 });
 
 test('resource re-registration does not clear an admin-set MAINTENANCE status', () => {
-  const { registry } = buildTestServices();
-  const resource = registerResource(registry, { name: 'lab-sw-02', type: 'sw', labels: [] });
+  const { registry } = buildTestServices(),
+    resource = registerResource(registry, { name: 'lab-sw-02', type: 'sw', labels: [] });
   registry.heartbeat(resource.id, { state: 'idle' });
   registry.setMaintenance(resource.id, true);
 
@@ -241,10 +241,10 @@ test('resource re-registration does not clear an admin-set MAINTENANCE status', 
 });
 
 test('renaming a Client (same clientId, new name) updates the same resource in place', () => {
-  const { registry } = buildTestServices();
-  const resource = registerResource(registry, { clientId: 'stable-uuid-1', name: 'old-name', type: 'sw', labels: [] });
+  const { registry } = buildTestServices(),
+    resource = registerResource(registry, { clientId: 'stable-uuid-1', name: 'old-name', type: 'sw', labels: [] }),
 
-  const { resourceId } = registry.registerAuto({ clientId: 'stable-uuid-1', name: 'new-name', type: 'sw', labels: [] });
+    { resourceId } = registry.registerAuto({ clientId: 'stable-uuid-1', name: 'new-name', type: 'sw', labels: [] });
 
   assert.equal(resourceId, resource.id);
   assert.equal(registry.get(resource.id).name, 'new-name');
@@ -267,8 +267,8 @@ test('a name already claimed by a different clientId is rejected, whether new or
 });
 
 test('a name held by an OUT_OF_SERVICE (abandoned) client can be reclaimed by a new registration', () => {
-  const { registry } = buildTestServices();
-  const abandoned = registerResource(registry, { clientId: 'old-uuid', name: 'lab-01', type: 'sw', labels: [] });
+  const { registry } = buildTestServices(),
+    abandoned = registerResource(registry, { clientId: 'old-uuid', name: 'lab-01', type: 'sw', labels: [] });
   registry.markOutOfService(abandoned.id);
 
   const { resourceId } = registry.registerAuto({ clientId: 'new-uuid', name: 'lab-01', type: 'hw', labels: ['x'] });
@@ -282,12 +282,12 @@ test('a name held by an OUT_OF_SERVICE (abandoned) client can be reclaimed by a 
 });
 
 test('a name held by an OUT_OF_SERVICE client can be reclaimed via a rename too, without duplicating the row', () => {
-  const { registry } = buildTestServices();
-  const abandoned = registerResource(registry, { clientId: 'old-uuid', name: 'lab-02', type: 'sw', labels: [] });
+  const { registry } = buildTestServices(),
+    abandoned = registerResource(registry, { clientId: 'old-uuid', name: 'lab-02', type: 'sw', labels: [] });
   registry.markOutOfService(abandoned.id);
-  const renaming = registerResource(registry, { clientId: 'live-uuid', name: 'my-bench', type: 'sw', labels: [] });
+  const renaming = registerResource(registry, { clientId: 'live-uuid', name: 'my-bench', type: 'sw', labels: [] }),
 
-  const { resourceId } = registry.registerAuto({ clientId: 'live-uuid', name: 'lab-02', type: 'sw', labels: [] });
+    { resourceId } = registry.registerAuto({ clientId: 'live-uuid', name: 'lab-02', type: 'sw', labels: [] });
 
   assert.equal(resourceId, renaming.id);
   assert.equal(registry.get(renaming.id).name, 'lab-02');
@@ -297,8 +297,8 @@ test('a name held by an OUT_OF_SERVICE client can be reclaimed via a rename too,
 });
 
 test('a legacy resource with no clientId (pre-dates the feature) is adopted by name on first registration', () => {
-  const { db, registry } = buildTestServices();
-  const resource = registerResource(registry, { clientId: 'will-be-overwritten', name: 'legacy-01', type: 'sw', labels: [] });
+  const { db, registry } = buildTestServices(),
+    resource = registerResource(registry, { clientId: 'will-be-overwritten', name: 'legacy-01', type: 'sw', labels: [] });
   // Simulate a pre-migration row: no client_id yet.
   db.prepare('UPDATE resources SET client_id = NULL WHERE id = ?').run(resource.id);
 
@@ -310,20 +310,20 @@ test('a legacy resource with no clientId (pre-dates the feature) is adopted by n
 });
 
 test('a job with target.group only schedules onto resources that are members of that group', () => {
-  const { registry, agents, groups, jobs, scheduler } = buildTestServices();
-  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
-  const groupA = groups.create({ name: 'group-a' });
-  const groupB = groups.create({ name: 'group-b' });
+  const { registry, agents, groups, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    groupA = groups.create({ name: 'group-a' }),
+    groupB = groups.create({ name: 'group-b' }),
 
-  const inGroupA = registerResource(registry, { name: 'lab-a', type: 'sw', groups: [groupA.id] });
-  const inGroupB = registerResource(registry, { name: 'lab-b', type: 'sw', groups: [groupB.id] });
+    inGroupA = registerResource(registry, { name: 'lab-a', type: 'sw', groups: [groupA.id] }),
+    inGroupB = registerResource(registry, { name: 'lab-b', type: 'sw', groups: [groupB.id] });
   registry.heartbeat(inGroupA.id, { state: 'idle' });
   registry.heartbeat(inGroupB.id, { state: 'idle' });
 
   const job = jobs.create({
     agentId: agent.id,
     source: 'cli',
-    spec: makeSpec({ target: { type: 'sw', labels: [], group: groupA.id } }),
+    spec: makeSpec({ target: { type: 'sw', labels: [], group: groupA.id } })
   });
   scheduler.runPass();
 
@@ -333,9 +333,9 @@ test('a job with target.group only schedules onto resources that are members of 
 });
 
 test('a job with target.group is rejected (422) when no resource is ever a member of that group', () => {
-  const { registry, agents, groups, jobs } = buildTestServices();
-  const { agent } = agents.create({ name: 'ci', kind: 'ci' });
-  const group = groups.create({ name: 'empty-group' });
+  const { registry, agents, groups, jobs } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    group = groups.create({ name: 'empty-group' });
   registerResource(registry, { name: 'lab-01', type: 'sw', groups: [] }); // exists, but not a member
 
   assert.throws(
@@ -343,27 +343,27 @@ test('a job with target.group is rejected (422) when no resource is ever a membe
       jobs.create({
         agentId: agent.id,
         source: 'cli',
-        spec: makeSpec({ target: { type: 'sw', labels: [], group: group.id } }),
+        spec: makeSpec({ target: { type: 'sw', labels: [], group: group.id } })
       }),
     /No registered resource/
   );
 });
 
 test('a resource can belong to several groups at once', () => {
-  const { registry, groups } = buildTestServices();
-  const g1 = groups.create({ name: 'g1' });
-  const g2 = groups.create({ name: 'g2' });
+  const { registry, groups } = buildTestServices(),
+    g1 = groups.create({ name: 'g1' }),
+    g2 = groups.create({ name: 'g2' }),
 
-  const resource = registerResource(registry, { name: 'multi-group', type: 'sw', groups: [g1.id, g2.id] });
+    resource = registerResource(registry, { name: 'multi-group', type: 'sw', groups: [g1.id, g2.id] });
 
   assert.deepEqual(registry.get(resource.id).group_ids, [g1.id, g2.id]);
 });
 
 test('deleting a group strips it from every resource that listed it, without touching the resource otherwise', () => {
-  const { registry, groups } = buildTestServices();
-  const g1 = groups.create({ name: 'to-delete' });
-  const g2 = groups.create({ name: 'keep-me' });
-  const resource = registerResource(registry, { name: 'lab-01', type: 'sw', labels: ['x'], groups: [g1.id, g2.id] });
+  const { registry, groups } = buildTestServices(),
+    g1 = groups.create({ name: 'to-delete' }),
+    g2 = groups.create({ name: 'keep-me' }),
+    resource = registerResource(registry, { name: 'lab-01', type: 'sw', labels: ['x'], groups: [g1.id, g2.id] });
 
   groups.remove(g1.id);
 

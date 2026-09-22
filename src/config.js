@@ -13,8 +13,8 @@
 
 'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
+const fs = require('node:fs'),
+  path = require('node:path');
 
 // Defaults mirror README.md §13 (/srv/thub/coordinator.json).
 const DEFAULTS = {
@@ -28,32 +28,34 @@ const DEFAULTS = {
   heartbeat: {
     intervalSec: 10,
     missedLimit: 3,
-    sweepIntervalSec: 5,
+    sweepIntervalSec: 5
   },
   scheduler: {
     assignAckTimeoutSec: 15,
     requeueOnLost: true,
     maxQueuedPerAgent: 20,
-    tickIntervalSec: 10,
+    tickIntervalSec: 10
   },
   jobs: {
     defaultTimeoutSec: 1800,
-    maxTimeoutSec: 14400,
+    maxTimeoutSec: 14400
   },
   retention: {
     logRetentionDays: 14,
-    artifactRetentionDays: 30,
+    artifactRetentionDays: 30
   },
   artifacts: {
     maxUploadMb: 512,
-    linkTtlHours: 168,
-  },
+    linkTtlHours: 168
+  }
 };
 
-function deepMerge(base, override) {
-  if (!override) return base;
+function deepMerge(base, override){
+  if (!override){
+    return base;
+  }
   const out = { ...base };
-  for (const [k, v] of Object.entries(override)) {
+  for (const [k, v]of Object.entries(override)){
     out[k] = v && typeof v === 'object' && !Array.isArray(v) ? deepMerge(base[k] || {}, v) : v;
   }
   return out;
@@ -64,19 +66,29 @@ function deepMerge(base, override) {
 // THUB_COORDINATOR_CONFIG or /srv/thub/coordinator.json (§13).
 const PACKAGE_DEFAULT_CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 
-function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG) {
+function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
   const candidate = [configPath, PACKAGE_DEFAULT_CONFIG_PATH].find(
-    (p) => p && fs.existsSync(p)
-  );
-  const fileConfig = candidate ? JSON.parse(fs.readFileSync(candidate, 'utf8')) || {} : {};
-  const config = deepMerge(DEFAULTS, fileConfig);
+      (p) => p && fs.existsSync(p)
+    ),
+    fileConfig = candidate ? JSON.parse(fs.readFileSync(candidate, 'utf8')) || {} : {},
+    config = deepMerge(DEFAULTS, fileConfig);
 
   // Environment overrides for the bits you don't want in a committed file.
-  if (process.env.THUB_LISTEN) config.listen = process.env.THUB_LISTEN;
-  if (process.env.THUB_PUBLIC_URL) config.publicUrl = process.env.THUB_PUBLIC_URL;
-  if (process.env.THUB_DATA_DIR) config.dataDir = process.env.THUB_DATA_DIR;
-  if (process.env.THUB_SESSION_SECRET) config.sessionSecret = process.env.THUB_SESSION_SECRET;
-  if (process.env.THUB_CLIENT_JOIN_KEY) config.clientJoinKey = process.env.THUB_CLIENT_JOIN_KEY;
+  if (process.env.THUB_LISTEN){
+    config.listen = process.env.THUB_LISTEN;
+  }
+  if (process.env.THUB_PUBLIC_URL){
+    config.publicUrl = process.env.THUB_PUBLIC_URL;
+  }
+  if (process.env.THUB_DATA_DIR){
+    config.dataDir = process.env.THUB_DATA_DIR;
+  }
+  if (process.env.THUB_SESSION_SECRET){
+    config.sessionSecret = process.env.THUB_SESSION_SECRET;
+  }
+  if (process.env.THUB_CLIENT_JOIN_KEY){
+    config.clientJoinKey = process.env.THUB_CLIENT_JOIN_KEY;
+  }
 
   const [host, port] = config.listen.split(':');
   config.host = host;

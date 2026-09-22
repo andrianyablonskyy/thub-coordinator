@@ -21,16 +21,16 @@ const { v4: uuid } = require('uuid');
 // Membership itself lives on the resource (registry.js's `group_ids`,
 // declared by the Client's own config), not here — this service only
 // owns the groups' own identity (id/name/comment).
-function createGroupsService(db, { events, registry }) {
-  function get(id) {
+function createGroupsService(db, { events, registry }){
+  function get(id){
     return db.prepare('SELECT * FROM groups WHERE id = ?').get(id);
   }
 
-  function list() {
+  function list(){
     return db.prepare('SELECT * FROM groups ORDER BY name ASC').all();
   }
 
-  function create({ name, comment }) {
+  function create({ name, comment }){
     const id = uuid();
     db.prepare('INSERT INTO groups (id, name, comment, created_at) VALUES (?, ?, ?, ?)').run(
       id,
@@ -42,9 +42,11 @@ function createGroupsService(db, { events, registry }) {
     return get(id);
   }
 
-  function update(id, { name, comment }) {
+  function update(id, { name, comment }){
     const group = get(id);
-    if (!group) throw Object.assign(new Error('Unknown group'), { status: 404 });
+    if (!group){
+      throw Object.assign(new Error('Unknown group'), { status: 404 });
+    }
     db.prepare('UPDATE groups SET name = ?, comment = ? WHERE id = ?').run(
       name ?? group.name,
       comment !== undefined ? comment : group.comment,
@@ -57,11 +59,13 @@ function createGroupsService(db, { events, registry }) {
   // Deletes the group and strips it out of every resource's membership
   // list — a resource whose config still lists this id just stops
   // matching on it, rather than being left with a dangling reference.
-  function remove(id) {
+  function remove(id){
     const group = get(id);
-    if (!group) return;
-    for (const resource of registry.list()) {
-      if (resource.group_ids.includes(id)) {
+    if (!group){
+      return;
+    }
+    for (const resource of registry.list()){
+      if (resource.group_ids.includes(id)){
         registry.setGroups(resource.id, resource.group_ids.filter((g) => g !== id));
       }
     }

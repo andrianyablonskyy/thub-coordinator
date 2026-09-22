@@ -17,11 +17,11 @@ const { TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/test-hub');
 
 // §6.4: log / state / end events, resumable via Last-Event-ID (§7: "the
 // Agent reconnects with exponential backoff and resumes from the last seq").
-function attachJobStream(req, res, { jobId, services, config }) {
-  const { jobs, logs, registry, bus } = services;
+function attachJobStream(req, res, { jobId, services, config }){
+  const { jobs, logs, registry, bus } = services,
 
-  const job = jobs.get(jobId);
-  if (!job) {
+    job = jobs.get(jobId);
+  if (!job){
     res.status(404).json({ error: 'Unknown job' });
     return;
   }
@@ -30,29 +30,31 @@ function attachJobStream(req, res, { jobId, services, config }) {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
     Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no',
+    'X-Accel-Buffering': 'no'
   });
   res.flushHeaders?.();
 
-  const lastEventId = req.get('Last-Event-ID');
-  const afterSeq = Number(lastEventId ?? req.query.after ?? 0) || 0;
+  const lastEventId = req.get('Last-Event-ID'),
+    afterSeq = Number(lastEventId ?? req.query.after ?? 0) || 0;
 
-  function writeEvent(event, data, id) {
-    if (id !== undefined) res.write(`id: ${id}\n`);
+  function writeEvent(event, data, id){
+    if (id !== undefined){
+      res.write(`id: ${id}\n`);
+    }
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
 
-  for (const line of logs.listSince(jobId, afterSeq)) {
+  for (const line of logs.listSince(jobId, afterSeq)){
     writeEvent('log', { ts: line.ts, stream: line.stream, line: line.line }, line.seq);
   }
 
-  function artifactsUrl() {
+  function artifactsUrl(){
     return `${config.publicUrl}/jobs/${jobId}#artifacts`;
   }
 
   const current = jobs.get(jobId);
-  if (TERMINAL_JOB_STATES.has(current.state)) {
+  if (TERMINAL_JOB_STATES.has(current.state)){
     writeEvent('end', { state: current.state, artifactsUrl: artifactsUrl() });
     return res.end();
   }
@@ -61,19 +63,25 @@ function attachJobStream(req, res, { jobId, services, config }) {
   writeEvent('state', { state: current.state, resource: resourceName(current.resource_id) });
 
   const onLog = (entry) => {
-    if (entry.jobId === jobId) writeEvent('log', { ts: entry.ts, stream: entry.stream, line: entry.line }, entry.seq);
-  };
-  const onState = (evt) => {
-    if (evt.jobId === jobId) writeEvent('state', { state: evt.state, resource: resourceName(evt.resourceId) });
-  };
-  const onFinished = (evt) => {
-    if (evt.jobId !== jobId) return;
-    writeEvent('end', { state: evt.state, artifactsUrl: artifactsUrl() });
-    cleanup();
-    res.end();
-  };
+      if (entry.jobId === jobId){
+        writeEvent('log', { ts: entry.ts, stream: entry.stream, line: entry.line }, entry.seq);
+      }
+    },
+    onState = (evt) => {
+      if (evt.jobId === jobId){
+        writeEvent('state', { state: evt.state, resource: resourceName(evt.resourceId) });
+      }
+    },
+    onFinished = (evt) => {
+      if (evt.jobId !== jobId){
+        return;
+      }
+      writeEvent('end', { state: evt.state, artifactsUrl: artifactsUrl() });
+      cleanup();
+      res.end();
+    };
 
-  function cleanup() {
+  function cleanup(){
     bus.off('job.log', onLog);
     bus.off('job.state', onState);
     bus.off('job.finished', onFinished);

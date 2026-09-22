@@ -13,45 +13,47 @@
 
 'use strict';
 
-const { v4: uuid } = require('uuid');
-const { RESOURCE_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/test-hub');
-const { generateToken, hashToken } = require('./tokens');
+const { v4: uuid } = require('uuid'),
+  { RESOURCE_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/test-hub'),
+  { generateToken, hashToken } = require('./tokens');
 
-function rowToResource(row) {
-  if (!row) return row;
+function rowToResource(row){
+  if (!row){
+    return row;
+  }
   return {
     ...row,
     labels: JSON.parse(row.labels || '[]'),
     group_ids: JSON.parse(row.group_ids || '[]'),
-    host_info: row.host_info ? JSON.parse(row.host_info) : null,
+    host_info: row.host_info ? JSON.parse(row.host_info) : null
   };
 }
 
-function createRegistryService(db, { bus, events }) {
-  function get(id) {
+function createRegistryService(db, { bus, events }){
+  function get(id){
     return rowToResource(db.prepare('SELECT * FROM resources WHERE id = ?').get(id));
   }
 
-  function getByName(name) {
+  function getByName(name){
     return rowToResource(db.prepare('SELECT * FROM resources WHERE name = ?').get(name));
   }
 
-  function getByClientId(clientId) {
+  function getByClientId(clientId){
     return rowToResource(db.prepare('SELECT * FROM resources WHERE client_id = ?').get(clientId));
   }
 
-  function getByTokenHash(tokenHash) {
+  function getByTokenHash(tokenHash){
     return rowToResource(db.prepare('SELECT * FROM resources WHERE token_hash = ?').get(tokenHash));
   }
 
-  function list({ status, type } = {}) {
+  function list({ status, type } = {}){
     let sql = 'SELECT * FROM resources WHERE 1=1';
     const params = [];
-    if (status) {
+    if (status){
       sql += ' AND status = ?';
       params.push(status);
     }
-    if (type) {
+    if (type){
       sql += ' AND type = ?';
       params.push(type);
     }
@@ -82,15 +84,15 @@ function createRegistryService(db, { bus, events }) {
   // this registration is allowed to reclaim it. Anything else (IDLE, BUSY,
   // MAINTENANCE, REGISTERED-but-just-created) means a process might still
   // be actively using that identity, so it stays a hard conflict.
-  function registerAuto({ clientId, name, type, labels = [], groups = [], hostInfo }) {
+  function registerAuto({ clientId, name, type, labels = [], groups = [], hostInfo }){
     const resourceToken = generateToken('res');
     let existing = getByClientId(clientId);
 
-    if (!existing) {
+    if (!existing){
       const nameOwner = getByName(name);
-      if (nameOwner) {
+      if (nameOwner){
         const abandoned = nameOwner.status === RESOURCE_STATES.OUT_OF_SERVICE;
-        if (nameOwner.client_id && nameOwner.client_id !== clientId && !abandoned) {
+        if (nameOwner.client_id && nameOwner.client_id !== clientId && !abandoned){
           throw Object.assign(
             new Error(
               `Resource name "${name}" is already registered by a different client (status: ${nameOwner.status})`
@@ -100,10 +102,11 @@ function createRegistryService(db, { bus, events }) {
         }
         existing = nameOwner; // legacy row, same client, or a reclaimed abandoned one
       }
-    } else if (existing.name !== name) {
+    }
+    else if (existing.name !== name){
       const nameOwner = getByName(name);
-      if (nameOwner && nameOwner.id !== existing.id) {
-        if (nameOwner.status !== RESOURCE_STATES.OUT_OF_SERVICE) {
+      if (nameOwner && nameOwner.id !== existing.id){
+        if (nameOwner.status !== RESOURCE_STATES.OUT_OF_SERVICE){
           throw Object.assign(
             new Error(`Resource name "${name}" is already used by another client (status: ${nameOwner.status})`),
             { status: 409 }
@@ -116,7 +119,7 @@ function createRegistryService(db, { bus, events }) {
       }
     }
 
-    if (existing) {
+    if (existing){
       // A fresh process registering is a definitive signal that whatever
       // the previous process was doing is abandoned — tell jobs.js (via
       // the bus, to avoid a registry<->jobs circular dependency) so any
@@ -150,7 +153,7 @@ function createRegistryService(db, { bus, events }) {
         type,
         labels,
         groups,
-        reregistered: true,
+        reregistered: true
       });
       return { resourceId: existing.id, resourceToken };
     }
@@ -176,34 +179,39 @@ function createRegistryService(db, { bus, events }) {
     return { resourceId: id, resourceToken };
   }
 
-  function setGroups(resourceId, groupIds) {
+  function setGroups(resourceId, groupIds){
     db.prepare('UPDATE resources SET group_ids = ? WHERE id = ?').run(JSON.stringify(groupIds), resourceId);
     return get(resourceId);
   }
 
   // Reconcile status from a heartbeat's self-reported state (§5.1).
-  function heartbeat(resourceId, { state, activeJobId, localLock, metrics } = {}) {
+  function heartbeat(resourceId, { state, activeJobId, localLock, metrics } = {}){
     const resource = get(resourceId);
-    if (!resource) throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    if (!resource){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
 
-    let nextStatus = resource.status;
-    let busySource = resource.busy_source;
-    let busyReason = resource.busy_reason;
+    let nextStatus = resource.status,
+      busySource = resource.busy_source,
+      busyReason = resource.busy_reason;
 
-    if (localLock) {
+    if (localLock){
       nextStatus = RESOURCE_STATES.BUSY;
       busySource = BUSY_SOURCES.LOCAL;
-    } else if (state === 'busy' && activeJobId) {
+    }
+    else if (state === 'busy' && activeJobId){
       nextStatus = RESOURCE_STATES.BUSY;
       // busy_source stays whatever the scheduler assigned.
-    } else if (
+    }
+    else if (
       resource.status === RESOURCE_STATES.OUT_OF_SERVICE ||
       resource.status === RESOURCE_STATES.REGISTERED
-    ) {
+    ){
       nextStatus = RESOURCE_STATES.IDLE;
       busySource = null;
       busyReason = null;
-    } else if (resource.status !== RESOURCE_STATES.MAINTENANCE && state === 'idle') {
+    }
+    else if (resource.status !== RESOURCE_STATES.MAINTENANCE && state === 'idle'){
       nextStatus = RESOURCE_STATES.IDLE;
       busySource = null;
       busyReason = null;
@@ -215,24 +223,28 @@ function createRegistryService(db, { bus, events }) {
        WHERE id = ?`
     ).run(new Date().toISOString(), nextStatus, busySource, busyReason, resourceId);
 
-    if (resource.status !== nextStatus) {
+    if (resource.status !== nextStatus){
       events.record('resource', resourceId, 'resource.status_changed', {
         from: resource.status,
-        to: nextStatus,
+        to: nextStatus
       });
-      if (nextStatus === RESOURCE_STATES.IDLE) bus.emit('resource.idle', { resourceId });
+      if (nextStatus === RESOURCE_STATES.IDLE){
+        bus.emit('resource.idle', { resourceId });
+      }
     }
 
     return { resource: get(resourceId), statusChanged: resource.status !== nextStatus };
   }
 
   // §8.4 local lock / unlock via the Client's Unix socket -> daemon -> Coordinator.
-  function setLocalLock(resourceId, { locked, reason }) {
+  function setLocalLock(resourceId, { locked, reason }){
     const resource = get(resourceId);
-    if (!resource) throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    if (!resource){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
 
-    if (locked) {
-      if (resource.status === RESOURCE_STATES.BUSY && resource.busy_source !== BUSY_SOURCES.LOCAL) {
+    if (locked){
+      if (resource.status === RESOURCE_STATES.BUSY && resource.busy_source !== BUSY_SOURCES.LOCAL){
         throw Object.assign(new Error('Resource is running a job'), { status: 409 });
       }
       db.prepare('UPDATE resources SET status = ?, busy_source = ?, busy_reason = ? WHERE id = ?').run(
@@ -242,7 +254,8 @@ function createRegistryService(db, { bus, events }) {
         resourceId
       );
       events.record('resource', resourceId, 'resource.locked', { reason });
-    } else {
+    }
+    else {
       db.prepare('UPDATE resources SET status = ?, busy_source = NULL, busy_reason = NULL WHERE id = ?').run(
         RESOURCE_STATES.IDLE,
         resourceId
@@ -253,15 +266,17 @@ function createRegistryService(db, { bus, events }) {
     return get(resourceId);
   }
 
-  function markOutOfService(resourceId) {
+  function markOutOfService(resourceId){
     const resource = get(resourceId);
-    if (!resource || resource.status === RESOURCE_STATES.OUT_OF_SERVICE) return resource;
+    if (!resource || resource.status === RESOURCE_STATES.OUT_OF_SERVICE){
+      return resource;
+    }
     db.prepare('UPDATE resources SET status = ? WHERE id = ?').run(RESOURCE_STATES.OUT_OF_SERVICE, resourceId);
     events.record('resource', resourceId, 'resource.oos', {});
     return get(resourceId);
   }
 
-  function markIdleAfterJob(resourceId) {
+  function markIdleAfterJob(resourceId){
     db.prepare(
       `UPDATE resources
        SET status = ?, busy_source = NULL, busy_reason = NULL, last_job_finished_at = ?
@@ -270,18 +285,22 @@ function createRegistryService(db, { bus, events }) {
     bus.emit('resource.idle', { resourceId });
   }
 
-  function setMaintenance(resourceId, enabled) {
+  function setMaintenance(resourceId, enabled){
     const resource = get(resourceId);
-    if (!resource) throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    if (!resource){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
     const status = enabled ? RESOURCE_STATES.MAINTENANCE : RESOURCE_STATES.IDLE;
     db.prepare('UPDATE resources SET status = ? WHERE id = ?').run(status, resourceId);
     events.record('resource', resourceId, enabled ? 'resource.maintenance_on' : 'resource.maintenance_off', {});
-    if (!enabled) bus.emit('resource.idle', { resourceId });
+    if (!enabled){
+      bus.emit('resource.idle', { resourceId });
+    }
     return get(resourceId);
   }
 
   // Used by the scheduler under a single write transaction.
-  function assignToJob(resourceId, busySource) {
+  function assignToJob(resourceId, busySource){
     db.prepare('UPDATE resources SET status = ?, busy_source = ? WHERE id = ?').run(
       RESOURCE_STATES.BUSY,
       busySource,
@@ -289,9 +308,9 @@ function createRegistryService(db, { bus, events }) {
     );
   }
 
-  function findIdleCandidates(type, labels, groupId) {
+  function findIdleCandidates(type, labels, groupId){
     const rows = db
-      .prepare("SELECT * FROM resources WHERE status = ? AND type = ?")
+      .prepare('SELECT * FROM resources WHERE status = ? AND type = ?')
       .all(RESOURCE_STATES.IDLE, type)
       .map(rowToResource);
     return rows.filter(
@@ -299,7 +318,7 @@ function createRegistryService(db, { bus, events }) {
     );
   }
 
-  function everSatisfiable(type, labels, groupId) {
+  function everSatisfiable(type, labels, groupId){
     const rows = db.prepare('SELECT * FROM resources WHERE type = ?').all(type).map(rowToResource);
     return rows.some(
       (r) => labels.every((l) => r.labels.includes(l)) && (!groupId || r.group_ids.includes(groupId))
@@ -321,7 +340,7 @@ function createRegistryService(db, { bus, events }) {
     setMaintenance,
     assignToJob,
     findIdleCandidates,
-    everSatisfiable,
+    everSatisfiable
   };
 }
 

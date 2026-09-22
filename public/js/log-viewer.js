@@ -11,15 +11,19 @@
  * from AdSystem.PRO.
  */
 
-(function () {
-  const pre = document.getElementById('log-viewer');
-  if (!pre) return;
-  const jobId = pre.dataset.jobId;
-  const jobActive = pre.dataset.jobActive === 'true';
-  const filter = document.getElementById('stream-filter');
-  const lines = [];
+'use strict';
 
-  function render() {
+(function (){
+  const pre = document.getElementById('log-viewer');
+  if (!pre){
+    return;
+  }
+  const jobId = pre.dataset.jobId,
+    jobActive = pre.dataset.jobActive === 'true',
+    filter = document.getElementById('stream-filter'),
+    lines = [];
+
+  function render(){
     const wanted = filter.value;
     pre.textContent = lines
       .filter((l) => !wanted || l.stream === wanted)
@@ -36,7 +40,7 @@
   // immediately got the job's "end" event, which reloaded the page, which
   // re-opened the stream, which reloaded again — an infinite loop for
   // anyone viewing a finished job.)
-  if (!jobActive) {
+  if (!jobActive){
     fetch(`/jobs/${jobId}/logs`)
       .then((r) => r.json())
       .then(({ lines: fetched }) => {

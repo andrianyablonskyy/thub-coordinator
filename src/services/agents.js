@@ -13,27 +13,27 @@
 
 'use strict';
 
-const { v4: uuid } = require('uuid');
-const { generateToken, hashToken } = require('./tokens');
+const { v4: uuid } = require('uuid'),
+  { generateToken, hashToken } = require('./tokens');
 
-function createAgentsService(db, { events }) {
-  function get(id) {
+function createAgentsService(db, { events }){
+  function get(id){
     return db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
   }
 
-  function getByTokenHash(tokenHash) {
+  function getByTokenHash(tokenHash){
     return db
       .prepare('SELECT * FROM agents WHERE token_hash = ? AND revoked_at IS NULL')
       .get(tokenHash);
   }
 
-  function list() {
+  function list(){
     return db.prepare('SELECT id, name, kind, created_at, last_used_at, revoked_at FROM agents ORDER BY created_at DESC').all();
   }
 
-  function create({ name, kind }) {
-    const id = `agt_${uuid()}`;
-    const token = generateToken('agt');
+  function create({ name, kind }){
+    const id = `agt_${uuid()}`,
+      token = generateToken('agt');
     db.prepare(
       'INSERT INTO agents (id, name, kind, token_hash, created_at) VALUES (?, ?, ?, ?, ?)'
     ).run(id, name, kind, hashToken(token), new Date().toISOString());
@@ -41,12 +41,12 @@ function createAgentsService(db, { events }) {
     return { agent: get(id), token };
   }
 
-  function revoke(id) {
+  function revoke(id){
     db.prepare('UPDATE agents SET revoked_at = ? WHERE id = ?').run(new Date().toISOString(), id);
     events.record('agent', id, 'agent.revoked', {});
   }
 
-  function touchLastUsed(id) {
+  function touchLastUsed(id){
     db.prepare('UPDATE agents SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), id);
   }
 

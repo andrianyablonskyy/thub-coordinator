@@ -13,25 +13,27 @@
 
 'use strict';
 
-const express = require('express');
-const multer = require('multer');
-const { requireRole, requireJoinKey } = require('../auth');
-const { JOB_STATES } = require('@andrian.yablonskyy/test-hub');
+const express = require('express'),
+  multer = require('multer'),
+  { requireRole, requireJoinKey } = require('../auth'),
+  { JOB_STATES } = require('@andrian.yablonskyy/test-hub');
 
 const upload = multer({ dest: require('node:os').tmpdir() });
 
-function requireOwnResource(req, res, next) {
-  if (req.resource.id !== req.params.id) {
+function requireOwnResource(req, res, next){
+  if (req.resource.id !== req.params.id){
     return res.status(403).json({ error: 'Token does not match resource' });
   }
   next();
 }
 
-function requireOwnJob(services) {
+function requireOwnJob(services){
   return (req, res, next) => {
     const job = services.jobs.get(req.params.id);
-    if (!job) return res.status(404).json({ error: 'Unknown job' });
-    if (job.resource_id !== req.resource.id) {
+    if (!job){
+      return res.status(404).json({ error: 'Unknown job' });
+    }
+    if (job.resource_id !== req.resource.id){
       return res.status(403).json({ error: 'Job is not assigned to this resource' });
     }
     req.job = job;
@@ -40,7 +42,7 @@ function requireOwnJob(services) {
 }
 
 // §6.2 Resource (Client) endpoints.
-function createResourceRouter({ services, config }) {
+function createResourceRouter({ services, config }){
   const router = express.Router();
 
   // Self-service registration: no admin action required. A Client proves
@@ -50,10 +52,10 @@ function createResourceRouter({ services, config }) {
   router.post('/resources/register', requireJoinKey(config), (req, res, next) => {
     try {
       const { clientId, name, type, labels, groups, hostInfo, capabilities } = req.body;
-      if (!clientId) {
+      if (!clientId){
         return res.status(400).json({ error: 'clientId is required (persisted in the Client\'s .client-id file)' });
       }
-      if (!name || !['hw', 'sw'].includes(type)) {
+      if (!name || !['hw', 'sw'].includes(type)){
         return res.status(400).json({ error: 'name and type (hw|sw) are required' });
       }
       const { resourceId, resourceToken } = services.registry.registerAuto({
@@ -62,10 +64,11 @@ function createResourceRouter({ services, config }) {
         type,
         labels: labels || capabilities?.labels || [],
         groups: groups || [],
-        hostInfo,
+        hostInfo
       });
       res.json({ resourceId, resourceToken, heartbeatIntervalSec: config.heartbeat.intervalSec });
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
@@ -82,7 +85,8 @@ function createResourceRouter({ services, config }) {
       services.registry.heartbeat(req.params.id, { state, activeJobId, localLock, metrics });
       const commands = services.commands.drain(req.params.id);
       res.json({ serverTime: new Date().toISOString(), commands });
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
@@ -90,37 +94,45 @@ function createResourceRouter({ services, config }) {
   router.post('/resources/:id/status', auth, requireOwnResource, (req, res, next) => {
     try {
       const { busy, source, reason } = req.body;
-      if (source && source !== 'local') {
+      if (source && source !== 'local'){
         return res.status(400).json({ error: 'Only source=local may be set explicitly' });
       }
       const resource = services.registry.setLocalLock(req.params.id, { locked: !!busy, reason });
       res.json(resource);
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
 
   router.get('/resources/:id/jobs/next', auth, requireOwnResource, async (req, res) => {
-    const waitSec = Math.min(Number(req.query.wait) || 0, 60);
+    const waitSec = Math.min(Number(req.query.wait) || 0, 60),
 
-    const existing = services.jobs.list({ state: JOB_STATES.ASSIGNED, resourceId: req.params.id, limit: 1 })[0];
-    if (existing) return res.json(existing);
+      existing = services.jobs.list({ state: JOB_STATES.ASSIGNED, resourceId: req.params.id, limit: 1 })[0];
+    if (existing){
+      return res.json(existing);
+    }
 
-    if (waitSec <= 0) return res.status(204).end();
+    if (waitSec <= 0){
+      return res.status(204).end();
+    }
 
     const jobId = await waitForAssignment(services.bus, req.params.id, waitSec);
-    if (!jobId) return res.status(204).end();
+    if (!jobId){
+      return res.status(204).end();
+    }
     res.json(services.jobs.get(jobId));
   });
 
   router.post('/jobs/:id/accept', auth, requireOwnJob(services), (req, res, next) => {
     try {
-      if (req.job.state !== JOB_STATES.ASSIGNED) {
+      if (req.job.state !== JOB_STATES.ASSIGNED){
         return res.status(409).json({ error: `Cannot accept job in state ${req.job.state}` });
       }
       const job = services.jobs.setState(req.params.id, JOB_STATES.PREPARING);
       res.json(job);
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
@@ -128,12 +140,13 @@ function createResourceRouter({ services, config }) {
   router.post('/jobs/:id/state', auth, requireOwnJob(services), (req, res, next) => {
     try {
       const { state, message } = req.body;
-      if (![JOB_STATES.PREPARING, JOB_STATES.RUNNING].includes(state)) {
+      if (![JOB_STATES.PREPARING, JOB_STATES.RUNNING].includes(state)){
         return res.status(400).json({ error: 'state must be PREPARING or RUNNING' });
       }
       const job = services.jobs.setState(req.params.id, state, { message });
       res.json(job);
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
@@ -141,10 +154,13 @@ function createResourceRouter({ services, config }) {
   router.post('/jobs/:id/logs', auth, requireOwnJob(services), (req, res, next) => {
     try {
       const lines = Array.isArray(req.body) ? req.body : req.body.lines;
-      if (!Array.isArray(lines)) return res.status(400).json({ error: 'Expected an array of log lines' });
+      if (!Array.isArray(lines)){
+        return res.status(400).json({ error: 'Expected an array of log lines' });
+      }
       const inserted = services.logs.appendBatch(req.params.id, lines);
       res.status(202).json({ accepted: inserted.length });
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
@@ -153,17 +169,19 @@ function createResourceRouter({ services, config }) {
     try {
       const stored = services.artifacts.storeUploaded(req.params.id, req.files || []);
       res.status(201).json({ artifacts: stored.map((a) => ({ id: a.id, name: a.name, size: a.size })) });
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
 
   router.post('/jobs/:id/result', auth, requireOwnJob(services), (req, res, next) => {
     try {
-      const { state, exitCode, summary } = req.body;
-      const job = services.jobs.applyResult(req.params.id, req.resource.id, { state, exitCode, summary });
+      const { state, exitCode, summary } = req.body,
+        job = services.jobs.applyResult(req.params.id, req.resource.id, { state, exitCode, summary });
       res.json(job);
-    } catch (err) {
+    }
+    catch (err){
       next(err);
     }
   });
@@ -171,15 +189,17 @@ function createResourceRouter({ services, config }) {
   return router;
 }
 
-function waitForAssignment(bus, resourceId, waitSec) {
+function waitForAssignment(bus, resourceId, waitSec){
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       bus.off('job.assigned', onAssigned);
       resolve(null);
     }, waitSec * 1000);
 
-    function onAssigned(evt) {
-      if (evt.resourceId !== resourceId) return;
+    function onAssigned(evt){
+      if (evt.resourceId !== resourceId){
+        return;
+      }
       clearTimeout(timer);
       bus.off('job.assigned', onAssigned);
       resolve(evt.jobId);
