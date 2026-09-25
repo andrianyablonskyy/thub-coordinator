@@ -157,7 +157,7 @@ Server-rendered Pug templates styled with Bootstrap 5.3, with a little vanilla J
 | `/admin/agents` | Register/revoke CI and developer agents; token shown once. Shows each agent's last reported version. |
 | `/profile` | Every logged-in user's own account settings: display name, avatar, timezone (renders every dashboard timestamp), theme, idle session timeout, password change. |
 
-**Resource card.** Clicking a resource on `/` or `/resources` opens a card with its name, type, status, Client version, IP addresses, labels, groups, busy source/reason, last heartbeat and (admins only) the maintenance/rotate-token actions. IP addresses are the Client host's interface addresses except loopback (reported at registration and on every heartbeat) plus the external address — the one the Coordinator last saw the Client connect from, taken from `X-Forwarded-For` when the request came through a proxy `trustProxy` trusts.
+**Resource card.** Clicking a resource on `/` or `/resources` opens a card with its name, type, status, Client version, IP addresses, capabilities (reported at registration: HW udev devices with a **missing** flag for any whose device node doesn't exist, relay channels and power control; SW image, source and limits), labels, groups, busy source/reason, last heartbeat and (admins only) the maintenance/rotate-token actions. IP addresses are the Client host's interface addresses except loopback (reported at registration and on every heartbeat) plus the external address — the one the Coordinator last saw the Client connect from, taken from `X-Forwarded-For` when the request came through a proxy `trustProxy` trusts.
 
 The Coordinator's own version (`ver. X.Y.Z`) is shown under the TestHub logo, top left of every page.
 

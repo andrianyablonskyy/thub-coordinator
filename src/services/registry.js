@@ -25,7 +25,8 @@ function rowToResource(row){
     ...row,
     labels: JSON.parse(row.labels || '[]'),
     group_ids: JSON.parse(row.group_ids || '[]'),
-    host_info: row.host_info ? JSON.parse(row.host_info) : null
+    host_info: row.host_info ? JSON.parse(row.host_info) : null,
+    capabilities: row.capabilities ? JSON.parse(row.capabilities) : null
   };
 }
 
@@ -49,6 +50,52 @@ function sanitizeAddresses(addresses){
 // Express reports IPv4 clients of a dual-stack socket as ::ffff:a.b.c.d.
 function normalizeRemoteAddr(addr){
   return typeof addr === 'string' && addr ? addr.replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/, '$1') : null;
+}
+
+// `capabilities` comes straight from the Client and is rendered on the
+// dashboard, so keep only the known shape, as plain strings/numbers/bools.
+const MAX_DEVICES = 8,
+  str = (v, max = 256) => (typeof v === 'string' && v ? v.slice(0, max) : null),
+  num = (v) => (Number.isFinite(v) ? v : null),
+  capList = (v) => (Array.isArray(v) ? v.slice(0, MAX_DEVICES) : []),
+  device = (d) => ({
+    path: str(d?.path),
+    index: num(d?.index),
+    serial: str(d?.serial, 64),
+    baudRate: num(d?.baudRate),
+    present: typeof d?.present === 'boolean' ? d.present : null
+  });
+
+function sanitizeCapabilities(caps){
+  if (!caps || typeof caps !== 'object'){
+    return null;
+  }
+  if (caps.sw && typeof caps.sw === 'object'){
+    const sw = caps.sw;
+    return {
+      sw: {
+        image: str(sw.image),
+        registry: str(sw.registry),
+        allowDockerHub: sw.allowDockerHub === true,
+        cpus: num(sw.cpus),
+        memory: str(sw.memory, 16)
+      }
+    };
+  }
+  if (caps.hw && typeof caps.hw === 'object'){
+    const hw = caps.hw,
+      power = hw.power && typeof hw.power === 'object' ? hw.power : null;
+    return {
+      hw: {
+        stlinks: capList(hw.stlinks).map(device),
+        uarts: capList(hw.uarts).map(device),
+        usbs: capList(hw.usbs).map(device),
+        relays: capList(hw.relays).map((r) => ({ channel: num(r?.channel), baseUrl: str(r?.baseUrl) })),
+        power: power ? { method: str(power.method, 32), hub: str(power.hub, 64), port: num(power.port) } : null
+      }
+    };
+  }
+  return null;
 }
 
 function createRegistryService(db, { bus, events }){
@@ -106,10 +153,12 @@ function createRegistryService(db, { bus, events }){
   // this registration is allowed to reclaim it. Anything else (IDLE, BUSY,
   // MAINTENANCE, REGISTERED-but-just-created) means a process might still
   // be actively using that identity, so it stays a hard conflict.
-  function registerAuto({ clientId, name, type, labels = [], groups = [], hostInfo, remoteAddr, clientVersion = null }){
+  function registerAuto({ clientId, name, type, labels = [], groups = [], hostInfo, capabilities, remoteAddr, clientVersion = null }){
     const resourceToken = generateToken('res'),
       remote = normalizeRemoteAddr(remoteAddr);
     hostInfo = { ...(hostInfo || {}), addresses: sanitizeAddresses(hostInfo?.addresses) || [] };
+    const caps = sanitizeCapabilities(capabilities),
+      capsJson = caps ? JSON.stringify(caps) : null;
     let existing = getByClientId(clientId);
 
     if (!existing){
@@ -157,7 +206,7 @@ function createRegistryService(db, { bus, events }){
       db.prepare(
         `UPDATE resources
          SET token_hash = ?, client_id = ?, name = ?, type = ?, labels = ?, group_ids = ?, host_info = ?,
-             remote_addr = ?, client_version = ?, status = ?, busy_source = NULL, busy_reason = NULL
+             remote_addr = ?, client_version = ?, capabilities = ?, status = ?, busy_source = NULL, busy_reason = NULL
          WHERE id = ?`
       ).run(
         hashToken(resourceToken),
@@ -169,6 +218,7 @@ function createRegistryService(db, { bus, events }){
         JSON.stringify(hostInfo),
         remote,
         clientVersion,
+        capsJson,
         nextStatus,
         existing.id
       );
@@ -187,8 +237,9 @@ function createRegistryService(db, { bus, events }){
 
     const id = `res_${uuid()}`;
     db.prepare(
-      `INSERT INTO resources (id, name, type, status, labels, group_ids, host_info, remote_addr, client_version, token_hash, client_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO resources (id, name, type, status, labels, group_ids, host_info, remote_addr, client_version, capabilities,
+                              token_hash, client_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       name,
@@ -199,6 +250,7 @@ function createRegistryService(db, { bus, events }){
       JSON.stringify(hostInfo),
       remote,
       clientVersion,
+      capsJson,
       hashToken(resourceToken),
       clientId,
       new Date().toISOString()

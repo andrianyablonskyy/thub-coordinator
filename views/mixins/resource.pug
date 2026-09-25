@@ -33,6 +33,62 @@ mixin resourceActions(r, returnTo)
       i.bi.bi-arrow-repeat
   +updateButton(`/resources/${r.id}/update`, r.update_to, returnTo)
 
+//- One udev device line: path (or udev index / ST-Link serial), extra
+//- detail, and whether the node was present when the Client registered.
+mixin capDevice(d, detail)
+  li
+    code= d.path || (d.serial ? `serial ${d.serial}` : `index ${d.index}`)
+    if detail
+      span.text-body-secondary.small.ms-2= detail
+    if d.present === false
+      span.badge.text-bg-danger.ms-2(
+        data-bs-toggle="tooltip"
+        data-bs-title="The device node didn't exist when the Client registered — check the adapter and udev rules"
+      ) missing
+
+//- What the Client reported it can drive at registration (HW: udev
+//- devices, relays, power; SW: emulator image and limits).
+mixin capabilitiesList(caps)
+  if !caps
+    span.text-body-secondary —
+  else if caps.sw
+    ul.list-unstyled.mb-0
+      li
+        span.text-body-secondary.small.me-2 Image
+        code= caps.sw.image || '—'
+      li
+        span.text-body-secondary.small.me-2 Source
+        = caps.sw.registry ? caps.sw.registry : 'no local registry'
+        = caps.sw.allowDockerHub ? ', then Docker Hub' : ' (Docker Hub off)'
+      li
+        span.text-body-secondary.small.me-2 Limits
+        = `${caps.sw.cpus || '—'} CPU, ${caps.sw.memory || '—'}`
+  else if caps.hw
+    - const kinds = [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'USB']]
+    - const empty = kinds.every(([k]) => !caps.hw[k].length) && !caps.hw.relays.length && !caps.hw.power
+    if empty
+      span.text-body-secondary no devices configured
+    each pair in kinds
+      if caps.hw[pair[0]].length
+        .small.text-body-secondary.mt-1= pair[1]
+        ul.list-unstyled.mb-0.ms-2
+          each d in caps.hw[pair[0]]
+            +capDevice(d, pair[0] === 'uarts' && d.baudRate ? `${d.baudRate} baud` : null)
+    if caps.hw.relays.length
+      .small.text-body-secondary.mt-1 Relays
+      ul.list-unstyled.mb-0.ms-2
+        each rl in caps.hw.relays
+          li
+            = `channel ${rl.channel}`
+            if rl.baseUrl
+              code.ms-2= rl.baseUrl
+    if caps.hw.power
+      .small.text-body-secondary.mt-1 Power
+      .ms-2
+        = caps.hw.power.method
+        if caps.hw.power.method === 'uhubctl' && caps.hw.power.hub
+          span.text-body-secondary.small.ms-2= `hub ${caps.hw.power.hub} port ${caps.hw.power.port}`
+
 mixin resourceCard(r, groupsById, returnTo)
   - const isLoopback = (a) => /^127\./.test(a) || a === '::1' || a === 'localhost'
   - const local = ((r.host_info && r.host_info.addresses) || []).filter((a) => !isLoopback(a.address))
@@ -69,6 +125,9 @@ mixin resourceCard(r, groupsById, returnTo)
                       data-bs-toggle="tooltip"
                       data-bs-title="The address the Coordinator last saw this Client connect from"
                     ) external
+            dt.col-sm-4 Capabilities
+            dd.col-sm-8
+              +capabilitiesList(r.capabilities)
             dt.col-sm-4 Labels
             dd.col-sm-8
               if r.labels.length

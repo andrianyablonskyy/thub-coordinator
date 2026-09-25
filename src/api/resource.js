@@ -65,6 +65,7 @@ function createResourceRouter({ services, config }){
         labels: labels || capabilities?.labels || [],
         groups: groups || [],
         hostInfo,
+        capabilities,
         remoteAddr: req.ip,
         clientVersion: appVersion(req, 'client')
       });
