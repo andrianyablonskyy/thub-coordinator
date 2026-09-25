@@ -1,0 +1,16 @@
+[Unit]
+Description=TestHub Coordinator self-update
+After=network-online.target
+Wants=network-online.target
+
+# ExecStart and Environment= are rewritten by scripts/install-systemd-unit.js
+# to this install's real node and helper paths, the request file, and the
+# user the Coordinator runs as. Runs as root: `npm i -g` writes the global
+# node_modules, and its postinstall re-renders these units and restarts
+# thub-coordinator. The helper only ever installs
+# @andrian.yablonskyy/thub-coordinator, at a strictly validated version.
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/node /usr/lib/node_modules/@andrian.yablonskyy/thub-coordinator/scripts/self-update-helper.js /var/lib/thub/.thub/update-request.json thub
+TimeoutStartSec=15min

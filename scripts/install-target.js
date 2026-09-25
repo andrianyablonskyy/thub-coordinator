@@ -66,6 +66,9 @@ function targetPaths(user){
     configPath,
     defaultDataDir,
     dataDir,
+    // Written by the dashboard's "Update app" button, watched by
+    // thub-coordinator-update.path (README §10.2).
+    updateRequestFile: path.join(dataDir, 'update-request.json'),
     dataSubdirs: ['artifacts', 'avatars', 'work'].map((d) => path.join(dataDir, d))
   };
 }

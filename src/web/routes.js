@@ -60,6 +60,7 @@ function createWebRouter({ services, config }){
     // Latest published versions (README §10.2) — navbar, Agents, Resources.
     res.locals.updates = services.updates.status();
     res.locals.isNewer = isNewer;
+    res.locals.currentPath = req.originalUrl;
     if (req.session){
       req.session.flash = [];
     }
@@ -257,6 +258,12 @@ function createWebRouter({ services, config }){
     const s = await services.updates.checkNow(),
       found = Object.entries(s.latest).map(([app, v]) => `${app} v${v}`).join(', ');
     return s.error ? `Version check: ${found || 'nothing found'} (errors: ${s.error})` : `Latest versions: ${found}.`;
+  }));
+
+  router.post('/updates/coordinator', requireAdminRole, updateAction(async (req) => {
+    const version = services.updates.requestCoordinatorUpdate(req.session.user.username);
+    console.log(`Coordinator self-update to v${version} requested by ${req.session.user.username}`);
+    return `Updating the Coordinator to v${version} — the dashboard restarts in a minute or two; reload the page then.`;
   }));
 
   router.post('/resources/update-all', requireAdminRole, updateAction(async () => {

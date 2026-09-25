@@ -102,7 +102,7 @@ thub-admin group add ci-nightly --comment "shared CI pool"
 thub-admin group list
 thub-admin group remove <groupId>
 
-# The Coordinator is only ever updated by hand (never from the dashboard).
+# Update the Coordinator by hand (the dashboard's "Update app" button does the same through a root helper).
 thub-admin check-update                  # installed vs latest published version
 thub-admin self-update [--to <x.y.z>]    # sudo npm i -g; the postinstall restarts the service
 ```
@@ -161,10 +161,10 @@ Server-rendered Pug templates styled with Bootstrap 5.3, with a little vanilla J
 
 The Coordinator's own version (`ver. X.Y.Z`) is shown under the TestHub logo, top left of every page.
 
-**Versions and self-update.** The Coordinator checks the npm registry for the latest Coordinator, Agent and Client every `updates.checkIntervalHours` (default 6, `0` disables; `updates.registry` for a private mirror) and on **Check for updates**. A newer Coordinator shows as a badge under the logo; Agents and Resources show each one's version with an **update available** or pending **→ vX.Y.Z** badge. Admins request self-updates per agent/resource (**Update**, which becomes **Cancel update**) or with **Update all agents** / **Update all clients**, always to the latest version:
+**Versions and self-update.** The Coordinator checks the npm registry for the latest Coordinator, Agent and Client every `updates.checkIntervalHours` (default 6, `0` disables; `updates.registry` for a private mirror) and on **Check for updates**. A newer Coordinator shows as an **Update app to X.Y.Z** button in the navbar for admins (a badge under the logo for viewers); Agents and Resources show each one's version with an **update available** or pending **→ vX.Y.Z** badge. Admins request self-updates per agent/resource (**Update**, which becomes **Cancel update**) or with **Update all agents** / **Update all clients**, always to the latest version:
 - Clients get a `self-update` command on their next heartbeat and install it through their root `thub-client-update` helper, once none of the host's instances is busy.
 - Agents install it at the start of their next run (`GET /api/v1/agents/me/update`), then re-run the command on the new version.
-- The Coordinator itself is updated by hand only: `thub-admin self-update`.
+- The Coordinator itself: the **Update app** button writes `<dataDir>/update-request.json`; the root `thub-coordinator-update.path` unit (installed by `sudo npm i -g`) runs `npm i -g` for it, and the postinstall restarts the service (the dashboard and API are briefly down). Logs: `journalctl -u thub-coordinator-update`. Without that unit, use `thub-admin self-update` on the host.
 
 A request is cleared when the Agent/Client reports the new version.
 

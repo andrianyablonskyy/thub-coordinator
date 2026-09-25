@@ -13,15 +13,21 @@
 
 'use strict';
 
-const { PACKAGES, fetchLatestVersion, defaultRegistry, isNewer } = require('@andrian.yablonskyy/thub-common'),
+const fs = require('node:fs'),
+  path = require('node:path'),
+  { PACKAGES, fetchLatestVersion, defaultRegistry, isNewer } = require('@andrian.yablonskyy/thub-common'),
   { version: coordinatorVersion } = require('../../package.json');
+
+// Installed by scripts/install-systemd-unit.js; runs the actual `npm i -g`
+// as root when the dashboard writes an update request (README §10.2).
+const UPDATE_PATH_UNIT = '/etc/systemd/system/thub-coordinator-update.path';
 
 // Latest published versions, refreshed every `updates.checkIntervalHours`
 // and on demand from the dashboard. Kept in memory only — a restart just
 // checks again.
 function createUpdatesService({ config }){
   const registry = config.updates.registry || defaultRegistry(),
-    state = { latest: {}, checkedAt: null, error: null };
+    state = { latest: {}, checkedAt: null, error: null, coordinatorPending: null };
   let inFlight = null;
 
   async function checkNow(){
@@ -55,6 +61,28 @@ function createUpdatesService({ config }){
     };
   }
 
+  // Navbar "Update app" button: hand the latest version to the root
+  // thub-coordinator-update helper, whose install restarts this process
+  // (so `coordinatorPending` only lasts until then).
+  function requestCoordinatorUpdate(requestedBy){
+    const target = status().coordinatorUpdate;
+    if (!target){
+      throw Object.assign(new Error(`Already on the latest version (v${coordinatorVersion}).`), { status: 409 });
+    }
+    if (!fs.existsSync(UPDATE_PATH_UNIT)){
+      throw Object.assign(
+        new Error(`Self-update isn't installed on this host (${UPDATE_PATH_UNIT}) — update by hand: thub-admin self-update`),
+        { status: 501 }
+      );
+    }
+    fs.writeFileSync(
+      path.join(config.dataDir, 'update-request.json'),
+      JSON.stringify({ version: target, requestedBy, requestedAt: new Date().toISOString() }) + '\n'
+    );
+    state.coordinatorPending = target;
+    return target;
+  }
+
   // The version a self-update request targets: the latest known one,
   // checking first if nothing has been fetched yet.
   async function targetVersion(app){
@@ -77,7 +105,7 @@ function createUpdatesService({ config }){
     timer.unref?.();
   }
 
-  return { checkNow, status, targetVersion, start };
+  return { checkNow, status, targetVersion, requestCoordinatorUpdate, start };
 }
 
 module.exports = { createUpdatesService };

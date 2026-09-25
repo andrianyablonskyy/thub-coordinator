@@ -24,7 +24,12 @@ const fs = require('node:fs'),
   UNIT_SRC = path.join(__dirname, '..', 'systemd', UNIT_NAME),
   SERVER_PATH = path.join(__dirname, '..', 'src', 'server.js'),
   UNIT_DEST = `/etc/systemd/system/${UNIT_NAME}`,
-  MANUAL_HINT = 'sudo npm i -g @andrian.yablonskyy/thub-coordinator';
+  MANUAL_HINT = 'sudo npm i -g @andrian.yablonskyy/thub-coordinator',
+  // Root-side self-update (README §10.2): the path unit watches the update
+  // request the dashboard writes, the service installs it.
+  UPDATE_PATH_UNIT = 'thub-coordinator-update.path',
+  UPDATE_SERVICE_UNIT = 'thub-coordinator-update.service',
+  UPDATE_HELPER = path.join(__dirname, 'self-update-helper.js');
 
 // The checked-in unit only has placeholders — fill in the target user and
 // wherever *this* install's node and server.js actually are, so it works
@@ -36,6 +41,19 @@ function renderUnit(user, paths){
     .replace(/^Environment=THUB_COORDINATOR_CONFIG=.*$/m, `Environment=THUB_COORDINATOR_CONFIG=${paths.configPath}`)
     .replace(/^ExecStart=.*$/m, `ExecStart=${process.execPath} ${SERVER_PATH}`)
     .replace(/^ReadWritePaths=.*$/m, `ReadWritePaths=${paths.dataDir}`);
+}
+
+function renderUpdateUnits(user, paths){
+  const nodeDir = path.dirname(process.execPath),
+    unitPath = (name) => path.join(__dirname, '..', 'systemd', name);
+  return {
+    [UPDATE_PATH_UNIT]: fs.readFileSync(unitPath(UPDATE_PATH_UNIT), 'utf8')
+      .replace(/^PathModified=.*$/m, `PathModified=${paths.updateRequestFile}`),
+    // npm is a `#!/usr/bin/env node` script, so this node goes first on PATH.
+    [UPDATE_SERVICE_UNIT]: fs.readFileSync(unitPath(UPDATE_SERVICE_UNIT), 'utf8')
+      .replace(/^Environment=PATH=.*$/m, `Environment=PATH=${nodeDir}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`)
+      .replace(/^ExecStart=.*$/m, `ExecStart=${process.execPath} ${UPDATE_HELPER} ${paths.updateRequestFile} ${user.name}`)
+  };
 }
 
 // Best-effort, never fails the `npm install` itself. Runs after
@@ -51,12 +69,18 @@ function main(){
     return;
   }
 
-  const user = resolveTargetUser();
+  const user = resolveTargetUser(),
+    paths = targetPaths(user);
   let step = 'write';
   try {
-    fs.writeFileSync(UNIT_DEST, renderUnit(user, targetPaths(user)));
+    fs.writeFileSync(UNIT_DEST, renderUnit(user, paths));
+    for (const [name, content]of Object.entries(renderUpdateUnits(user, paths))){
+      fs.writeFileSync(`/etc/systemd/system/${name}`, content);
+    }
     step = 'daemon-reload';
     execFileSync('systemctl', ['daemon-reload'], { stdio: 'ignore' });
+    step = `enable ${UPDATE_PATH_UNIT}`;
+    execFileSync('systemctl', ['enable', '--now', UPDATE_PATH_UNIT], { stdio: 'ignore' });
     step = 'enable';
     execFileSync('systemctl', ['enable', UNIT_NAME], { stdio: 'ignore' });
     step = 'restart';

@@ -1,0 +1,13 @@
+[Unit]
+Description=TestHub Coordinator self-update request watcher
+
+# PathModified= is rewritten by scripts/install-systemd-unit.js to the
+# update-request.json in the Coordinator's dataDir. The dashboard's
+# "Update app" button writes it; this starts thub-coordinator-update.service
+# (as root) to install the requested version.
+[Path]
+PathModified=/var/lib/thub/.thub/update-request.json
+Unit=thub-coordinator-update.service
+
+[Install]
+WantedBy=multi-user.target

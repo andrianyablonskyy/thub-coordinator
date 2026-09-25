@@ -14,11 +14,11 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
           span TestHub
           small.text-body-secondary.fw-normal.mt-1(style="font-size: .7rem;")
             | ver. #{coordinatorVersion}
-            if user && updates.coordinatorUpdate
+            if user && user.role !== 'admin' && updates.coordinatorUpdate
               span.badge.text-bg-warning.ms-1(
                 data-bs-toggle="tooltip"
                 data-bs-placement="bottom"
-                data-bs-title="Update the Coordinator by hand on its host: thub-admin self-update"
+                data-bs-title="An admin can update the Coordinator from the navbar"
               )= `v${updates.coordinatorUpdate} available`
         button.navbar-toggler(type="button" data-bs-toggle="collapse" data-bs-target="#nav")
           span.navbar-toggler-icon
@@ -37,6 +37,27 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                 li.nav-item
                   a.nav-link(href="/admin/agents" class=active === 'agents' ? 'active' : '') Agents
           ul.navbar-nav
+            if user && user.role === 'admin' && updates.coordinatorUpdate
+              li.nav-item.d-flex.align-items-center.me-3
+                if updates.coordinatorPending
+                  button.btn.btn-sm.btn-warning(type="button" disabled)
+                    span.spinner-border.spinner-border-sm.me-1(aria-hidden="true")
+                    = `Updating app to ${updates.coordinatorPending}…`
+                else
+                  form(
+                    method="post"
+                    action="/updates/coordinator"
+                    onsubmit=`return confirm('Update the Coordinator to v${updates.coordinatorUpdate}? It restarts, and the dashboard and API are briefly unavailable.')`
+                  )
+                    input(type="hidden" name="returnTo" value=currentPath)
+                    button.btn.btn-sm.btn-warning(
+                      type="submit"
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="bottom"
+                      data-bs-title=`Installed v${coordinatorVersion} — installs v${updates.coordinatorUpdate} and restarts the Coordinator`
+                    )
+                      i.bi.bi-cloud-download.me-1
+                      = `Update app to ${updates.coordinatorUpdate}`
             li.nav-item.d-flex.align-items-center.me-3
               button#theme-toggle.btn.btn-sm.btn-outline-secondary(
                 type="button"
