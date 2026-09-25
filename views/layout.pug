@@ -12,7 +12,14 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
       .container-fluid
         a.navbar-brand.d-flex.flex-column.lh-1.py-1(href="/")
           span TestHub
-          small.text-body-secondary.fw-normal.mt-1(style="font-size: .7rem;") ver. #{coordinatorVersion}
+          small.text-body-secondary.fw-normal.mt-1(style="font-size: .7rem;")
+            | ver. #{coordinatorVersion}
+            if user && updates.coordinatorUpdate
+              span.badge.text-bg-warning.ms-1(
+                data-bs-toggle="tooltip"
+                data-bs-placement="bottom"
+                data-bs-title="Update the Coordinator by hand on its host: thub-admin self-update"
+              )= `v${updates.coordinatorUpdate} available`
         button.navbar-toggler(type="button" data-bs-toggle="collapse" data-bs-target="#nav")
           span.navbar-toggler-icon
         #nav.collapse.navbar-collapse

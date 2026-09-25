@@ -93,7 +93,13 @@ function createResourceRouter({ services, config }){
         remoteAddr: req.ip,
         clientVersion: appVersion(req, 'client')
       });
-      const commands = services.commands.drain(req.params.id);
+      const commands = services.commands.drain(req.params.id),
+        // Repeated on every heartbeat until the Client reports the new
+        // version (README §10.2) — the Client ignores repeats itself.
+        updateTo = services.registry.pendingUpdate(req.params.id);
+      if (updateTo){
+        commands.push({ command: 'self-update', version: updateTo });
+      }
       res.json({ serverTime: new Date().toISOString(), commands });
     }
     catch (err){

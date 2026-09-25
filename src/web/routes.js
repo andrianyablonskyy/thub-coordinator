@@ -20,7 +20,7 @@ const fs = require('node:fs'),
   multer = require('multer'),
   { requireAdminSession, requireAdminRole } = require('../auth'),
   { attachJobStream } = require('../api/sse'),
-  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/thub-common');
+  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES, isNewer } = require('@andrian.yablonskyy/thub-common');
 
 // §10.1: avatar uploads are small, single images — a hard size cap and an
 // allow-list of image mimetypes, same spirit as the join-key/token checks
@@ -57,6 +57,9 @@ function createWebRouter({ services, config }){
     const user = req.session?.user || null;
     res.locals.user = user;
     res.locals.messages = req.session?.flash || [];
+    // Latest published versions (README §10.2) — navbar, Agents, Resources.
+    res.locals.updates = services.updates.status();
+    res.locals.isNewer = isNewer;
     if (req.session){
       req.session.flash = [];
     }
@@ -234,6 +237,59 @@ function createWebRouter({ services, config }){
     flash(req, 'warning', `New resource token (copy it now): ${token}`);
     res.redirect(returnTo(req, '/resources'));
   });
+
+  // Self-update (README §10.2). Clients get a `self-update` heartbeat
+  // command, Agents update on their next run; both target the latest
+  // published version. The Coordinator itself is only ever updated by hand.
+  function updateAction(fn){
+    return async (req, res) => {
+      try {
+        flash(req, 'info', await fn(req));
+      }
+      catch (err){
+        flash(req, 'danger', err.message);
+      }
+      res.redirect(returnTo(req, '/'));
+    };
+  }
+
+  router.post('/updates/check', requireAdminRole, updateAction(async () => {
+    const s = await services.updates.checkNow(),
+      found = Object.entries(s.latest).map(([app, v]) => `${app} v${v}`).join(', ');
+    return s.error ? `Version check: ${found || 'nothing found'} (errors: ${s.error})` : `Latest versions: ${found}.`;
+  }));
+
+  router.post('/resources/update-all', requireAdminRole, updateAction(async () => {
+    const version = await services.updates.targetVersion('client'),
+      n = services.registry.requestUpdateAll(version);
+    return `Requested update to client v${version} on ${n} resource(s).`;
+  }));
+
+  router.post('/resources/:id/update', requireAdminRole, updateAction(async (req) => {
+    if (req.body.cancel === '1'){
+      services.registry.setUpdateTo(req.params.id, null);
+      return 'Update request canceled.';
+    }
+    const version = await services.updates.targetVersion('client');
+    services.registry.setUpdateTo(req.params.id, version);
+    return `Requested update to client v${version} — it starts on the Client's next heartbeat.`;
+  }));
+
+  router.post('/admin/agents/update-all', requireAdminRole, updateAction(async () => {
+    const version = await services.updates.targetVersion('agent'),
+      n = services.agents.requestUpdateAll(version);
+    return `Requested update to agent v${version} for ${n} agent(s) — each updates on its next run.`;
+  }));
+
+  router.post('/admin/agents/:id/update', requireAdminRole, updateAction(async (req) => {
+    if (req.body.cancel === '1'){
+      services.agents.setUpdateTo(req.params.id, null);
+      return 'Update request canceled.';
+    }
+    const version = await services.updates.targetVersion('agent');
+    services.agents.setUpdateTo(req.params.id, version);
+    return `Requested update to agent v${version} — it updates on its next run.`;
+  }));
 
   router.get('/jobs', (req, res) => {
     const filters = { state: req.query.state || undefined, source: req.query.source || undefined },

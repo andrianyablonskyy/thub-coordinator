@@ -1,0 +1,67 @@
+//- Version display and self-update controls (README §10.2), shared by
+//- the Agents and Resources pages and the resource card.
+
+//- An app's reported version, plus a pending update request or a newer
+//- published version.
+mixin versionCell(current, latest, updateTo)
+  span= current ? `v${current}` : '—'
+  if updateTo
+    span.badge.text-bg-warning.ms-1(
+      data-bs-toggle="tooltip"
+      data-bs-title="Self-update requested — cleared once it reports this version"
+    )= `→ v${updateTo}`
+  else if current && isNewer(latest, current)
+    span.badge.text-bg-secondary.ms-1(
+      data-bs-toggle="tooltip"
+      data-bs-title=`v${latest} is available`
+    ) update available
+
+//- Latest published version of `app` (agent | client), "check now" and,
+//- for admins, "update all".
+mixin updatesToolbar(app, label, returnTo)
+  .d-flex.flex-wrap.align-items-center.gap-2.small.text-body-secondary
+    span
+      | Latest #{app}:
+      = ' '
+      strong= updates.latest[app] ? `v${updates.latest[app]}` : 'unknown'
+      if updates.checkedAt
+        = ` · checked ${fmtDate(updates.checkedAt)}`
+      if updates.error
+        i.bi.bi-exclamation-triangle.text-warning.ms-1(data-bs-toggle="tooltip" data-bs-title=updates.error)
+    if user.role === 'admin'
+      form.d-inline(method="post" action="/updates/check")
+        input(type="hidden" name="returnTo" value=returnTo)
+        button.btn.btn-sm.btn-outline-secondary(type="submit")
+          i.bi.bi-arrow-clockwise.me-1
+          | Check for updates
+      form.d-inline(
+        method="post"
+        action=app === 'agent' ? '/admin/agents/update-all' : '/resources/update-all'
+        onsubmit=`return confirm('Request a self-update of every ${label} to the latest version?')`
+      )
+        input(type="hidden" name="returnTo" value=returnTo)
+        button.btn.btn-sm.btn-outline-primary(type="submit" disabled=!updates.latest[app])
+          i.bi.bi-cloud-download.me-1
+          = `Update all ${label}`
+
+//- Per-item "Update" / "Cancel update" button.
+mixin updateButton(action, pending, returnTo)
+  form.d-inline.ms-1(method="post" action=action)
+    input(type="hidden" name="returnTo" value=returnTo)
+    if pending
+      input(type="hidden" name="cancel" value="1")
+      button.btn.btn-sm.btn-outline-warning(
+        type="submit"
+        aria-label="Cancel update"
+        data-bs-toggle="tooltip"
+        data-bs-title=`Cancel the pending self-update to v${pending}`
+      )
+        i.bi.bi-x-circle
+    else
+      button.btn.btn-sm.btn-outline-primary(
+        type="submit"
+        aria-label="Update"
+        data-bs-toggle="tooltip"
+        data-bs-title="Self-update to the latest published version"
+      )
+        i.bi.bi-cloud-download

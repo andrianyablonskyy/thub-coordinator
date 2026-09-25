@@ -1,9 +1,12 @@
 extends ../layout
+include ../mixins/updates
 
 block content
   .d-flex.justify-content-between.align-items-center.mb-3
     h1.h4.mb-0 Agents (CI / developers)
     button.btn.btn-primary.btn-sm(type="button" data-bs-toggle="modal" data-bs-target="#addAgentModal") Register agent
+  .mb-3
+    +updatesToolbar('agent', 'agents', '/admin/agents')
 
   if newToken
     .alert.alert-warning
@@ -26,14 +29,16 @@ block content
         tr(class=a.revoked_at ? 'opacity-50' : '')
           td= a.name
           td.text-uppercase= a.kind
-          td= a.version ? `v${a.version}` : '—'
+          td: +versionCell(a.version, updates.latest.agent, a.update_to)
           td= fmtDate(a.created_at)
           td= fmtDate(a.last_used_at, 'never')
           td= a.revoked_at ? 'revoked' : 'active'
           td
             if !a.revoked_at
-              form(method="post" action=`/admin/agents/${a.id}/revoke` onsubmit="return confirm('Revoke this agent token?')")
-                button.btn.btn-sm.btn-outline-danger(type="submit") Revoke
+              .d-flex.justify-content-end
+                +updateButton(`/admin/agents/${a.id}/update`, a.update_to, '/admin/agents')
+                form.ms-1(method="post" action=`/admin/agents/${a.id}/revoke` onsubmit="return confirm('Revoke this agent token?')")
+                  button.btn.btn-sm.btn-outline-danger(type="submit") Revoke
 
   .modal(tabindex="-1" id="addAgentModal")
     .modal-dialog

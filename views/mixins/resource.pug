@@ -31,6 +31,7 @@ mixin resourceActions(r, returnTo)
       data-bs-title="Invalidate the current resource token and issue a new one — the Client won't reconnect until it has it"
     )
       i.bi.bi-arrow-repeat
+  +updateButton(`/resources/${r.id}/update`, r.update_to, returnTo)
 
 mixin resourceCard(r, groupsById, returnTo)
   - const isLoopback = (a) => /^127\./.test(a) || a === '::1' || a === 'localhost'
@@ -51,7 +52,7 @@ mixin resourceCard(r, groupsById, returnTo)
             dt.col-sm-4 Status
             dd.col-sm-8: +resourceBadge(r.status)
             dt.col-sm-4 Client version
-            dd.col-sm-8= r.client_version ? `v${r.client_version}` : '—'
+            dd.col-sm-8: +versionCell(r.client_version, updates.latest.client, r.update_to)
             dt.col-sm-4 IP addresses
             dd.col-sm-8
               if !local.length && !external

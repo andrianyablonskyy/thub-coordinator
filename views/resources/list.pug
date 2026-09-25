@@ -1,11 +1,15 @@
 extends ../layout
 include ../mixins/status-badge
 include ../mixins/resource
+include ../mixins/updates
 
 block content
   h1.h4.mb-3 Resources
   p.text-body-secondary.small.
     Resources register themselves — start a Client with the shared join key and it appears here. Click a resource for its details, including IP addresses.
+
+  .mb-3
+    +updatesToolbar('client', 'clients', '/resources')
 
   table.table.table-hover.align-middle
     thead
@@ -25,7 +29,7 @@ block content
         tr(role="button" tabindex="0" data-resource-card=`resource-card-${r.id}`)
           td= r.name
           td.text-uppercase= r.type
-          td= r.client_version ? `v${r.client_version}` : '—'
+          td: +versionCell(r.client_version, updates.latest.client, r.update_to)
           td: +resourceBadge(r.status)
           td
             each l in r.labels

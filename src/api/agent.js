@@ -92,6 +92,14 @@ function createAgentRouter({ services, config }){
     res.json({ resources: services.registry.list().map(publicResource) });
   });
 
+  // Checked by the Agent at the start of every run (README §10.2): the
+  // version an admin asked it to self-update to, if still newer than the
+  // one it runs (auth has already recorded that from its User-Agent).
+  router.get('/agents/me/update', auth, (req, res) => {
+    const agent = services.agents.get(req.agent.id);
+    res.json({ updateTo: agent.update_to || null, latest: services.updates.status().latest.agent || null });
+  });
+
   return router;
 }
 

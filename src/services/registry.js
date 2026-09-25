@@ -14,7 +14,7 @@
 'use strict';
 
 const { v4: uuid } = require('uuid'),
-  { RESOURCE_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/thub-common'),
+  { RESOURCE_STATES, BUSY_SOURCES, compareVersions } = require('@andrian.yablonskyy/thub-common'),
   { generateToken, hashToken } = require('./tokens');
 
 function rowToResource(row){
@@ -173,6 +173,7 @@ function createRegistryService(db, { bus, events }){
         existing.id
       );
 
+      completeUpdateIfDone(existing.id);
       events.record('resource', existing.id, 'resource.registered', {
         hostInfo,
         name,
@@ -264,6 +265,7 @@ function createRegistryService(db, { bus, events }){
       clientVersion,
       resourceId
     );
+    completeUpdateIfDone(resourceId);
 
     if (resource.status !== nextStatus){
       events.record('resource', resourceId, 'resource.status_changed', {
@@ -327,6 +329,40 @@ function createRegistryService(db, { bus, events }){
     bus.emit('resource.idle', { resourceId });
   }
 
+  // Self-update requests (README §10.2): delivered as a `self-update`
+  // command on every heartbeat until the Client reports `update_to` (or
+  // newer). `version` null cancels a pending one.
+  function setUpdateTo(resourceId, version){
+    if (!get(resourceId)){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    db.prepare('UPDATE resources SET update_to = ? WHERE id = ?').run(version, resourceId);
+    events.record('resource', resourceId, version ? 'resource.update_requested' : 'resource.update_canceled', { version });
+  }
+
+  // Every resource not already on `version` or newer.
+  function requestUpdateAll(version){
+    const ids = list()
+      .filter((r) => !r.client_version || compareVersions(r.client_version, version) < 0)
+      .map((r) => r.id);
+    ids.forEach((id) => setUpdateTo(id, version));
+    return ids.length;
+  }
+
+  function completeUpdateIfDone(resourceId){
+    const r = get(resourceId);
+    if (r?.update_to && r.client_version && compareVersions(r.client_version, r.update_to) >= 0){
+      db.prepare('UPDATE resources SET update_to = NULL WHERE id = ?').run(resourceId);
+      events.record('resource', resourceId, 'resource.updated', { version: r.client_version });
+    }
+  }
+
+  // The version a heartbeating Client should update to, if any.
+  function pendingUpdate(resourceId){
+    const r = get(resourceId);
+    return r?.update_to && (!r.client_version || compareVersions(r.client_version, r.update_to) < 0) ? r.update_to : null;
+  }
+
   function setMaintenance(resourceId, enabled){
     const resource = get(resourceId);
     if (!resource){
@@ -380,6 +416,9 @@ function createRegistryService(db, { bus, events }){
     markOutOfService,
     markIdleAfterJob,
     setMaintenance,
+    setUpdateTo,
+    requestUpdateAll,
+    pendingUpdate,
     assignToJob,
     findIdleCandidates,
     everSatisfiable

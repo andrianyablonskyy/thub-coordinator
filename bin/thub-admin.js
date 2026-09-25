@@ -32,7 +32,10 @@ const { loadConfig } = require('../src/config'),
   { createAdminUsersService } = require('../src/services/admin-users'),
   { createArtifactsService } = require('../src/services/artifacts'),
   { createJobsService } = require('../src/services/jobs'),
-  { generateToken } = require('../src/services/tokens');
+  { generateToken } = require('../src/services/tokens'),
+  { PACKAGES, fetchLatestVersion, isNewer, isValidVersion, npmBin } = require('@andrian.yablonskyy/thub-common'),
+  { spawnSync } = require('node:child_process'),
+  { version: installedVersion } = require('../package.json');
 
 function usage(){
   console.log(`Usage:
@@ -45,6 +48,9 @@ function usage(){
   thub-admin group add <name> [--comment <text>]
   thub-admin group list
   thub-admin group remove <groupId>
+  thub-admin check-update         Compare this Coordinator with the latest published version
+  thub-admin self-update [--to X.Y.Z]
+                                  Update this Coordinator (sudo npm i -g; restarts the service)
 `);
 }
 
@@ -79,9 +85,46 @@ function parseFlags(args){
   return { positional, flags };
 }
 
+// The Coordinator is only ever updated by hand (README §10.2) — never
+// from the dashboard. Neither command needs the database.
+async function updateCommand(cmd, args){
+  const { flags } = parseFlags(args),
+    latest = await fetchLatestVersion(PACKAGES.coordinator);
+  if (cmd === 'check-update'){
+    console.log(`Installed: v${installedVersion}  Latest: v${latest}`);
+    console.log(isNewer(latest, installedVersion) ? 'Update available: thub-admin self-update' : 'Up to date.');
+    return 0;
+  }
+  const target = flags.to || latest;
+  if (!isValidVersion(target)){
+    console.error(`Invalid version "${target}"`);
+    return 4;
+  }
+  if (!flags.to && !isNewer(target, installedVersion)){
+    console.log(`Already on v${installedVersion} (latest v${latest}).`);
+    return 0;
+  }
+  // Root, via sudo, so the postinstall re-renders and restarts the
+  // thub-coordinator service for the right user (SUDO_USER).
+  const npmArgs = ['i', '-g', `${PACKAGES.coordinator}@${target}`],
+    isRoot = process.getuid?.() === 0,
+    [bin, argv] = isRoot ? [npmBin(), npmArgs] : ['sudo', [npmBin(), ...npmArgs]];
+  console.log(`Updating Coordinator v${installedVersion} -> v${target}: ${[bin, ...argv].join(' ')}`);
+  return spawnSync(bin, argv, { stdio: 'inherit' }).status ?? 1;
+}
+
 function main(){
-  const [, , cmd, sub, ...rest] = process.argv,
-    config = loadConfig(),
+  const [, , cmd, sub, ...rest] = process.argv;
+  if (cmd === 'check-update' || cmd === 'self-update'){
+    return updateCommand(cmd, [sub, ...rest].filter(Boolean))
+      .then((code) => process.exit(code))
+      .catch((err) => {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      });
+  }
+
+  const config = loadConfig(),
     db = openDb(config.dbPath),
     events = createEventsService(db),
     registry = createRegistryService(db, { bus, events }),

@@ -52,6 +52,13 @@ const DEFAULTS = {
   artifacts: {
     maxUploadMb: 512,
     linkTtlHours: 168
+  },
+  // New-version check of the Coordinator/Agent/Client packages (README
+  // §10.2). 0 disables the periodic check; registry null = the public npm
+  // registry (or npm_config_registry).
+  updates: {
+    checkIntervalHours: 6,
+    registry: null
   }
 };
 

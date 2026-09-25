@@ -43,7 +43,8 @@ The Coordinator loads a plain **JSON** config file (no YAML support). Resolution
   "scheduler": { "assignAckTimeoutSec": 15, "requeueOnLost": true, "maxQueuedPerAgent": 20, "tickIntervalSec": 10 },
   "jobs": { "defaultTimeoutSec": 1800, "maxTimeoutSec": 14400 },
   "retention": { "logRetentionDays": 14, "artifactRetentionDays": 30 },
-  "artifacts": { "maxUploadMb": 512, "linkTtlHours": 168 }
+  "artifacts": { "maxUploadMb": 512, "linkTtlHours": 168 },
+  "updates": { "checkIntervalHours": 6, "registry": null }
 }
 ```
 
@@ -100,6 +101,10 @@ thub-admin jobs clean --yes
 thub-admin group add ci-nightly --comment "shared CI pool"
 thub-admin group list
 thub-admin group remove <groupId>
+
+# The Coordinator is only ever updated by hand (never from the dashboard).
+thub-admin check-update                  # installed vs latest published version
+thub-admin self-update [--to <x.y.z>]    # sudo npm i -g; the postinstall restarts the service
 ```
 
 Both `jobs reset` and `jobs clean` refuse to run without `--yes` — there's no undo for either, especially `clean`.
@@ -120,13 +125,14 @@ All endpoints are under `/api/v1`, JSON, and require `Authorization: Bearer <tok
 | `GET` | `/jobs/:id/logs/stream` | Server-Sent Events: `log`, `state`, `end`. Honors `Last-Event-ID` for resume. |
 | `GET` | `/jobs/:id/artifacts` | Artifact list with signed download URLs. |
 | `GET` | `/resources` | Resources with status (read-only). |
+| `GET` | `/agents/me/update` | `{updateTo, latest}` — a self-update requested for the calling agent. |
 
 **Resource (Client) endpoints** (used by [thub-client](https://github.com/andrianyablonskyy/thub-client)):
 
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/resources/register` | Self-register (every start/restart) using the shared `clientJoinKey`; upserts by `clientId`. `hostInfo.addresses` (`[{iface, address, family}]`) lists the host's non-loopback interface addresses; the request's source address is stored as the external one. |
-| `POST` | `/resources/:id/heartbeat` | Heartbeat and self-reported state, plus the current `addresses`; refreshes the external address; response may carry `commands[]`. |
+| `POST` | `/resources/:id/heartbeat` | Heartbeat and self-reported state, plus the current `addresses`; refreshes the external address; response may carry `commands[]` (`cancel-job`, `self-update`). |
 | `POST` | `/resources/:id/status` | Explicit status change, e.g. a local lock. |
 | `GET` | `/resources/:id/jobs/next?wait=30` | Long-poll for an assigned job; `204` when nothing arrived within `wait` seconds. |
 | `POST` | `/jobs/:id/accept` | Acknowledge assignment. |
@@ -154,6 +160,13 @@ Server-rendered Pug templates styled with Bootstrap 5.3, with a little vanilla J
 **Resource card.** Clicking a resource on `/` or `/resources` opens a card with its name, type, status, Client version, IP addresses, labels, groups, busy source/reason, last heartbeat and (admins only) the maintenance/rotate-token actions. IP addresses are the Client host's interface addresses except loopback (reported at registration and on every heartbeat) plus the external address — the one the Coordinator last saw the Client connect from, taken from `X-Forwarded-For` when the request came through a proxy `trustProxy` trusts.
 
 The Coordinator's own version (`ver. X.Y.Z`) is shown under the TestHub logo, top left of every page.
+
+**Versions and self-update.** The Coordinator checks the npm registry for the latest Coordinator, Agent and Client every `updates.checkIntervalHours` (default 6, `0` disables; `updates.registry` for a private mirror) and on **Check for updates**. A newer Coordinator shows as a badge under the logo; Agents and Resources show each one's version with an **update available** or pending **→ vX.Y.Z** badge. Admins request self-updates per agent/resource (**Update**, which becomes **Cancel update**) or with **Update all agents** / **Update all clients**, always to the latest version:
+- Clients get a `self-update` command on their next heartbeat and install it through their root `thub-client-update` helper, once none of the host's instances is busy.
+- Agents install it at the start of their next run (`GET /api/v1/agents/me/update`), then re-run the command on the new version.
+- The Coordinator itself is updated by hand only: `thub-admin self-update`.
+
+A request is cleared when the Agent/Client reports the new version.
 
 ## Data storage
 
