@@ -1,0 +1,92 @@
+//- Resource actions and the resource info card (modal), shared by the
+//- Overview and Resources pages. `returnTo` is the page the action forms
+//- redirect back to.
+
+mixin resourceActions(r, returnTo)
+  form.d-inline(method="post" action=`/resources/${r.id}/maintenance`)
+    input(type="hidden" name="enabled" value=r.status === 'MAINTENANCE' ? '0' : '1')
+    input(type="hidden" name="returnTo" value=returnTo)
+    if r.status === 'MAINTENANCE'
+      button.btn.btn-sm.btn-outline-secondary(
+        type="submit"
+        aria-label="Enable"
+        data-bs-toggle="tooltip"
+        data-bs-title="Bring this resource back into rotation so the scheduler can assign it jobs again"
+      )
+        i.bi.bi-play-circle
+    else
+      button.btn.btn-sm.btn-outline-secondary(
+        type="submit"
+        aria-label="Disable"
+        data-bs-toggle="tooltip"
+        data-bs-title="Take this resource out of rotation for maintenance — the scheduler will skip it"
+      )
+        i.bi.bi-tools
+  form.d-inline.ms-1(method="post" action=`/resources/${r.id}/rotate-token` onsubmit="return confirm('Rotate token? The Client will need the new one.')")
+    input(type="hidden" name="returnTo" value=returnTo)
+    button.btn.btn-sm.btn-outline-warning(
+      type="submit"
+      aria-label="Rotate token"
+      data-bs-toggle="tooltip"
+      data-bs-title="Invalidate the current resource token and issue a new one — the Client won't reconnect until it has it"
+    )
+      i.bi.bi-arrow-repeat
+
+mixin resourceCard(r, groupsById, returnTo)
+  - const isLoopback = (a) => /^127\./.test(a) || a === '::1' || a === 'localhost'
+  - const local = ((r.host_info && r.host_info.addresses) || []).filter((a) => !isLoopback(a.address))
+  - const external = r.remote_addr && !isLoopback(r.remote_addr) ? r.remote_addr : null
+  .modal.fade(id=`resource-card-${r.id}` tabindex="-1" aria-labelledby=`resource-card-${r.id}-title` aria-hidden="true")
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header
+          h5.modal-title(id=`resource-card-${r.id}-title`)= r.name
+          button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+        .modal-body
+          dl.row.mb-0
+            dt.col-sm-4 Name
+            dd.col-sm-8= r.name
+            dt.col-sm-4 Type
+            dd.col-sm-8.text-uppercase= r.type
+            dt.col-sm-4 Status
+            dd.col-sm-8: +resourceBadge(r.status)
+            dt.col-sm-4 Client version
+            dd.col-sm-8= r.client_version ? `v${r.client_version}` : '—'
+            dt.col-sm-4 IP addresses
+            dd.col-sm-8
+              if !local.length && !external
+                span.text-body-secondary —
+              ul.list-unstyled.mb-0
+                each a in local
+                  li
+                    code= a.address
+                    span.text-body-secondary.small.ms-2= a.iface ? `${a.iface} · ${a.family}` : a.family
+                if external
+                  li
+                    code= external
+                    span.text-body-secondary.small.ms-2(
+                      data-bs-toggle="tooltip"
+                      data-bs-title="The address the Coordinator last saw this Client connect from"
+                    ) external
+            dt.col-sm-4 Labels
+            dd.col-sm-8
+              if r.labels.length
+                each l in r.labels
+                  span.badge.text-bg-light.border.me-1= l
+              else
+                span.text-body-secondary —
+            dt.col-sm-4 Groups
+            dd.col-sm-8
+              if r.group_ids.length
+                each gid in r.group_ids
+                  span.badge.text-bg-info.me-1(title=gid)= groupsById[gid] ? groupsById[gid].name : `(unknown: ${gid})`
+              else
+                span.text-body-secondary —
+            dt.col-sm-4 Busy source / reason
+            dd.col-sm-8= r.busy_source ? `${r.busy_source}${r.busy_reason ? ' — ' + r.busy_reason : ''}` : '—'
+            dt.col-sm-4 Last heartbeat
+            dd.col-sm-8= fmtDate(r.last_heartbeat_at, 'never')
+            if user.role === 'admin'
+              dt.col-sm-4 Actions
+              dd.col-sm-8.mb-0
+                +resourceActions(r, returnTo)

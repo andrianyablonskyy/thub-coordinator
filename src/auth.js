@@ -17,6 +17,13 @@ const crypto = require('node:crypto'),
   { hashToken } = require('./services/tokens');
 
 // §3.1 / §12: bearer tokens are hashed with SHA-256 and carry a role
+// App version from a "thub-<app>/<version>" User-Agent (shared ApiClient),
+// or null for anything else (curl, an older Agent/Client).
+function appVersion(req, app){
+  const m = new RegExp(`^thub-${app}/([0-9A-Za-z.+-]{1,32})(?:\\s|$)`).exec(req.get('user-agent') || '');
+  return m ? m[1] : null;
+}
+
 // (agent | resource); admin is authenticated via the dashboard session
 // instead of an API token (§10).
 function requireRole(role){
@@ -33,7 +40,7 @@ function requireRole(role){
       if (!agent){
         return res.status(401).json({ error: 'Invalid or revoked agent token' });
       }
-      req.app.locals.services.agents.touchLastUsed(agent.id);
+      req.app.locals.services.agents.touchLastUsed(agent.id, appVersion(req, 'agent'));
       req.agent = agent;
       return next();
     }
@@ -91,4 +98,4 @@ function requireAdminRole(req, res, next){
   next();
 }
 
-module.exports = { requireRole, requireJoinKey, requireAdminSession, requireAdminRole };
+module.exports = { requireRole, requireJoinKey, requireAdminSession, requireAdminRole, appVersion };

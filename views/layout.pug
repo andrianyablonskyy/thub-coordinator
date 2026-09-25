@@ -10,7 +10,9 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
   body
     nav.navbar.navbar-expand-lg.bg-body-tertiary.border-bottom
       .container-fluid
-        a.navbar-brand(href="/") TestHub
+        a.navbar-brand.d-flex.flex-column.lh-1.py-1(href="/")
+          span TestHub
+          small.text-body-secondary.fw-normal.mt-1(style="font-size: .7rem;") ver. #{coordinatorVersion}
         button.navbar-toggler(type="button" data-bs-toggle="collapse" data-bs-target="#nav")
           span.navbar-toggler-icon
         #nav.collapse.navbar-collapse

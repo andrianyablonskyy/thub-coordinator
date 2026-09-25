@@ -29,6 +29,28 @@ function rowToResource(row){
   };
 }
 
+// host_info.addresses comes straight from the Client, so keep only
+// well-formed { iface, address, family } entries and cap the list.
+const MAX_ADDRESSES = 64;
+function sanitizeAddresses(addresses){
+  if (!Array.isArray(addresses)){
+    return undefined;
+  }
+  return addresses
+    .filter((a) => a && typeof a.address === 'string' && /^[0-9A-Fa-f:.%\w-]{2,64}$/.test(a.address))
+    .slice(0, MAX_ADDRESSES)
+    .map((a) => ({
+      iface: typeof a.iface === 'string' ? a.iface.slice(0, 64) : '',
+      address: a.address,
+      family: a.family === 'IPv6' ? 'IPv6' : 'IPv4'
+    }));
+}
+
+// Express reports IPv4 clients of a dual-stack socket as ::ffff:a.b.c.d.
+function normalizeRemoteAddr(addr){
+  return typeof addr === 'string' && addr ? addr.replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/, '$1') : null;
+}
+
 function createRegistryService(db, { bus, events }){
   function get(id){
     return rowToResource(db.prepare('SELECT * FROM resources WHERE id = ?').get(id));
@@ -84,8 +106,10 @@ function createRegistryService(db, { bus, events }){
   // this registration is allowed to reclaim it. Anything else (IDLE, BUSY,
   // MAINTENANCE, REGISTERED-but-just-created) means a process might still
   // be actively using that identity, so it stays a hard conflict.
-  function registerAuto({ clientId, name, type, labels = [], groups = [], hostInfo }){
-    const resourceToken = generateToken('res');
+  function registerAuto({ clientId, name, type, labels = [], groups = [], hostInfo, remoteAddr, clientVersion = null }){
+    const resourceToken = generateToken('res'),
+      remote = normalizeRemoteAddr(remoteAddr);
+    hostInfo = { ...(hostInfo || {}), addresses: sanitizeAddresses(hostInfo?.addresses) || [] };
     let existing = getByClientId(clientId);
 
     if (!existing){
@@ -133,7 +157,7 @@ function createRegistryService(db, { bus, events }){
       db.prepare(
         `UPDATE resources
          SET token_hash = ?, client_id = ?, name = ?, type = ?, labels = ?, group_ids = ?, host_info = ?,
-             status = ?, busy_source = NULL, busy_reason = NULL
+             remote_addr = ?, client_version = ?, status = ?, busy_source = NULL, busy_reason = NULL
          WHERE id = ?`
       ).run(
         hashToken(resourceToken),
@@ -142,7 +166,9 @@ function createRegistryService(db, { bus, events }){
         type,
         JSON.stringify(labels),
         JSON.stringify(groups),
-        JSON.stringify(hostInfo || {}),
+        JSON.stringify(hostInfo),
+        remote,
+        clientVersion,
         nextStatus,
         existing.id
       );
@@ -160,8 +186,8 @@ function createRegistryService(db, { bus, events }){
 
     const id = `res_${uuid()}`;
     db.prepare(
-      `INSERT INTO resources (id, name, type, status, labels, group_ids, host_info, token_hash, client_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO resources (id, name, type, status, labels, group_ids, host_info, remote_addr, client_version, token_hash, client_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       name,
@@ -169,7 +195,9 @@ function createRegistryService(db, { bus, events }){
       RESOURCE_STATES.REGISTERED,
       JSON.stringify(labels),
       JSON.stringify(groups),
-      JSON.stringify(hostInfo || {}),
+      JSON.stringify(hostInfo),
+      remote,
+      clientVersion,
       hashToken(resourceToken),
       clientId,
       new Date().toISOString()
@@ -185,7 +213,7 @@ function createRegistryService(db, { bus, events }){
   }
 
   // Reconcile status from a heartbeat's self-reported state (§5.1).
-  function heartbeat(resourceId, { state, activeJobId, localLock, metrics } = {}){
+  function heartbeat(resourceId, { state, activeJobId, localLock, metrics, addresses, remoteAddr, clientVersion = null } = {}){
     const resource = get(resourceId);
     if (!resource){
       throw Object.assign(new Error('Unknown resource'), { status: 404 });
@@ -217,11 +245,25 @@ function createRegistryService(db, { bus, events }){
       busyReason = null;
     }
 
+    // Older Clients don't send addresses — keep whatever registration stored.
+    const cleanAddresses = sanitizeAddresses(addresses),
+      hostInfo = cleanAddresses ? { ...(resource.host_info || {}), addresses: cleanAddresses } : resource.host_info;
+
     db.prepare(
       `UPDATE resources
-       SET last_heartbeat_at = ?, status = ?, busy_source = ?, busy_reason = ?
+       SET last_heartbeat_at = ?, status = ?, busy_source = ?, busy_reason = ?, host_info = ?,
+           remote_addr = COALESCE(?, remote_addr), client_version = COALESCE(?, client_version)
        WHERE id = ?`
-    ).run(new Date().toISOString(), nextStatus, busySource, busyReason, resourceId);
+    ).run(
+      new Date().toISOString(),
+      nextStatus,
+      busySource,
+      busyReason,
+      hostInfo ? JSON.stringify(hostInfo) : null,
+      normalizeRemoteAddr(remoteAddr),
+      clientVersion,
+      resourceId
+    );
 
     if (resource.status !== nextStatus){
       events.record('resource', resourceId, 'resource.status_changed', {

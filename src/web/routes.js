@@ -45,6 +45,14 @@ function createWebRouter({ services, config }){
     req.session.flash.push({ type, text });
   }
 
+  // Where a resource action (maintenance, rotate token) came from — the
+  // Resources page or the Overview's resource card. Only a local path,
+  // never another site.
+  function returnTo(req, fallback){
+    const target = req.body.returnTo;
+    return typeof target === 'string' && /^\/(?![\/\\])/.test(target) ? target : fallback;
+  }
+
   router.use((req, res, next) => {
     const user = req.session?.user || null;
     res.locals.user = user;
@@ -198,8 +206,9 @@ function createWebRouter({ services, config }){
       jobsLast24h = services.jobs
         .list({ limit: 1000 })
         .filter((j) => j.created_at >= dayAgo).length,
-      onlineCount = resources.filter((r) => r.status !== RESOURCE_STATES.OUT_OF_SERVICE && r.status !== RESOURCE_STATES.REGISTERED).length;
-    res.render('index', { title: 'Overview', active: 'overview', resources, queueLength, jobsLast24h, onlineCount });
+      onlineCount = resources.filter((r) => r.status !== RESOURCE_STATES.OUT_OF_SERVICE && r.status !== RESOURCE_STATES.REGISTERED).length,
+      groupsById = Object.fromEntries(services.groups.list().map((g) => [g.id, g]));
+    res.render('index', { title: 'Overview', active: 'overview', resources, queueLength, jobsLast24h, onlineCount, groupsById });
   });
 
   router.get('/resources', (req, res) => {
@@ -214,7 +223,7 @@ function createWebRouter({ services, config }){
 
   router.post('/resources/:id/maintenance', requireAdminRole, (req, res) => {
     services.registry.setMaintenance(req.params.id, req.body.enabled === '1');
-    res.redirect('/resources');
+    res.redirect(returnTo(req, '/resources'));
   });
 
   router.post('/resources/:id/rotate-token', requireAdminRole, (req, res) => {
@@ -223,7 +232,7 @@ function createWebRouter({ services, config }){
     services.db.prepare('UPDATE resources SET token_hash = ? WHERE id = ?').run(hashToken(token), req.params.id);
     services.events.record('resource', req.params.id, 'resource.token_rotated', {});
     flash(req, 'warning', `New resource token (copy it now): ${token}`);
-    res.redirect('/resources');
+    res.redirect(returnTo(req, '/resources'));
   });
 
   router.get('/jobs', (req, res) => {

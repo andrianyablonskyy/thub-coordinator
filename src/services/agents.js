@@ -28,7 +28,7 @@ function createAgentsService(db, { events }){
   }
 
   function list(){
-    return db.prepare('SELECT id, name, kind, created_at, last_used_at, revoked_at FROM agents ORDER BY created_at DESC').all();
+    return db.prepare('SELECT id, name, kind, version, created_at, last_used_at, revoked_at FROM agents ORDER BY created_at DESC').all();
   }
 
   function create({ name, kind }){
@@ -46,8 +46,9 @@ function createAgentsService(db, { events }){
     events.record('agent', id, 'agent.revoked', {});
   }
 
-  function touchLastUsed(id){
-    db.prepare('UPDATE agents SET last_used_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+  // `version` only when the Agent reported one — keeps the last known one otherwise.
+  function touchLastUsed(id, version = null){
+    db.prepare('UPDATE agents SET last_used_at = ?, version = COALESCE(?, version) WHERE id = ?').run(new Date().toISOString(), version, id);
   }
 
   return { get, getByTokenHash, list, create, revoke, touchLastUsed };

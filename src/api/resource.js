@@ -15,7 +15,7 @@
 
 const express = require('express'),
   multer = require('multer'),
-  { requireRole, requireJoinKey } = require('../auth'),
+  { requireRole, requireJoinKey, appVersion } = require('../auth'),
   { JOB_STATES } = require('@andrian.yablonskyy/thub-common');
 
 const upload = multer({ dest: require('node:os').tmpdir() });
@@ -64,7 +64,9 @@ function createResourceRouter({ services, config }){
         type,
         labels: labels || capabilities?.labels || [],
         groups: groups || [],
-        hostInfo
+        hostInfo,
+        remoteAddr: req.ip,
+        clientVersion: appVersion(req, 'client')
       });
       res.json({ resourceId, resourceToken, heartbeatIntervalSec: config.heartbeat.intervalSec });
     }
@@ -81,8 +83,16 @@ function createResourceRouter({ services, config }){
 
   router.post('/resources/:id/heartbeat', auth, requireOwnResource, (req, res, next) => {
     try {
-      const { state, activeJobId, localLock, metrics } = req.body;
-      services.registry.heartbeat(req.params.id, { state, activeJobId, localLock, metrics });
+      const { state, activeJobId, localLock, metrics, addresses } = req.body;
+      services.registry.heartbeat(req.params.id, {
+        state,
+        activeJobId,
+        localLock,
+        metrics,
+        addresses,
+        remoteAddr: req.ip,
+        clientVersion: appVersion(req, 'client')
+      });
       const commands = services.commands.drain(req.params.id);
       res.json({ serverTime: new Date().toISOString(), commands });
     }

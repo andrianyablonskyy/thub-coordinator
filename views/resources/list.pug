@@ -1,16 +1,18 @@
 extends ../layout
 include ../mixins/status-badge
+include ../mixins/resource
 
 block content
   h1.h4.mb-3 Resources
   p.text-body-secondary.small.
-    Resources register themselves — start a Client with the shared join key and it appears here.
+    Resources register themselves — start a Client with the shared join key and it appears here. Click a resource for its details, including IP addresses.
 
   table.table.table-hover.align-middle
     thead
       tr
         th Name
         th Type
+        th Version
         th Status
         th Labels
         th Groups
@@ -20,9 +22,10 @@ block content
           th Actions
     tbody
       each r in resources
-        tr
+        tr(role="button" tabindex="0" data-resource-card=`resource-card-${r.id}`)
           td= r.name
           td.text-uppercase= r.type
+          td= r.client_version ? `v${r.client_version}` : '—'
           td: +resourceBadge(r.status)
           td
             each l in r.labels
@@ -37,29 +40,10 @@ block content
           td= fmtDate(r.last_heartbeat_at, 'never')
           if user.role === 'admin'
             td
-              form.d-inline(method="post" action=`/resources/${r.id}/maintenance`)
-                input(type="hidden" name="enabled" value=r.status === 'MAINTENANCE' ? '0' : '1')
-                if r.status === 'MAINTENANCE'
-                  button.btn.btn-sm.btn-outline-secondary(
-                    type="submit"
-                    aria-label="Enable"
-                    data-bs-toggle="tooltip"
-                    data-bs-title="Bring this resource back into rotation so the scheduler can assign it jobs again"
-                  )
-                    i.bi.bi-play-circle
-                else
-                  button.btn.btn-sm.btn-outline-secondary(
-                    type="submit"
-                    aria-label="Disable"
-                    data-bs-toggle="tooltip"
-                    data-bs-title="Take this resource out of rotation for maintenance — the scheduler will skip it"
-                  )
-                    i.bi.bi-tools
-              form.d-inline.ms-1(method="post" action=`/resources/${r.id}/rotate-token` onsubmit="return confirm('Rotate token? The Client will need the new one.')")
-                button.btn.btn-sm.btn-outline-warning(
-                  type="submit"
-                  aria-label="Rotate token"
-                  data-bs-toggle="tooltip"
-                  data-bs-title="Invalidate the current resource token and issue a new one — the Client won't reconnect until it has it"
-                )
-                  i.bi.bi-arrow-repeat
+              +resourceActions(r, '/resources')
+
+  each r in resources
+    +resourceCard(r, groupsById, '/resources')
+
+block scripts
+  script(src="/js/resource-card.js")

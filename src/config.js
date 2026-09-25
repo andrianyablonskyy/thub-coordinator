@@ -21,6 +21,10 @@ const fs = require('node:fs'),
 const DEFAULTS = {
   listen: '127.0.0.1:8080',
   publicUrl: 'http://localhost:8080',
+  // Express `trust proxy`: which proxies' X-Forwarded-For to believe for
+  // a Client's external address (resource card). 'loopback' fits the
+  // default setup — listening on 127.0.0.1 behind a local reverse proxy.
+  trustProxy: 'loopback',
   dataDir: path.join(process.cwd(), '.data'),
   sessionSecret: 'dev-only-change-me',
   // Shared secret Clients present to self-register (see api/resource.js).

@@ -35,6 +35,7 @@ The Coordinator loads a plain **JSON** config file (no YAML support). Resolution
 {
   "listen": "127.0.0.1:8080",
   "publicUrl": "https://thub.example.com",
+  "trustProxy": "loopback",
   "dataDir": "/var/lib/thub",
   "sessionSecret": "change-me-to-a-long-random-string",
   "clientJoinKey": "change-me-to-a-long-random-string",
@@ -46,7 +47,7 @@ The Coordinator loads a plain **JSON** config file (no YAML support). Resolution
 }
 ```
 
-`sessionSecret` signs the dashboard's session cookie and the HMAC on artifact download links; `clientJoinKey` is the shared secret Clients self-register with — omit or leave `null` to disable auto-registration entirely. Individual `THUB_LISTEN` / `THUB_PUBLIC_URL` / `THUB_DATA_DIR` / `THUB_SESSION_SECRET` / `THUB_CLIENT_JOIN_KEY` env vars override whatever the file set.
+`sessionSecret` signs the dashboard's session cookie and the HMAC on artifact download links; `clientJoinKey` is the shared secret Clients self-register with — omit or leave `null` to disable auto-registration entirely. `trustProxy` is Express's [`trust proxy`](https://expressjs.com/en/guide/behind-proxies.html) setting (default `loopback`): which reverse proxies' `X-Forwarded-For` to believe for a Client's external address on the resource card — e.g. `"10.0.0.0/8"` or `1` for a proxy on another host, `false` to always use the socket address. Individual `THUB_LISTEN` / `THUB_PUBLIC_URL` / `THUB_DATA_DIR` / `THUB_SESSION_SECRET` / `THUB_CLIENT_JOIN_KEY` env vars override whatever the file set.
 
 `npm install -g` creates `~/.config/thub/coordinator.json` for you if it doesn't already exist, with all the options above, `dataDir` set to `~/var/lib/thub` and a freshly generated random `sessionSecret` (not the placeholder above), readable only by its owner — a re-install never overwrites it or regenerates the secret. Set `publicUrl` and `clientJoinKey` yourself before relying on auto-registration.
 
@@ -105,7 +106,7 @@ Both `jobs reset` and `jobs clean` refuse to run without `--yes` — there's no 
 
 ## API
 
-All endpoints are under `/api/v1`, JSON, and require `Authorization: Bearer <token>` (the dashboard is a separate session-based auth path).
+All endpoints are under `/api/v1`, JSON, and require `Authorization: Bearer <token>` (the dashboard is a separate session-based auth path). The Agent and Client send `User-Agent: thub-agent/<version>` / `thub-client/<version>`, and the Coordinator records that version for the dashboard.
 
 **Agent endpoints** (used by [thub-agent](https://github.com/andrianyablonskyy/thub-agent)):
 
@@ -124,8 +125,8 @@ All endpoints are under `/api/v1`, JSON, and require `Authorization: Bearer <tok
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/resources/register` | Self-register (every start/restart) using the shared `clientJoinKey`; upserts by `clientId`. |
-| `POST` | `/resources/:id/heartbeat` | Heartbeat and self-reported state; response may carry `commands[]`. |
+| `POST` | `/resources/register` | Self-register (every start/restart) using the shared `clientJoinKey`; upserts by `clientId`. `hostInfo.addresses` (`[{iface, address, family}]`) lists the host's non-loopback interface addresses; the request's source address is stored as the external one. |
+| `POST` | `/resources/:id/heartbeat` | Heartbeat and self-reported state, plus the current `addresses`; refreshes the external address; response may carry `commands[]`. |
 | `POST` | `/resources/:id/status` | Explicit status change, e.g. a local lock. |
 | `GET` | `/resources/:id/jobs/next?wait=30` | Long-poll for an assigned job; `204` when nothing arrived within `wait` seconds. |
 | `POST` | `/jobs/:id/accept` | Acknowledge assignment. |
@@ -142,13 +143,17 @@ Server-rendered Pug templates styled with Bootstrap 5.3, with a little vanilla J
 
 | Page | Content |
 |---|---|
-| `/` | Resource cards by status, queue length, jobs in the last 24 h. |
-| `/resources` | Type, labels, groups, status, busy source/reason, last heartbeat age; admin maintenance/rotate-token actions. |
+| `/` | Resource cards by status, queue length, jobs in the last 24 h. Click a card for its resource card (below). |
+| `/resources` | Type, Client version, labels, groups, status, busy source/reason, last heartbeat age; admin maintenance/rotate-token actions. Click a row for its resource card (below). |
 | `/groups` | Resource groups — id/name/comment, member count; admin create/rename/delete. Membership itself is set per-resource in the Client's own config. |
 | `/jobs` | Filterable job list (state, source, resource), with the job's `user` label if set; admin **Reset queue** / **Clean history**. |
 | `/jobs/:id` | Spec, timeline, live log viewer with stream filter, artifact downloads, cancel button. |
-| `/admin/agents` | Register/revoke CI and developer agents; token shown once. |
+| `/admin/agents` | Register/revoke CI and developer agents; token shown once. Shows each agent's last reported version. |
 | `/profile` | Every logged-in user's own account settings: display name, avatar, timezone (renders every dashboard timestamp), theme, idle session timeout, password change. |
+
+**Resource card.** Clicking a resource on `/` or `/resources` opens a card with its name, type, status, Client version, IP addresses, labels, groups, busy source/reason, last heartbeat and (admins only) the maintenance/rotate-token actions. IP addresses are the Client host's interface addresses except loopback (reported at registration and on every heartbeat) plus the external address — the one the Coordinator last saw the Client connect from, taken from `X-Forwarded-For` when the request came through a proxy `trustProxy` trusts.
+
+The Coordinator's own version (`ver. X.Y.Z`) is shown under the TestHub logo, top left of every page.
 
 ## Data storage
 

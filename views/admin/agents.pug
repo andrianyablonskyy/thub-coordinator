@@ -16,6 +16,7 @@ block content
       tr
         th Name
         th Kind
+        th Version
         th Created
         th Last used
         th Status
@@ -25,6 +26,7 @@ block content
         tr(class=a.revoked_at ? 'opacity-50' : '')
           td= a.name
           td.text-uppercase= a.kind
+          td= a.version ? `v${a.version}` : '—'
           td= fmtDate(a.created_at)
           td= fmtDate(a.last_used_at, 'never')
           td= a.revoked_at ? 'revoked' : 'active'

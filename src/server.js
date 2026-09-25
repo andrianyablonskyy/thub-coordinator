@@ -85,7 +85,10 @@ function createApp(config, services){
   const app = express();
   app.set('view engine', 'pug');
   app.set('views', path.join(__dirname, '..', 'views'));
+  app.set('trust proxy', config.trustProxy);
   app.locals.services = services;
+  // Shown in every dashboard page's footer (layout.pug).
+  app.locals.coordinatorVersion = require('../package.json').version;
 
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
