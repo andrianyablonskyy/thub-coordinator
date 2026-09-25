@@ -22,7 +22,7 @@ const fs = require('node:fs'),
 // as root when the dashboard writes an update request (README §10.2).
 const UPDATE_PATH_UNIT = '/etc/systemd/system/thub-coordinator-update.path';
 
-// Latest published versions, refreshed every `updates.checkIntervalHours`
+// Latest published versions, refreshed every `updates.checkIntervalMin`
 // and on demand from the dashboard. Kept in memory only — a restart just
 // checks again.
 function createUpdatesService({ config }){
@@ -96,12 +96,12 @@ function createUpdatesService({ config }){
   }
 
   function start(){
-    const hours = Number(config.updates.checkIntervalHours);
-    if (!(hours > 0)){
+    const minutes = Number(config.updates.checkIntervalMin);
+    if (!(minutes > 0)){
       return;
     }
     checkNow().catch(() => {});
-    const timer = setInterval(() => checkNow().catch(() => {}), hours * 3600 * 1000);
+    const timer = setInterval(() => checkNow().catch(() => {}), minutes * 60 * 1000);
     timer.unref?.();
   }
 

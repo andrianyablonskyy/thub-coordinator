@@ -54,10 +54,13 @@ const DEFAULTS = {
     linkTtlHours: 168
   },
   // New-version check of the Coordinator/Agent/Client packages (README
-  // §10.2). 0 disables the periodic check; registry null = the public npm
-  // registry (or npm_config_registry).
+  // §10.2), every 15 minutes so a new Coordinator's "Update app" button
+  // shows up promptly. 0 disables the periodic check; registry null = the
+  // public npm registry (or npm_config_registry). The old
+  // `checkIntervalHours` (6) is no longer read — installed configs still
+  // carry it from their defaults.
   updates: {
-    checkIntervalHours: 6,
+    checkIntervalMin: 15,
     registry: null
   }
 };
