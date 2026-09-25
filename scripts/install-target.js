@@ -52,14 +52,14 @@ function resolveTargetUser(){
 }
 
 // Default layout (README §13): config under ~/.config/thub, runtime data
-// (SQLite DB, uploaded artifacts, avatars, work files) under ~/var/lib/thub.
+// (SQLite DB, uploaded artifacts, avatars, work files) under ~/.thub.
 // An existing coordinator.json's own dataDir wins over the default, so a
 // re-install prepares (and the systemd unit allows writes to) the
 // directory the Coordinator will really use.
 function targetPaths(user){
   const configDir = path.join(user.home, '.config', 'thub'),
     configPath = path.join(configDir, 'coordinator.json'),
-    defaultDataDir = path.join(user.home, 'var', 'lib', 'thub'),
+    defaultDataDir = path.join(user.home, '.thub'),
     dataDir = configuredDataDir(configPath) || defaultDataDir;
   return {
     configDir,

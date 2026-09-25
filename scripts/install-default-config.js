@@ -1,7 +1,7 @@
 /**
  * @file        scripts/install-default-config.js
  * @description npm postinstall: on a real global install, creates the Coordinator's directory layout
- *              (~/.config/thub, ~/var/lib/thub and its artifacts/avatars/work subdirs) and, if it
+ *              (~/.config/thub, ~/.thub and its artifacts/avatars/work subdirs) and, if it
  *              doesn't already exist, ~/.config/thub/coordinator.json with every default option and
  *              a freshly generated sessionSecret (README §12, §13)
  *
@@ -26,7 +26,7 @@ const fs = require('node:fs'),
 // can be changed — not a copy of the bundled config.json (which uses a
 // relative dataDir and a fixed sessionSecret for zero-setup `npm run
 // coordinator` in the monorepo). What differs from DEFAULTS:
-//   - dataDir: home-anchored (~/var/lib/thub), not cwd-relative — a real
+//   - dataDir: home-anchored (~/.thub), not cwd-relative — a real
 //     install shouldn't get a different data directory depending on which
 //     directory thub-coordinator happened to be launched from.
 //   - sessionSecret: freshly random per install, never the shared
@@ -51,7 +51,7 @@ function chownToUser(p, user){
 }
 
 // Creates `dir` and chowns every directory this call created along the
-// way (e.g. ~/.config, ~/var, ~/var/lib when they didn't exist yet),
+// way (e.g. ~/.config, ~/.thub when they didn't exist yet),
 // plus `dir` itself.
 function mkdirOwned(dir, user){
   const firstCreated = fs.mkdirSync(dir, { recursive: true });
