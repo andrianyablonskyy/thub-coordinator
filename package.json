@@ -3,6 +3,9 @@
   "version": "1.0.5",
   "description": "TestHub Coordinator — job queue, resource registry, scheduler, heartbeat monitor, log/artifact store and web dashboard",
   "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "thub-admin": "./bin/thub-admin.js",
     "thub-coordinator": "./src/server.js"
@@ -11,7 +14,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test test/*.test.js",
-    "postinstall": "node scripts/install-default-config.js && node scripts/install-systemd-unit.js",
+    "postinstall": "node scripts/ensure-native-deps.js && node scripts/install-default-config.js && node scripts/install-systemd-unit.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
