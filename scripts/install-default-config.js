@@ -1,9 +1,9 @@
 /**
  * @file        scripts/install-default-config.js
- * @description npm postinstall: creates ~/.config/thub/coordinator.json on a real global install,
- *              if it doesn't already exist, with a freshly generated sessionSecret rather than a
- *              shared placeholder — so every real installation isn't using the same known secret
- *              for its session cookies and artifact-download HMACs (README §12, §13)
+ * @description npm postinstall: on a real global install, creates the Coordinator's directory layout
+ *              (~/.config/thub, ~/var/lib/thub and its artifacts/avatars/work subdirs) and, if it
+ *              doesn't already exist, ~/.config/thub/coordinator.json with every default option and
+ *              a freshly generated sessionSecret (README §12, §13)
  *
  * @author      Andrian Yablonskyy
  * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
@@ -17,57 +17,82 @@
 'use strict';
 
 const fs = require('node:fs'),
-  os = require('node:os'),
   path = require('node:path'),
   crypto = require('node:crypto'),
+  { DEFAULTS } = require('../src/config'),
+  { isGlobalInstall, isRoot, resolveTargetUser, targetPaths } = require('./install-target');
 
-  CONFIG_PATH = path.join(os.homedir(), '.config', 'thub', 'coordinator.json');
-
-// npm only sets this for an actual `npm install -g` — absent for a plain
-// local/workspace install (e.g. this monorepo's own `npm install`).
-function isGlobalInstall(){
-  return process.env.npm_config_global === 'true';
-}
-
-// Deliberately minimal, not a copy of the bundled config.json (which uses
-// a relative dataDir and a fixed sessionSecret for zero-setup `npm run
-// coordinator` in the monorepo — fine there since it's never a real
-// deployment). loadConfig()'s own DEFAULTS already cover everything else
-// (listen, publicUrl, heartbeat/scheduler/jobs/retention/artifacts), so
-// only what genuinely needs to differ for a real standalone install goes
-// here:
-//   - dataDir: home-anchored, not cwd-relative — a real install shouldn't
-//     silently get a different data directory depending on which
-//     directory you happened to launch thub-coordinator from.
-//   - sessionSecret: freshly random per install. The code's own default
-//     ("dev-only-change-me") is fine for local dev but would otherwise
-//     mean every real installation nobody got around to changing shares
-//     the exact same session-signing key.
-//   - clientJoinKey stays unset (null, the code's own default) — auto-
-//     registration is opt-in, and there's nothing sensible to
-//     auto-generate here since it also has to be copied to every Client.
-function defaultContent(){
+// Every option loadConfig() knows, written out so the file documents what
+// can be changed — not a copy of the bundled config.json (which uses a
+// relative dataDir and a fixed sessionSecret for zero-setup `npm run
+// coordinator` in the monorepo). What differs from DEFAULTS:
+//   - dataDir: home-anchored (~/var/lib/thub), not cwd-relative — a real
+//     install shouldn't get a different data directory depending on which
+//     directory thub-coordinator happened to be launched from.
+//   - sessionSecret: freshly random per install, never the shared
+//     "dev-only-change-me" default.
+//   - clientJoinKey stays null (auto-registration is opt-in, and it also
+//     has to be copied to every Client, so there's nothing to generate).
+function defaultContent(paths){
   return {
-    dataDir: path.join(os.homedir(), '.local', 'share', 'thub'),
+    ...DEFAULTS,
+    dataDir: paths.defaultDataDir,
     sessionSecret: crypto.randomBytes(32).toString('hex')
   };
 }
 
+// Under `sudo npm i -g` everything is created by root in another user's
+// home — hand it over, or the Coordinator (running as that user, see
+// install-systemd-unit.js) couldn't read its config or write its data.
+function chownToUser(p, user){
+  if (isRoot() && user.uid !== 0){
+    fs.chownSync(p, user.uid, user.gid);
+  }
+}
+
+// Creates `dir` and chowns every directory this call created along the
+// way (e.g. ~/.config, ~/var, ~/var/lib when they didn't exist yet),
+// plus `dir` itself.
+function mkdirOwned(dir, user){
+  const firstCreated = fs.mkdirSync(dir, { recursive: true });
+  if (firstCreated){
+    const rel = path.relative(firstCreated, dir).split(path.sep).filter(Boolean);
+    let current = firstCreated;
+    chownToUser(current, user);
+    for (const part of rel){
+      current = path.join(current, part);
+      chownToUser(current, user);
+    }
+  }
+  else {
+    chownToUser(dir, user);
+  }
+}
+
 // Best-effort and never fails the `npm install` itself. Never overwrites
-// an existing file — a re-install/upgrade must not clobber whatever the
-// user already configured, and must never regenerate sessionSecret out
+// an existing config file — a re-install/upgrade must not clobber whatever
+// the user already configured, and must never regenerate sessionSecret out
 // from under a running deployment (that would invalidate every session).
 function main(){
-  if (!isGlobalInstall() || fs.existsSync(CONFIG_PATH)){
+  if (!isGlobalInstall()){
     return;
   }
+  const user = resolveTargetUser(),
+    paths = targetPaths(user);
   try {
-    fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultContent(), null, 2) + '\n', { mode: 0o600 });
-    console.log(`thub-coordinator: created ${CONFIG_PATH} with a freshly generated sessionSecret`);
+    mkdirOwned(paths.configDir, user);
+    for (const dir of [paths.dataDir, ...paths.dataSubdirs]){
+      mkdirOwned(dir, user);
+    }
+    if (!fs.existsSync(paths.configPath)){
+      fs.writeFileSync(paths.configPath, JSON.stringify(defaultContent(paths), null, 2) + '\n', { mode: 0o600 });
+      chownToUser(paths.configPath, user);
+      console.log(`thub-coordinator: created ${paths.configPath} with a freshly generated sessionSecret`);
+    }
+    console.log(`thub-coordinator: data directory is ${paths.dataDir}`);
   }
   catch (err){
-    console.warn(`thub-coordinator: could not create ${CONFIG_PATH} automatically (${err.message}).`);
+    console.warn(`thub-coordinator: could not create ${paths.configPath} / ${paths.dataDir} automatically (${err.message}).`);
   }
 }
 

@@ -7,10 +7,25 @@ See the [main TestHub repo](https://github.com/andrianyablonskyy/thub) for the f
 ## Install
 
 ```bash
-npm i -g @andrian.yablonskyy/thub-coordinator
+sudo npm i -g @andrian.yablonskyy/thub-coordinator
 ```
 
-This gives you two global commands: `thub-coordinator` (the server itself) and `thub-admin` (the local operator CLI, below). Or clone this repo directly and run it from source (see below).
+This gives you two global commands: `thub-coordinator` (the server itself) and `thub-admin` (the local operator CLI, below), and sets up everything needed to run it:
+
+- `~/.config/thub/coordinator.json` with every default option (see Configuration below), if it doesn't exist yet.
+- `~/var/lib/thub` (the `dataDir`: SQLite DB, uploaded artifacts, avatars) with its `artifacts/`, `avatars/` and `work/` subdirectories.
+- On Linux as root: `/etc/systemd/system/thub-coordinator.service`, enabled and started, so the Coordinator runs now and on every boot. A re-install/upgrade restarts it on the new code.
+
+Under `sudo`, `~` means the home of the user who ran `sudo` (`SUDO_USER`), not `/root`. That user owns the config and data and the service runs as them. Without root the config and directories are still created; the systemd step is skipped.
+
+```bash
+sudo systemctl status thub-coordinator
+journalctl -u thub-coordinator -f
+# after editing ~/.config/thub/coordinator.json:
+sudo systemctl restart thub-coordinator
+```
+
+Or clone this repo directly and run it from source (see below).
 
 ## Configuration
 
@@ -33,17 +48,19 @@ The Coordinator loads a plain **JSON** config file (no YAML support). Resolution
 
 `sessionSecret` signs the dashboard's session cookie and the HMAC on artifact download links; `clientJoinKey` is the shared secret Clients self-register with — omit or leave `null` to disable auto-registration entirely. Individual `THUB_LISTEN` / `THUB_PUBLIC_URL` / `THUB_DATA_DIR` / `THUB_SESSION_SECRET` / `THUB_CLIENT_JOIN_KEY` env vars override whatever the file set.
 
-`npm install -g` creates `~/.config/thub/coordinator.json` for you if it doesn't already exist, with a home-anchored `dataDir` and a freshly generated random `sessionSecret` (not the placeholder above) — a re-install never overwrites it or regenerates the secret. Set `publicUrl` and `clientJoinKey` yourself before relying on auto-registration.
+`npm install -g` creates `~/.config/thub/coordinator.json` for you if it doesn't already exist, with all the options above, `dataDir` set to `~/var/lib/thub` and a freshly generated random `sessionSecret` (not the placeholder above), readable only by its owner — a re-install never overwrites it or regenerates the secret. Set `publicUrl` and `clientJoinKey` yourself before relying on auto-registration.
 
 ## Running it
 
 ```bash
 # First run: no admin_users row exists yet, so either set a bootstrap
-# password (creates user "admin") or use thub-admin afterwards.
-THUB_COORDINATOR_CONFIG=/etc/thub/coordinator.json \
+# password (creates user "admin") or use thub-admin afterwards. Reads
+# ~/.config/thub/coordinator.json; point THUB_COORDINATOR_CONFIG at another
+# file only if it exists — a missing one is an error, not a fallback.
 THUB_BOOTSTRAP_ADMIN_PASSWORD=correct-horse-battery-staple \
 thub-coordinator
 # -> Reset password for admin user "admin" from THUB_BOOTSTRAP_ADMIN_PASSWORD
+# -> Config: /home/you/.config/thub/coordinator.json; data: /home/you/var/lib/thub
 # -> TestHub Coordinator listening on http://127.0.0.1:8080
 ```
 

@@ -145,6 +145,7 @@ function start(configPath){
   ensureBootstrapAdmin(services);
 
   const server = app.listen(config.port, config.host, () => {
+    console.log(`Config: ${config.configPath || '(built-in defaults)'}; data: ${config.dataDir}`);
     console.log(`TestHub Coordinator listening on http://${config.host}:${config.port}`);
   });
 

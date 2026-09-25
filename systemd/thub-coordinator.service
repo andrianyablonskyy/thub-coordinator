@@ -1,0 +1,22 @@
+[Unit]
+Description=TestHub Coordinator
+After=network-online.target
+Wants=network-online.target
+
+# User, Group, THUB_COORDINATOR_CONFIG, ReadWritePaths and ExecStart are
+# rewritten by scripts/install-systemd-unit.js at install time to the user
+# who ran `sudo npm i -g` and this install's real node/server.js paths.
+[Service]
+Type=simple
+User=thub
+Group=thub
+Environment=THUB_COORDINATOR_CONFIG=/var/lib/thub/.config/thub/coordinator.json
+ExecStart=/usr/bin/node /usr/lib/node_modules/@andrian.yablonskyy/thub-coordinator/src/server.js
+Restart=always
+RestartSec=2
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/thub/var/lib/thub
+
+[Install]
+WantedBy=multi-user.target

@@ -72,6 +72,13 @@ const USER_CONFIG_PATH = path.join(os.homedir(), '.config', 'thub', 'coordinator
   PACKAGE_DEFAULT_CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 
 function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
+  // An explicitly named config that doesn't exist is an error, not a cue to
+  // fall back: silently running on the bundled dev config instead (relative
+  // dataDir, placeholder secrets) only surfaces later as a confusing
+  // failure far from the real cause, e.g. SQLITE_CANTOPEN.
+  if (configPath && !fs.existsSync(configPath)){
+    throw new Error(`Coordinator config not found: ${configPath} (from THUB_COORDINATOR_CONFIG)`);
+  }
   const candidate = [configPath, USER_CONFIG_PATH, PACKAGE_DEFAULT_CONFIG_PATH].find(
       (p) => p && fs.existsSync(p)
     ),
@@ -95,6 +102,9 @@ function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
     config.clientJoinKey = process.env.THUB_CLIENT_JOIN_KEY;
   }
 
+  config.configPath = candidate || null;
+  config.dataDir = path.resolve(config.dataDir);
+
   const [host, port] = config.listen.split(':');
   config.host = host;
   config.port = Number(port);
@@ -103,11 +113,27 @@ function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
   config.workDir = path.join(config.dataDir, 'work');
   config.avatarsDir = path.join(config.dataDir, 'avatars');
 
-  fs.mkdirSync(config.dataDir, { recursive: true });
-  fs.mkdirSync(config.artifactsDir, { recursive: true });
-  fs.mkdirSync(config.avatarsDir, { recursive: true });
+  ensureWritableDir(config.dataDir, config.configPath);
+  ensureWritableDir(config.artifactsDir, config.configPath);
+  ensureWritableDir(config.avatarsDir, config.configPath);
 
   return config;
+}
+
+// SQLite opens thub.db (plus its -wal/-shm files) inside dataDir, so an
+// existing but unwritable dataDir — typically one created by an earlier
+// run under sudo — would otherwise fail later as a bare SQLITE_CANTOPEN.
+function ensureWritableDir(dir, configPath){
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.accessSync(dir, fs.constants.W_OK);
+  }
+  catch (err){
+    throw new Error(
+      `Coordinator data directory ${dir} is not writable by this user (${err.code || err.message}). ` +
+        `Fix its ownership, or set dataDir in ${configPath || 'the config'} / THUB_DATA_DIR to a writable path.`
+    );
+  }
 }
 
 module.exports = { loadConfig, DEFAULTS };
