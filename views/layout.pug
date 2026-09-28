@@ -104,12 +104,16 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                   )
                     i.bi.bi-box-arrow-right
     //- Flash messages as toasts (public/js/toasts.js): errors stay until
-    //- closed, warnings close after 30 s, info/success after 10 s. Rendered
+    //- closed, warnings close after 30 s, info/success after 10 s, with a
+    //- countdown bar along the bottom (paused on hover). Rendered
     //- visible (.show), so they're readable even if the script fails.
     if messages && messages.length
       .toast-container.position-fixed.end-0.p-3(style="top: 3.5rem; z-index: 1090;")
         each m in messages
-          - const type = ['danger', 'warning', 'info', 'success'].includes(m.type) ? m.type : 'info'
+          //- Error-level aliases map to danger (never auto-closes); anything
+          //- else unknown is shown as info.
+          - const alias = { error: 'danger', critical: 'danger', fatal: 'danger' }[m.type] || m.type
+          - const type = ['danger', 'warning', 'info', 'success'].includes(alias) ? alias : 'info'
           - const icon = { danger: 'x-octagon-fill', warning: 'exclamation-triangle-fill', info: 'info-circle-fill', success: 'check-circle-fill' }[type]
           .toast.show.border-0(
             class=`text-bg-${type}`

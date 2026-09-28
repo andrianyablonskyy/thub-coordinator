@@ -4,3 +4,27 @@
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* Toast auto-close countdown (public/js/toasts.js): a thin bar along the
+   bottom that shrinks over the toast's delay; the toast closes when it
+   runs out. Hovering or focusing the toast pauses it. currentColor keeps
+   it readable on every text-bg-* variant. */
+.thub-toast-progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: currentColor;
+  opacity: 0.45;
+  transform-origin: left center;
+  animation: thub-toast-countdown var(--thub-toast-delay, 10s) linear forwards;
+}
+
+.toast:hover .thub-toast-progress,
+.toast:focus-within .thub-toast-progress {
+  animation-play-state: paused;
+}
+
+@keyframes thub-toast-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}

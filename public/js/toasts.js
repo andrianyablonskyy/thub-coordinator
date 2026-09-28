@@ -22,12 +22,28 @@
   document.querySelectorAll('[data-thub-toast]').forEach((el) => {
     const type = el.dataset.thubToast in DELAY_MS ? el.dataset.thubToast : 'info',
       delay = el.dataset.sticky ? null : DELAY_MS[type],
-      toast = new bootstrap.Toast(el, { autohide: delay !== null, delay: delay ?? 0 });
+      // Our own countdown instead of Bootstrap's autohide: that one restarts
+      // the full delay after every hover, which a progress bar can't show.
+      toast = new bootstrap.Toast(el, { autohide: false });
     // "Self-destroying": gone from the page once hidden, not just invisible.
     el.addEventListener('hidden.bs.toast', () => {
       toast.dispose();
       el.remove();
     });
+
+    // The bar is the timer: a CSS animation over `delay` (paused while the
+    // toast is hovered or focused, see thub.css) — the toast closes when
+    // it ends. Added here, not in the markup, so without this script no
+    // bar suggests a close that would never happen.
+    if (delay !== null){
+      const bar = document.createElement('div');
+      bar.className = 'thub-toast-progress';
+      bar.setAttribute('aria-hidden', 'true');
+      bar.style.setProperty('--thub-toast-delay', `${delay}ms`);
+      bar.addEventListener('animationend', () => toast.hide(), { once: true });
+      el.classList.add('position-relative', 'overflow-hidden');
+      el.appendChild(bar);
+    }
     toast.show();
   });
 })();
