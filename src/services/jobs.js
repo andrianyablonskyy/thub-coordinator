@@ -30,7 +30,10 @@ function rowToJob(row){
 // developer's own machine — separate series (each own counter row) rather
 // than a shared counter with just a different letter, so e.g. A-00042
 // doesn't imply 41 manual runs happened first.
-const JOB_ID_PREFIXES = { ci: 'A', cli: 'M' };
+const JOB_ID_PREFIXES = { ci: 'A', cli: 'M' },
+  // Default priority when the spec doesn't set one (§7.1): a developer's
+  // manual run jumps ahead of CI's queue.
+  DEFAULT_PRIORITY = { ci: 50, cli: 60 };
 
 function nextJobId(db, source){
   const prefix = JOB_ID_PREFIXES[source];
@@ -85,7 +88,9 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
   // Agent: POST /jobs (§6.1, §4.3). Rejects unsatisfiable label requests
   // immediately (§5.4) instead of letting them starve in the queue.
   function create({ agentId, source, spec: rawSpec }){
-    const { valid, spec, errors } = validateJobSpec(rawSpec);
+    const { valid, spec, errors } = validateJobSpec(
+      rawSpec?.priority === undefined ? { ...rawSpec, priority: DEFAULT_PRIORITY[source] } : rawSpec
+    );
     if (!valid){
       throw Object.assign(new Error(`Invalid job spec: ${errors.join('; ')}`), { status: 400 });
     }

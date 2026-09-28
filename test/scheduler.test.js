@@ -157,6 +157,16 @@ test('job ids are split by source: A-##### for ci, M-##### for cli', () => {
   assert.equal(Number(ciJob2.id.slice(2)), Number(ciJob.id.slice(2)) + 1);
 });
 
+test('default priority follows the job source; an explicit one is kept', () => {
+  const { agents, registry, jobs } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' });
+  registerResource(registry, { name: 'lab-sw-01', type: 'sw' });
+
+  assert.equal(jobs.create({ agentId: agent.id, source: 'ci', spec: makeSpec() }).priority, 50);
+  assert.equal(jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() }).priority, 60);
+  assert.equal(jobs.create({ agentId: agent.id, source: 'ci', spec: makeSpec({ priority: 90 }) }).priority, 90);
+});
+
 test('admin resetQueue cancels every active job and leaves finished ones alone', () => {
   const { registry, agents, jobs, scheduler } = buildTestServices(),
     { agent } = agents.create({ name: 'ci', kind: 'ci' }),

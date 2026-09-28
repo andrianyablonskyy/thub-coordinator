@@ -28,7 +28,11 @@ function createAgentRouter({ services, config }){
 
   router.post('/jobs', auth, (req, res, next) => {
     try {
-      const job = services.jobs.create({ agentId: req.agent.id, source: req.body.source || 'cli', spec: req.body });
+      // The job source (A-/M- id series, default priority) is the agent
+      // token's admin-assigned kind alone — never taken from the request,
+      // so it can't be spoofed or mis-detected on the Agent side.
+      const source = req.agent.kind,
+        job = services.jobs.create({ agentId: req.agent.id, source, spec: req.body });
       res.status(201).json({ jobId: job.id, state: job.state, webUrl: `${config.publicUrl}/jobs/${job.id}` });
     }
     catch (err){
