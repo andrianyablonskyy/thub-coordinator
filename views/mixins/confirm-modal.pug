@@ -3,7 +3,8 @@
 //- data-bs-target="#<opts.id>" (no JS needed). The block is the body text.
 //- opts: id, title, action, confirmLabel, and optional tone (Bootstrap
 //- color, default danger), icon / confirmIcon (bootstrap-icons classes),
-//- disabled (nothing to do — the confirm button is disabled).
+//- disabled (nothing to do — the confirm button is disabled), formId (id of
+//- the footer form, so inputs in the body can join it with form=<formId>).
 mixin confirmModal(opts)
   - const tone = opts.tone || 'danger'
   .modal.fade(id=opts.id tabindex="-1" aria-labelledby=`${opts.id}-title` aria-hidden="true")
@@ -19,7 +20,7 @@ mixin confirmModal(opts)
           block
         .modal-footer
           button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Keep
-          form(method="post" action=opts.action)
+          form(method="post" action=opts.action id=opts.formId)
             button.btn(type="submit" class=`btn-${tone}` disabled=opts.disabled)
               if opts.confirmIcon
                 i.bi.me-1(class=opts.confirmIcon)

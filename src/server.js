@@ -34,6 +34,7 @@ const path = require('node:path'),
   { createArtifactsService } = require('./services/artifacts'),
   { createCommandsService } = require('./services/commands'),
   { createRetentionService } = require('./services/retention'),
+  { createCleanupService } = require('./services/cleanup'),
   { createUpdatesService } = require('./services/updates'),
 
   { createAgentRouter } = require('./api/agent'),
@@ -55,10 +56,12 @@ function buildServices(config){
     scheduler = createScheduler(db, { bus, events, registry, config }),
     heartbeatMonitor = createHeartbeatMonitor(db, { bus, events, registry, jobs, config }),
     retention = createRetentionService(db, { bus, logs, artifacts, config }),
+    cleanup = createCleanupService(db, { jobs, config }),
     updates = createUpdatesService({ config });
 
   jobs.reconcileOnStartup();
   updates.start();
+  cleanup.start();
 
   const sweepInterval = setInterval(() => {
     jobs.checkAssignAcks();
@@ -81,6 +84,7 @@ function buildServices(config){
     scheduler,
     heartbeatMonitor,
     retention,
+    cleanup,
     updates
   };
 }

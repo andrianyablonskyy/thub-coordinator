@@ -32,8 +32,9 @@ const { loadConfig } = require('../src/config'),
   { createAdminUsersService } = require('../src/services/admin-users'),
   { createArtifactsService } = require('../src/services/artifacts'),
   { createJobsService } = require('../src/services/jobs'),
+  { createCleanupService } = require('../src/services/cleanup'),
   { generateToken } = require('../src/services/tokens'),
-  { PACKAGES, fetchLatestVersion, isNewer, isValidVersion, npmBin } = require('@andrian.yablonskyy/thub-common'),
+  { PACKAGES, fetchLatestVersion, isNewer, isValidVersion, npmBin, formatDateTime, parseDateTime } = require('@andrian.yablonskyy/thub-common'),
   { spawnSync } = require('node:child_process'),
   { version: installedVersion } = require('../package.json');
 
@@ -44,7 +45,10 @@ function usage(){
   thub-admin join-key generate
   thub-admin resource maintenance <resourceId> --on|--off
   thub-admin jobs reset --yes     Cancel every queued/assigned/preparing/running job
-  thub-admin jobs clean --yes     Permanently delete finished jobs, logs and artifacts
+  thub-admin jobs clean --yes [--before "dd/mm/yyyy HH:MM:SS"]
+                                  Permanently delete finished jobs (with logs and artifacts) and
+                                  history from before then (local time; default: now), then
+                                  compact the database file
   thub-admin group add <name> [--comment <text>]
   thub-admin group list
   thub-admin group remove <groupId>
@@ -192,8 +196,17 @@ function main(){
       console.error('This permanently deletes finished jobs and their logs/artifacts. Re-run with --yes to confirm.');
       process.exit(4);
     }
-    const deleted = jobs.cleanHistory();
-    console.log(`Deleted ${deleted} finished job(s) and their logs/artifacts.`);
+    const before = flags.before ? parseDateTime(flags.before) : new Date();
+    if (!before){
+      console.error(`--before "${flags.before}" isn't a date/time in the dd/mm/yyyy HH:MM:SS format`);
+      process.exit(4);
+    }
+    const r = createCleanupService(db, { jobs, config }).cleanup({ before }),
+      mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+    console.log(
+      `Deleted ${r.jobs} finished job(s) and ${r.events} history record(s) from before ${formatDateTime(r.before)}. ` +
+        `Database: ${mb(r.bytesBefore)} -> ${mb(r.bytesAfter)}.`
+    );
     return;
   }
 

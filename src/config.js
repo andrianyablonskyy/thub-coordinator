@@ -15,7 +15,8 @@
 
 const fs = require('node:fs'),
   os = require('node:os'),
-  path = require('node:path');
+  path = require('node:path'),
+  { JOB_RETENTION } = require('./services/cleanup');
 
 // Defaults mirror README.md §13.
 const DEFAULTS = {
@@ -47,7 +48,12 @@ const DEFAULTS = {
   },
   retention: {
     logRetentionDays: 14,
-    artifactRetentionDays: 30
+    artifactRetentionDays: 30,
+    // How long a finished job (with its logs, artifacts and events) is kept
+    // before the hourly retention task wipes it (services/cleanup.js):
+    // 1w | 2w | 1m | 3m | 6m | forever. `forever` keeps everything until a
+    // manual cleanup (dashboard Clean up database / thub-admin jobs clean).
+    jobRetention: 'forever'
   },
   artifacts: {
     maxUploadMb: 512,
@@ -114,6 +120,13 @@ function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
   }
   if (process.env.THUB_CLIENT_JOIN_KEY){
     config.clientJoinKey = process.env.THUB_CLIENT_JOIN_KEY;
+  }
+
+  if (!Object.hasOwn(JOB_RETENTION, config.retention.jobRetention)){
+    throw new Error(
+      `retention.jobRetention must be one of: ${Object.keys(JOB_RETENTION).join(', ')} ` +
+        `(got ${JSON.stringify(config.retention.jobRetention)}) in ${candidate || 'the config'}`
+    );
   }
 
   config.configPath = candidate || null;

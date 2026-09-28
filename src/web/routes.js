@@ -20,7 +20,10 @@ const fs = require('node:fs'),
   multer = require('multer'),
   { requireAdminSession, requireAdminRole } = require('../auth'),
   { attachJobStream } = require('../api/sse'),
-  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES, isNewer, compareVersions, formatDateTime } = require('@andrian.yablonskyy/thub-common'),
+  {
+    RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, isNewer, compareVersions, formatDateTime, parseDateTime
+  } = require('@andrian.yablonskyy/thub-common'),
+  { retentionCutoff, JOB_RETENTION } = require('../services/cleanup'),
   listPrefs = require('../services/list-prefs');
 
 // Resources page sort keys (list-prefs.js) -> comparators. Empty values
@@ -90,6 +93,31 @@ function createWebRouter({ services, config }){
         return `${req.baseUrl}${req.path}${qs ? `?${qs}` : ''}`;
       };
     return { prefs, urlFor, pageSizes: listPrefs.PAGE_SIZES };
+  }
+
+  // What the Clean up database modal shows: current size, the oldest
+  // finished job, the retention setting, and quick-pick cutoffs — all
+  // formatted in the user's time zone, like the cutoff field itself.
+  function cleanupInfo(req){
+    const tz = req.session.user.timezone || 'UTC',
+      fmt = (d) => formatDateTime(d, { timeZone: tz }),
+      now = new Date(),
+      oldest = services.db.prepare(
+        `SELECT MIN(COALESCE(finished_at, created_at)) AS at FROM jobs
+         WHERE state IN (${[...TERMINAL_JOB_STATES].map(() => '?').join(',')})`
+      ).get(...TERMINAL_JOB_STATES).at,
+      retention = config.retention.jobRetention;
+    return {
+      size: `${(services.cleanup.databaseBytes() / 1024 / 1024).toFixed(1)} MB`,
+      oldestFinished: oldest ? fmt(oldest) : null,
+      now: fmt(now),
+      retention,
+      retentionLabel: JOB_RETENTION[retention]?.label,
+      presets: [
+        { label: 'Everything (now)', value: fmt(now) },
+        ...['1w', '1m', '3m', '6m'].map((k) => ({ label: `Older than ${JOB_RETENTION[k].label}`, value: fmt(retentionCutoff(k, now)) }))
+      ]
+    };
   }
 
   // The job each resource is on (if any), for the resource card's Cancel.
@@ -507,8 +535,9 @@ function createWebRouter({ services, config }){
       // A row's Cancel comes back to this exact view (filters, sort, page).
       returnTo: pageUrl(),
       canManage: req.session.user.role === 'admin',
-      // For the Reset queue / Clean history confirmation modals.
-      jobCounts: req.session.user.role === 'admin' ? services.jobs.countActiveAndFinished() : null
+      // For the Reset queue / Clean up database confirmation modals.
+      jobCounts: req.session.user.role === 'admin' ? services.jobs.countActiveAndFinished() : null,
+      cleanupInfo: req.session.user.role === 'admin' ? cleanupInfo(req) : null
     });
   });
 
@@ -521,9 +550,30 @@ function createWebRouter({ services, config }){
     res.redirect('/jobs');
   });
 
+  // "Clean up database" (§9): everything before the given time — finished
+  // jobs with their logs/artifacts, and older history — then VACUUM. The
+  // time is dd/mm/yyyy HH:MM:SS in the user's own time zone.
   router.post('/jobs/clean-history', requireAdminRole, (req, res) => {
-    const deleted = services.jobs.cleanHistory();
-    flash(req, 'warning', `Deleted ${deleted} finished job(s) and their logs/artifacts.`);
+    const tz = req.session.user.timezone || 'UTC',
+      text = String(req.body.before || '').trim(),
+      before = text ? parseDateTime(text, { timeZone: tz }) : new Date();
+    if (!before){
+      flash(req, 'danger', `"${text}" isn't a date/time in the dd/mm/yyyy HH:MM:SS format — nothing was deleted.`);
+      return res.redirect('/jobs');
+    }
+    try {
+      const r = services.cleanup.cleanup({ before }),
+        mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+      flash(
+        req,
+        'warning',
+        `Deleted ${r.jobs} finished job(s) and ${r.events} history record(s) from before ` +
+          `${formatDateTime(r.before, { timeZone: tz })}. Database: ${mb(r.bytesBefore)} → ${mb(r.bytesAfter)}.`
+      );
+    }
+    catch (err){
+      flash(req, 'danger', `Cleanup failed: ${err.message}`);
+    }
     res.redirect('/jobs');
   });
 

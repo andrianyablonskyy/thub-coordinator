@@ -416,24 +416,38 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
   // not just active work, needs clearing out. Unlike the nightly retention
   // sweep (§9), this runs on demand and isn't limited to old jobs.
   function cleanHistory(){
+    return purgeFinishedBefore(null);
+  }
+
+  // Finished jobs that ended before `beforeIso` (null: all of them), with
+  // their logs, artifacts (files too) and events — manual cleanup and the
+  // job retention task (services/cleanup.js). Active jobs are never touched.
+  function purgeFinishedBefore(beforeIso){
     const placeholders = [...TERMINAL_JOB_STATES].map(() => '?').join(','),
-      rows = db.prepare(`SELECT id FROM jobs WHERE state IN (${placeholders})`).all(...TERMINAL_JOB_STATES),
+      rows = beforeIso
+        ? db.prepare(`SELECT id FROM jobs WHERE state IN (${placeholders}) AND COALESCE(finished_at, created_at) < ?`)
+          .all(...TERMINAL_JOB_STATES, beforeIso)
+        : db.prepare(`SELECT id FROM jobs WHERE state IN (${placeholders})`).all(...TERMINAL_JOB_STATES),
       ids = rows.map((r) => r.id);
     if (ids.length === 0){
       return 0;
     }
 
-    const tx = db.transaction(() => {
-      for (const id of ids){
-        artifacts.deleteJobArtifacts(id);
-        db.prepare('DELETE FROM artifacts WHERE job_id = ?').run(id);
-        db.prepare('DELETE FROM job_logs WHERE job_id = ?').run(id);
-        db.prepare('DELETE FROM events WHERE entity = \'job\' AND entity_id = ?').run(id);
-        db.prepare('DELETE FROM jobs WHERE id = ?').run(id);
-      }
-    });
+    const deleteArtifacts = db.prepare('DELETE FROM artifacts WHERE job_id = ?'),
+      deleteLogs = db.prepare('DELETE FROM job_logs WHERE job_id = ?'),
+      deleteEvents = db.prepare('DELETE FROM events WHERE entity = \'job\' AND entity_id = ?'),
+      deleteJob = db.prepare('DELETE FROM jobs WHERE id = ?'),
+      tx = db.transaction(() => {
+        for (const id of ids){
+          artifacts.deleteJobArtifacts(id);
+          deleteArtifacts.run(id);
+          deleteLogs.run(id);
+          deleteEvents.run(id);
+          deleteJob.run(id);
+        }
+      });
     tx();
-    events.record('job', 'bulk', 'jobs.cleaned', { count: ids.length });
+    events.record('job', 'bulk', 'jobs.cleaned', { count: ids.length, before: beforeIso });
     return ids.length;
   }
 
@@ -470,7 +484,8 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     reconcileOnStartup,
     resetQueue,
     countActiveAndFinished,
-    cleanHistory
+    cleanHistory,
+    purgeFinishedBefore
   };
 }
 

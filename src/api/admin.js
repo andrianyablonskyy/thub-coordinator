@@ -82,9 +82,15 @@ function createAdminRouter({ services }){
   });
 
   // Permanently deletes finished jobs and their logs/artifacts (§13.1).
+  // Database cleanup (§9): optional `before` (ISO 8601; default now) —
+  // finished jobs that ended before it, older history, then VACUUM.
   router.post('/jobs/clean-history', (req, res) => {
-    const deleted = services.jobs.cleanHistory();
-    res.json({ deleted });
+    const before = req.body?.before ? new Date(req.body.before) : new Date();
+    if (Number.isNaN(before.getTime())){
+      return res.status(400).json({ error: 'before must be an ISO 8601 date/time' });
+    }
+    const r = services.cleanup.cleanup({ before });
+    res.json({ deleted: r.jobs, events: r.events, before: r.before, bytesBefore: r.bytesBefore, bytesAfter: r.bytesAfter });
   });
 
   // Resource groups (§13.1) — membership itself is declared by each

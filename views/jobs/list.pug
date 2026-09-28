@@ -9,7 +9,7 @@ block content
     if canManage
       .btn-group
         button.btn.btn-sm.btn-outline-warning(type="button" data-bs-toggle="modal" data-bs-target="#reset-queue-modal") Reset queue
-        button.btn.btn-sm.btn-outline-danger.ms-1(type="button" data-bs-toggle="modal" data-bs-target="#clean-history-modal") Clean history
+        button.btn.btn-sm.btn-outline-danger.ms-1(type="button" data-bs-toggle="modal" data-bs-target="#clean-history-modal") Clean up database
 
   form.row.g-2.mb-3(method="get")
     .col-auto
@@ -90,22 +90,57 @@ block content
 
     +confirmModal({
       id: 'clean-history-modal',
+      formId: 'cleanup-form',
       tone: 'danger',
       icon: 'bi-trash3-fill',
-      title: 'Clean job history?',
+      title: 'Clean up the database?',
       action: '/jobs/clean-history',
-      confirmLabel: 'Delete finished jobs',
-      confirmIcon: 'bi-trash3',
-      disabled: !jobCounts.finished
+      confirmLabel: 'Delete and compact',
+      confirmIcon: 'bi-trash3'
     })
-      if jobCounts.finished
-        p
-          | This permanently deletes
+      p.small.text-body-secondary
+        | Database size:
+        |
+        strong= cleanupInfo.size
+        | . Finished jobs:
+        |
+        strong= jobCounts.finished
+        if cleanupInfo.oldestFinished
+          |  (oldest from #{cleanupInfo.oldestFinished})
+        | .
+      label.form-label(for="cleanup-before") Delete everything before
+      input.form-control#cleanup-before(
+        type="text"
+        name="before"
+        form="cleanup-form"
+        value=cleanupInfo.now
+        required
+        pattern="\\s*\\d{1,2}/\\d{1,2}/\\d{4}( +\\d{1,2}:\\d{2}(:\\d{2})?)?\\s*"
+        placeholder="dd/mm/yyyy HH:MM:SS"
+        aria-describedby="cleanup-before-help"
+      )
+      .form-text#cleanup-before-help
+        | dd/mm/yyyy HH:MM:SS, 24-hour, in your time zone (#{userTimeZone}).
+      .d-flex.flex-wrap.gap-1.mt-2.mb-3
+        each preset in cleanupInfo.presets
+          button.btn.btn-sm.btn-outline-secondary(
+            type="button"
+            data-value=preset.value
+            onclick="document.getElementById('cleanup-before').value = this.dataset.value"
+          )= preset.label
+      p
+        | Deletes finished jobs that ended before then, with their logs and artifacts (files too), and the resource, agent and group history logged before then — then compacts the database file.
+        |
+        strong This cannot be undone.
+        |  Active jobs are never touched.
+      p.small.text-body-secondary.mb-0
+        i.bi.bi-clock-history.me-1
+        if cleanupInfo.retention === 'forever'
+          | Automatic cleanup is off: finished jobs are kept indefinitely. Set
           |
-          strong= `${jobCounts.finished} finished job${jobCounts.finished === 1 ? '' : 's'}`
-          |  together with their logs and artifacts (database rows and files on disk).
-        p.mb-0
-          strong This cannot be undone.
-          |  Active jobs are not touched.
-      else
-        p.mb-0 There are no finished jobs — nothing to delete.
+          code retention.jobRetention
+          |  in coordinator.json (1w, 2w, 1m, 3m, 6m) to wipe older ones every hour.
+        else
+          | Automatic cleanup: finished jobs are kept for #{cleanupInfo.retentionLabel} (
+          code retention.jobRetention
+          | ) and older ones are wiped every hour.
