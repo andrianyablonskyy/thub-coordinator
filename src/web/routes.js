@@ -480,7 +480,9 @@ function createWebRouter({ services, config }){
       list: { ...view, pagination, pageUrl },
       // A row's Cancel comes back to this exact view (filters, sort, page).
       returnTo: pageUrl(),
-      canManage: req.session.user.role === 'admin'
+      canManage: req.session.user.role === 'admin',
+      // For the Reset queue / Clean history confirmation modals.
+      jobCounts: req.session.user.role === 'admin' ? services.jobs.countActiveAndFinished() : null
     });
   });
 

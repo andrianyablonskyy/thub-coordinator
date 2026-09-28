@@ -9,8 +9,10 @@ block content
   p.text-body-secondary.small.
     Resources register themselves — start a Client with the shared join key and it appears here. Click a resource for its details, including IP addresses.
 
-  .mb-3
+  .d-flex.flex-wrap.align-items-center.gap-2.mb-3
     +updatesToolbar('client', 'clients', '/resources')
+    .ms-auto
+      +pageSizePicker(list)
 
   +listToolbar(list, 'resources')
 

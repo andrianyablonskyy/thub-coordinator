@@ -3,24 +3,28 @@
 //- dir}, pagination {page, pages, total, from, to}, pageSizes, urlFor(changes)
 //- (link with params changed; size/sort changes restart at page 1).
 
-//- Shown above the table: "Showing 26–50 of 312 jobs", the page-size
-//- picker and the page links.
+//- Records-per-page picker — placed on the right of the page's filter row.
+//- Navigates on change (no `name`), so it never rides along with a filter
+//- form it sits in.
+mixin pageSizePicker(list)
+  .d-flex.align-items-center.gap-2
+    label.small.text-body-secondary.mb-0.text-nowrap(for="list-page-size") Show
+    select.form-select.form-select-sm.w-auto#list-page-size(
+      aria-label="Records per page"
+      onchange="location.href = this.value"
+    )
+      each s in list.pageSizes
+        option(value=list.urlFor({ size: s }) selected=list.prefs.size === s)= s === 'all' ? 'All' : s
+
+//- Shown above the table: "Showing 26–50 of 312 jobs" and the page links.
 mixin listToolbar(list, noun)
   - const p = list.pagination
   .d-flex.flex-wrap.align-items-center.justify-content-between.gap-2.mb-2
-    .d-flex.align-items-center.gap-2
-      span.small.text-body-secondary
-        if p.total
-          | Showing #{p.from}–#{p.to} of #{p.total} #{noun}
-        else
-          | No #{noun}
-      label.small.text-body-secondary.mb-0(for="list-page-size") Show
-      select.form-select.form-select-sm.w-auto#list-page-size(
-        aria-label="Records per page"
-        onchange="location.href = this.value"
-      )
-        each s in list.pageSizes
-          option(value=list.urlFor({ size: s }) selected=list.prefs.size === s)= s === 'all' ? 'All' : s
+    span.small.text-body-secondary
+      if p.total
+        | Showing #{p.from}–#{p.to} of #{p.total} #{noun}
+      else
+        | No #{noun}
     if p.pages > 1
       +pager(list)
 

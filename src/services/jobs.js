@@ -402,6 +402,15 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     return active.length;
   }
 
+  // How many jobs Reset queue / Clean history would touch — shown in their
+  // confirmation modals on /jobs.
+  function countActiveAndFinished(){
+    const count = (states) => db
+      .prepare(`SELECT COUNT(*) AS n FROM jobs WHERE state IN (${[...states].map(() => '?').join(',')})`)
+      .get(...states).n;
+    return { active: count(ACTIVE_JOB_STATES), finished: count(TERMINAL_JOB_STATES) };
+  }
+
   // Admin: "clean the queue" — permanently delete finished jobs (and their
   // logs/artifacts, on disk and in the DB), for when the history itself,
   // not just active work, needs clearing out. Unlike the nightly retention
@@ -460,6 +469,7 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     checkAssignAcks,
     reconcileOnStartup,
     resetQueue,
+    countActiveAndFinished,
     cleanHistory
   };
 }

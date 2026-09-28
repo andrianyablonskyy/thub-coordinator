@@ -1,0 +1,26 @@
+//- A confirmation modal for a destructive admin action that POSTs to
+//- `opts.action`: opened by a button with data-bs-toggle="modal"
+//- data-bs-target="#<opts.id>" (no JS needed). The block is the body text.
+//- opts: id, title, action, confirmLabel, and optional tone (Bootstrap
+//- color, default danger), icon / confirmIcon (bootstrap-icons classes),
+//- disabled (nothing to do — the confirm button is disabled).
+mixin confirmModal(opts)
+  - const tone = opts.tone || 'danger'
+  .modal.fade(id=opts.id tabindex="-1" aria-labelledby=`${opts.id}-title` aria-hidden="true")
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header(class=`text-bg-${tone}`)
+          h5.modal-title(id=`${opts.id}-title`)
+            if opts.icon
+              i.bi.me-2(class=opts.icon)
+            = opts.title
+          button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+        .modal-body
+          block
+        .modal-footer
+          button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Keep
+          form(method="post" action=opts.action)
+            button.btn(type="submit" class=`btn-${tone}` disabled=opts.disabled)
+              if opts.confirmIcon
+                i.bi.me-1(class=opts.confirmIcon)
+              = opts.confirmLabel

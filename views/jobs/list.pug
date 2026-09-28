@@ -1,16 +1,15 @@
 extends ../layout
 include ../mixins/status-badge
 include ../mixins/list-controls
+include ../mixins/confirm-modal
 
 block content
   .d-flex.justify-content-between.align-items-center.mb-3
     h1.h4.mb-0 Jobs
     if canManage
       .btn-group
-        form(method="post" action="/jobs/reset-queue" onsubmit="return confirm('Cancel every queued/assigned/preparing/running job? This stops in-flight work.')")
-          button.btn.btn-sm.btn-outline-warning(type="submit") Reset queue
-        form.ms-1(method="post" action="/jobs/clean-history" onsubmit="return confirm('Permanently delete all finished jobs and their logs/artifacts? This cannot be undone.')")
-          button.btn.btn-sm.btn-outline-danger(type="submit") Clean history
+        button.btn.btn-sm.btn-outline-warning(type="button" data-bs-toggle="modal" data-bs-target="#reset-queue-modal") Reset queue
+        button.btn.btn-sm.btn-outline-danger.ms-1(type="button" data-bs-toggle="modal" data-bs-target="#clean-history-modal") Clean history
 
   form.row.g-2.mb-3(method="get")
     .col-auto
@@ -23,6 +22,8 @@ block content
         option(value="") any source
         option(value="ci" selected=filters.source === 'ci') ci
         option(value="cli" selected=filters.source === 'cli') cli
+    .col-auto.ms-auto
+      +pageSizePicker(list)
 
   +listToolbar(list, 'jobs')
 
@@ -60,3 +61,49 @@ block content
                   input(type="hidden" name="returnTo" value=returnTo)
                   button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Cancel" title="Cancel this job")
                     i.bi.bi-x-circle
+
+  if canManage
+    +confirmModal({
+      id: 'reset-queue-modal',
+      tone: 'warning',
+      icon: 'bi-exclamation-triangle-fill',
+      title: 'Reset the job queue?',
+      action: '/jobs/reset-queue',
+      confirmLabel: 'Cancel all active jobs',
+      confirmIcon: 'bi-x-octagon',
+      disabled: !jobCounts.active
+    })
+      if jobCounts.active
+        p
+          | This cancels
+          |
+          strong= `${jobCounts.active} active job${jobCounts.active === 1 ? '' : 's'}`
+          |  — everything queued, assigned, preparing or running. Running jobs are stopped on their Clients, and all of them end as
+          |
+          code CANCELED
+          | .
+        p.small.text-body-secondary.mb-0 Finished jobs, logs and artifacts are not touched.
+      else
+        p.mb-0 There are no active jobs — nothing to cancel.
+
+    +confirmModal({
+      id: 'clean-history-modal',
+      tone: 'danger',
+      icon: 'bi-trash3-fill',
+      title: 'Clean job history?',
+      action: '/jobs/clean-history',
+      confirmLabel: 'Delete finished jobs',
+      confirmIcon: 'bi-trash3',
+      disabled: !jobCounts.finished
+    })
+      if jobCounts.finished
+        p
+          | This permanently deletes
+          |
+          strong= `${jobCounts.finished} finished job${jobCounts.finished === 1 ? '' : 's'}`
+          |  together with their logs and artifacts (database rows and files on disk).
+        p.mb-0
+          strong This cannot be undone.
+          |  Active jobs are not touched.
+      else
+        p.mb-0 There are no finished jobs — nothing to delete.
