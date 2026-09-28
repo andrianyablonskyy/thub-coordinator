@@ -78,6 +78,7 @@ function sanitizeCapabilities(caps){
         image: str(sw.image),
         registry: str(sw.registry),
         allowDockerHub: sw.allowDockerHub === true,
+        allowJobImages: sw.allowJobImages === true,
         cpus: num(sw.cpus),
         memory: str(sw.memory, 16)
       }
@@ -468,10 +469,13 @@ function createRegistryService(db, { bus, events }){
     );
   }
 
-  function matchesTarget(r, labels, groupId, resourceId){
+  // `needs.jobImage`: the job brings its own Docker image (firmware.image),
+  // which only SW Clients that opted in (sw.allowJobImages) will run.
+  function matchesTarget(r, labels, groupId, resourceId, needs = {}){
     return labels.every((l) => r.labels.includes(l)) &&
       (!groupId || r.group_ids.includes(groupId)) &&
-      (!resourceId || r.id === resourceId);
+      (!resourceId || r.id === resourceId) &&
+      (!needs.jobImage || r.capabilities?.sw?.allowJobImages === true);
   }
 
   // Admin: remove a resource from the registry (dashboard "Remove"). Refused
@@ -509,17 +513,17 @@ function createRegistryService(db, { bus, events }){
     return db.prepare('SELECT * FROM resources WHERE remove_requested_at IS NOT NULL').all().map(rowToResource);
   }
 
-  function findIdleCandidates(type, labels, groupId, resourceId){
+  function findIdleCandidates(type, labels, groupId, resourceId, needs){
     const rows = db
       .prepare('SELECT * FROM resources WHERE status = ? AND type = ? AND remove_requested_at IS NULL')
       .all(RESOURCE_STATES.IDLE, type)
       .map(rowToResource);
-    return rows.filter((r) => matchesTarget(r, labels, groupId, resourceId));
+    return rows.filter((r) => matchesTarget(r, labels, groupId, resourceId, needs));
   }
 
-  function everSatisfiable(type, labels, groupId, resourceId){
+  function everSatisfiable(type, labels, groupId, resourceId, needs){
     const rows = db.prepare('SELECT * FROM resources WHERE type = ?').all(type).map(rowToResource);
-    return rows.some((r) => matchesTarget(r, labels, groupId, resourceId));
+    return rows.some((r) => matchesTarget(r, labels, groupId, resourceId, needs));
   }
 
   return {

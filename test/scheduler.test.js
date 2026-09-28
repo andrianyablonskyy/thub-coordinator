@@ -525,6 +525,28 @@ test('a removed Client re-registers as a fresh resource under the same name', ()
   assert.equal(again.name, 'lab-back');
 });
 
+test('a job-supplied Docker image only goes to SW Clients that allow it; otherwise 422', () => {
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'dev', kind: 'cli' }),
+    imageJob = { target: { type: 'sw', labels: [] }, firmware: { image: 'alpine' }, tests: { url: 'https://x/t.tar.gz' } },
+    strict = registerResource(registry, { name: 'sw-strict', type: 'sw' });
+  registry.heartbeat(strict.id, { state: 'idle' });
+
+  assert.throws(() => jobs.create({ agentId: agent.id, source: 'cli', spec: imageJob }), /allowJobImages/);
+
+  const { resourceId } = registry.registerAuto({
+    clientId: 'c-open', name: 'sw-open', type: 'sw', labels: [], capabilities: { sw: { image: 'emu', allowJobImages: true } }
+  });
+  registry.heartbeat(resourceId, { state: 'idle' });
+  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: imageJob });
+  scheduler.runPass();
+  assert.equal(jobs.get(job.id).resource_id, resourceId); // not sw-strict, though it's idle too
+
+  const fileJob = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
+  scheduler.runPass();
+  assert.equal(jobs.get(fileJob.id).resource_id, strict.id); // firmware URLs still go anywhere
+});
+
 test('a resource can belong to several groups at once', () => {
   const { registry, groups } = buildTestServices(),
     g1 = groups.create({ name: 'g1' }),
