@@ -2,9 +2,8 @@
 //- Overview and Resources pages. `returnTo` is the page the action forms
 //- redirect back to.
 
-//- `opts.update: false` leaves out the Update button — the resource card
-//- shows it on its Client version line instead.
-mixin resourceActions(r, returnTo, opts = {})
+//- Update isn't here: it sits next to the version (+versionWithUpdate).
+mixin resourceActions(r, returnTo)
   form.d-inline(method="post" action=`/resources/${r.id}/maintenance`)
     input(type="hidden" name="enabled" value=r.status === 'MAINTENANCE' ? '0' : '1')
     input(type="hidden" name="returnTo" value=returnTo)
@@ -40,8 +39,6 @@ mixin resourceActions(r, returnTo, opts = {})
       data-bs-title="Invalidate the current resource token and issue a new one — the Client won't reconnect until it has it"
     )
       i.bi.bi-arrow-repeat
-  if opts.update !== false
-    +updateButton(`/resources/${r.id}/update`, r.update_to, returnTo)
   +removeResourceButton(r, returnTo)
 
 //- Remove: a plain confirm when the resource is idle; with a running job,
@@ -208,12 +205,12 @@ mixin uptimeRows(r, returnTo)
     if user.role === 'admin'
       +cancelActivityButton(r, returnTo)
 
-//- Cancel the Client's current activity (its job, a local lock or a
-//- self-update hold) — icon only, on the card's Task / status line, and
-//- only while there's something to cancel.
+//- Cancel the Client's current job or local lock — icon only, on the card's
+//- Task / status line, and only while there's one. A self-update hold is
+//- canceled from the version line instead (+versionWithUpdate).
 mixin cancelActivityButton(r, returnTo)
   - const state = r.activity && r.activity.state
-  - const what = r.activeJob ? `job ${r.activeJob.id}` : state === 'locked' ? 'the local lock' : state === 'update-hold' ? 'the self-update' : null
+  - const what = r.activeJob ? `job ${r.activeJob.id}` : state === 'locked' ? 'the local lock' : null
   if what
     form.d-inline.ms-2(
       method="post"
@@ -252,13 +249,7 @@ mixin resourceCard(r, groupsById, returnTo)
             dd.col-sm-8: +resourceBadge(r.status, r.remove_requested_at)
             +uptimeRows(r, returnTo)
             dt.col-sm-4 Client version
-            dd.col-sm-8
-              +versionCell(r.client_version, updates.latest.client, r.update_to)
-              //- Admins: Update only when a newer Client is published (or
-              //- Cancel, while one is requested). An unknown version (too
-              //- old to report it) can't be compared, so no button.
-              if user.role === 'admin' && (r.update_to || (r.client_version && isNewer(updates.latest.client, r.client_version)))
-                +updateButton(`/resources/${r.id}/update`, r.update_to, returnTo)
+            dd.col-sm-8: +versionWithUpdate(r.client_version, updates.latest.client, r.update_to, `/resources/${r.id}/update`, returnTo, true, r.activity && r.activity.state === 'update-hold')
             dt.col-sm-4 IP addresses
             dd.col-sm-8
               if !local.length && !external
@@ -299,4 +290,4 @@ mixin resourceCard(r, groupsById, returnTo)
             if user.role === 'admin'
               dt.col-sm-4 Actions
               dd.col-sm-8.mb-0
-                +resourceActions(r, returnTo, { update: false })
+                +resourceActions(r, returnTo)

@@ -134,9 +134,10 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
             data-sticky=m.sticky ? '1' : false
           )
             .d-flex
-              .toast-body.d-flex.gap-2
-                i.bi(class=`bi-${icon}`)
-                span= m.text
+              //- Multi-line: "\n" in a message is a line break (thub.css).
+              .toast-body.d-flex.align-items-start.gap-2
+                i.bi.flex-shrink-0(class=`bi-${icon}`)
+                span.thub-toast-text= m.text
               button.btn-close.me-2.m-auto(
                 type="button"
                 class=type === 'danger' || type === 'success' ? 'btn-close-white' : ''

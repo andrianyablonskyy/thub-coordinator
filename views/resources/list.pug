@@ -34,7 +34,7 @@ block content
         tr(role="button" tabindex="0" data-resource-card=`resource-card-${r.id}`)
           td= r.name
           td.text-uppercase= r.type
-          td: +versionCell(r.client_version, updates.latest.client, r.update_to)
+          td: +versionWithUpdate(r.client_version, updates.latest.client, r.update_to, `/resources/${r.id}/update`, list.pageUrl(), true, r.activity && r.activity.state === 'update-hold')
           td: +resourceBadge(r.status, r.remove_requested_at)
           td
             each l in r.labels

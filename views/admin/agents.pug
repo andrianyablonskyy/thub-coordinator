@@ -29,13 +29,8 @@ block content
         tr(class=a.revoked_at ? 'opacity-50' : '')
           td= a.name
           td.text-uppercase= a.kind
-          td
-            +versionCell(a.version, updates.latest.agent, a.update_to)
-            //- Update only when a newer Agent is published (or Cancel, while
-            //- one is requested) — and not for a revoked token, which can't
-            //- pick it up. An unknown version can't be compared: no button.
-            if !a.revoked_at && (a.update_to || (a.version && isNewer(updates.latest.agent, a.version)))
-              +updateButton(`/admin/agents/${a.id}/update`, a.update_to, '/admin/agents')
+          //- A revoked token can't pick an update up: no button.
+          td: +versionWithUpdate(a.version, updates.latest.agent, a.update_to, `/admin/agents/${a.id}/update`, '/admin/agents', !a.revoked_at)
           td= fmtDate(a.created_at)
           td= fmtDate(a.last_used_at, 'never')
           td= a.revoked_at ? 'revoked' : 'active'

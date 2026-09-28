@@ -16,6 +16,18 @@ mixin versionCell(current, latest, updateTo)
       data-bs-title=`v${latest} is available`
     ) update available
 
+//- A version cell with its Update button right next to it — shown only to
+//- admins, and only when a newer version is published (or as Cancel while
+//- an update is requested). An unknown version (too old to report it)
+//- can't be compared, so no button; `canUpdate: false` (e.g. a revoked
+//- agent) hides it too. `holding`: a Client's host is already holding for
+//- a self-update — Cancel then also aborts that (the one cancel control for
+//- an update). Agents table, Resources table, resource card.
+mixin versionWithUpdate(current, latest, updateTo, action, returnTo, canUpdate = true, holding = false)
+  +versionCell(current, latest, updateTo)
+  if user.role === 'admin' && canUpdate && (updateTo || holding || (current && isNewer(latest, current)))
+    +updateButton(action, updateTo || (holding ? true : null), returnTo)
+
 //- Latest published version of `app` (agent | client), "check now" and,
 //- for admins, "update all".
 mixin updatesToolbar(app, label, returnTo)
@@ -47,7 +59,8 @@ mixin updatesToolbar(app, label, returnTo)
           i.bi.bi-cloud-download.me-1
           = `Update all ${label}`
 
-//- Per-item "Update" / "Cancel update" button.
+//- Per-item "Update" / "Cancel update" button. `pending`: the requested
+//- version, or true for an update already under way without one.
 mixin updateButton(action, pending, returnTo)
   form.d-inline.ms-1(method="post" action=action)
     input(type="hidden" name="returnTo" value=returnTo)
@@ -57,7 +70,7 @@ mixin updateButton(action, pending, returnTo)
         type="submit"
         aria-label="Cancel update"
         data-bs-toggle="tooltip"
-        data-bs-title=`Cancel the pending self-update to v${pending}`
+        data-bs-title=pending === true ? 'Cancel the self-update in progress on this host' : `Cancel the pending self-update to v${pending}`
       )
         i.bi.bi-x-circle
     else

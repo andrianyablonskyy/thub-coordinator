@@ -125,6 +125,14 @@ function createWebRouter({ services, config }){
     return resources.map((r) => ({ ...r, activeJob: services.jobs.activeForResource(r.id) }));
   }
 
+  // Express 5 leaves req.body undefined for a POST without a form body (a
+  // browser always sends one; curl or a script may not) — treat it as an
+  // empty form rather than crashing every handler that reads a field.
+  router.use((req, res, next) => {
+    req.body ??= {};
+    next();
+  });
+
   router.use((req, res, next) => {
     const user = req.session?.user || null;
     res.locals.user = user;
@@ -388,7 +396,7 @@ function createWebRouter({ services, config }){
         'warning',
         pending
           ? `Stopped job ${stoppedJob} on ${r.name}; ${r.name} is removed as soon as its Client confirms the job ended.`
-          : `Removed ${r.name}.` + (canceledJobs.length ? ` Canceled job(s) queued for it: ${canceledJobs.join(', ')}.` : '')
+          : `Removed ${r.name}.` + (canceledJobs.length ? `\nCanceled job(s) queued for it: ${canceledJobs.join(', ')}.` : '')
       );
     }
     catch (err){
@@ -403,7 +411,7 @@ function createWebRouter({ services, config }){
     services.db.prepare('UPDATE resources SET token_hash = ? WHERE id = ?').run(hashToken(token), req.params.id);
     services.events.record('resource', req.params.id, 'resource.token_rotated', {});
     // Sticky: shown only once, so it mustn't close before it's copied.
-    flash(req, 'warning', `New resource token (copy it now): ${token}`, { sticky: true });
+    flash(req, 'warning', `New resource token (copy it now):\n${token}`, { sticky: true });
     res.redirect(returnTo(req, '/resources'));
   });
 
@@ -491,8 +499,20 @@ function createWebRouter({ services, config }){
   }));
 
   router.post('/resources/:id/update', requireAdminRole, updateAction(async (req) => {
+    // Cancel (next to the version): withdraw the request and, if the host is
+    // already holding for the update, abort that too (the Client's next
+    // heartbeat) — the one control for canceling a Client update.
     if (req.body.cancel === '1'){
-      services.registry.setUpdateTo(req.params.id, null);
+      const r = services.registry.get(req.params.id);
+      if (!r){
+        throw Object.assign(new Error('Unknown resource'), { status: 404 });
+      }
+      services.registry.setUpdateTo(r.id, null);
+      if (r.activity?.state === 'update-hold'){
+        services.commands.push(r.id, { command: 'cancel-update' });
+        services.events.record('resource', r.id, 'resource.activity_canceled', { activity: 'update-hold', by: req.session.user.username });
+        return { type: 'warning', text: `Canceling the self-update on ${r.name}'s host (on its next heartbeat).` };
+      }
       return 'Update request canceled.';
     }
     const version = await services.updates.targetVersion('client');
@@ -568,7 +588,7 @@ function createWebRouter({ services, config }){
         req,
         'warning',
         `Deleted ${r.jobs} finished job(s) and ${r.events} history record(s) from before ` +
-          `${formatDateTime(r.before, { timeZone: tz })}. Database: ${mb(r.bytesBefore)} → ${mb(r.bytesAfter)}.`
+          `${formatDateTime(r.before, { timeZone: tz })}.\nDatabase: ${mb(r.bytesBefore)} → ${mb(r.bytesAfter)}.`
       );
     }
     catch (err){

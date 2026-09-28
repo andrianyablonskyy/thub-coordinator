@@ -53,3 +53,11 @@
   font-size: 0.55em;
   vertical-align: middle;
 }
+
+/* Toast text (layout.pug): "\n" in a flash message is a line break, and a
+   long unbroken token/URL wraps instead of overflowing the toast. */
+.thub-toast-text {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
