@@ -145,15 +145,22 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
       spec.target.client = resource.id;
     }
 
-    // A job-supplied Docker image needs an SW Client that opted in — say so
-    // specifically rather than the generic "no resource can satisfy".
-    const needs = { jobImage: Boolean(spec.firmware.image) },
+    // A job-supplied Docker image or command needs a Client that opted in —
+    // say which, rather than the generic "no resource can satisfy".
+    const needs = { jobImage: Boolean(spec.firmware.image), jobCommand: Boolean(spec.tests.command) },
       { type, labels, group, client } = spec.target;
-    if (needs.jobImage && registry.everSatisfiable(type, labels, group, client) && !registry.everSatisfiable(type, labels, group, client, needs)){
+    if ((needs.jobImage || needs.jobCommand) && registry.everSatisfiable(type, labels, group, client) &&
+      !registry.everSatisfiable(type, labels, group, client, needs)){
+      const missing = [
+        needs.jobImage && !registry.everSatisfiable(type, labels, group, client, { jobImage: true }) &&
+          `job-supplied Docker images (${spec.firmware.image}) — "sw": { "allowJobImages": true }`,
+        needs.jobCommand && !registry.everSatisfiable(type, labels, group, client, { jobCommand: true }) &&
+          'job-supplied commands (--run) — "allowJobCommands": true'
+      ].filter(Boolean);
       throw Object.assign(
         new Error(
-          `No matching SW Client runs job-supplied Docker images (${spec.firmware.image}) — enable it on a Client ` +
-            'with "sw": { "allowJobImages": true } in its config, or pass a firmware URL instead'
+          `No matching Client runs ${missing.length ? missing.join(', nor ') : 'both a job-supplied Docker image and command together'}` +
+            ' — enable it in a Client\'s config'
         ),
         { status: 422 }
       );

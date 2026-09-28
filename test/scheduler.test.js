@@ -547,6 +547,24 @@ test('a job-supplied Docker image only goes to SW Clients that allow it; otherwi
   assert.equal(jobs.get(fileJob.id).resource_id, strict.id); // firmware URLs still go anywhere
 });
 
+test('a job-supplied command only goes to Clients with allowJobCommands; otherwise 422 naming it', () => {
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'dev', kind: 'cli' }),
+    commandJob = makeSpec({ tests: { url: 'https://x/t.tar.gz', command: 'make test' } }),
+    plain = registerResource(registry, { name: 'sw-plain', type: 'sw' });
+  registry.heartbeat(plain.id, { state: 'idle' });
+
+  assert.throws(() => jobs.create({ agentId: agent.id, source: 'cli', spec: commandJob }), /allowJobCommands/);
+
+  const { resourceId } = registry.registerAuto({
+    clientId: 'c-cmd', name: 'sw-cmd', type: 'sw', labels: [], capabilities: { sw: { image: 'emu' }, allowJobCommands: true }
+  });
+  registry.heartbeat(resourceId, { state: 'idle' });
+  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: commandJob });
+  scheduler.runPass();
+  assert.equal(jobs.get(job.id).resource_id, resourceId);
+});
+
 test('a resource can belong to several groups at once', () => {
   const { registry, groups } = buildTestServices(),
     g1 = groups.create({ name: 'g1' }),

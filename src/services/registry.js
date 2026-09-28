@@ -67,10 +67,16 @@ const MAX_DEVICES = 8,
     present: typeof d?.present === 'boolean' ? d.present : null
   });
 
+// Plus `allowJobCommands` (either type): runs a job's own `tests.command`.
 function sanitizeCapabilities(caps){
   if (!caps || typeof caps !== 'object'){
     return null;
   }
+  const typed = sanitizeTypedCapabilities(caps);
+  return typed ? { ...typed, allowJobCommands: caps.allowJobCommands === true } : null;
+}
+
+function sanitizeTypedCapabilities(caps){
   if (caps.sw && typeof caps.sw === 'object'){
     const sw = caps.sw;
     return {
@@ -469,13 +475,15 @@ function createRegistryService(db, { bus, events }){
     );
   }
 
-  // `needs.jobImage`: the job brings its own Docker image (firmware.image),
-  // which only SW Clients that opted in (sw.allowJobImages) will run.
+  // `needs`: what a job brings that a Client must have opted in to run —
+  // jobImage (firmware.image; sw.allowJobImages) and jobCommand
+  // (tests.command; allowJobCommands).
   function matchesTarget(r, labels, groupId, resourceId, needs = {}){
     return labels.every((l) => r.labels.includes(l)) &&
       (!groupId || r.group_ids.includes(groupId)) &&
       (!resourceId || r.id === resourceId) &&
-      (!needs.jobImage || r.capabilities?.sw?.allowJobImages === true);
+      (!needs.jobImage || r.capabilities?.sw?.allowJobImages === true) &&
+      (!needs.jobCommand || r.capabilities?.allowJobCommands === true);
   }
 
   // Admin: remove a resource from the registry (dashboard "Remove"). Refused
