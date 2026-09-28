@@ -22,6 +22,9 @@ block content
     dd.col-sm-10= job.resource ? job.resource.name : '—'
     dt.col-sm-2 Target
     dd.col-sm-10= `${job.spec.target.type} — ${(job.spec.target.labels || []).join(', ')}`
+    if job.spec.target.client
+      dt.col-sm-2 Client
+      dd.col-sm-10= pinnedClient ? pinnedClient.name : job.spec.target.client
     dt.col-sm-2 Created
     dd.col-sm-10= fmtDate(job.created_at)
     if job.message

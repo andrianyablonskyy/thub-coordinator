@@ -91,11 +91,22 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     }
     spec.source = source;
 
-    if (!registry.everSatisfiable(spec.target.type, spec.target.labels, spec.target.group)){
+    // `target.client` (thub run --client) accepts a resource id or name;
+    // store the id so the job stays pinned to the same Client across renames.
+    if (spec.target.client){
+      const resource = registry.get(spec.target.client) || registry.getByName(spec.target.client);
+      if (!resource){
+        throw Object.assign(new Error(`Unknown client "${spec.target.client}"`), { status: 422 });
+      }
+      spec.target.client = resource.id;
+    }
+
+    if (!registry.everSatisfiable(spec.target.type, spec.target.labels, spec.target.group, spec.target.client)){
       throw Object.assign(
         new Error(
           `No registered resource can ever satisfy type=${spec.target.type} labels=${spec.target.labels.join(',')}` +
-            (spec.target.group ? ` group=${spec.target.group}` : '')
+            (spec.target.group ? ` group=${spec.target.group}` : '') +
+            (spec.target.client ? ` client=${spec.target.client}` : '')
         ),
         { status: 422 }
       );

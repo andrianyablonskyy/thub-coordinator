@@ -1,6 +1,6 @@
 /**
  * @file        packages/coordinator/test/scheduler.test.js
- * @description Tests: scheduler, registry, groups, job id allocation, and admin queue operations
+ * @description Tests: scheduler, registry, groups, client pinning, job id allocation, and admin queue operations
  *
  * @author      Andrian Yablonskyy
  * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
@@ -344,6 +344,76 @@ test('a job with target.group is rejected (422) when no resource is ever a membe
         agentId: agent.id,
         source: 'cli',
         spec: makeSpec({ target: { type: 'sw', labels: [], group: group.id } })
+      }),
+    /No registered resource/
+  );
+});
+
+test('a job with target.client (by name) waits for that client even when another matching one is idle', () => {
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    pinned = registerResource(registry, { name: 'lab-pinned', type: 'sw' }),
+    other = registerResource(registry, { name: 'lab-other', type: 'sw' });
+  registry.heartbeat(other.id, { state: 'idle' }); // pinned is still REGISTERED, not IDLE
+
+  const job = jobs.create({
+    agentId: agent.id,
+    source: 'cli',
+    spec: makeSpec({ target: { type: 'sw', labels: [], client: 'lab-pinned' } })
+  });
+  assert.equal(job.spec.target.client, pinned.id); // name resolved to the stable resource id
+
+  scheduler.runPass();
+  assert.equal(jobs.get(job.id).state, JOB_STATES.QUEUED); // not grabbed by lab-other
+
+  registry.heartbeat(pinned.id, { state: 'idle' });
+  scheduler.runPass();
+  const assigned = jobs.get(job.id);
+  assert.equal(assigned.state, JOB_STATES.ASSIGNED);
+  assert.equal(assigned.resource_id, pinned.id);
+});
+
+test('an unpinned job prefers a resource no queued job is pinned to', () => {
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    pinned = registerResource(registry, { name: 'lab-pinned', type: 'sw' }),
+    other = registerResource(registry, { name: 'lab-other', type: 'sw' });
+  registry.heartbeat(pinned.id, { state: 'idle' });
+  registry.heartbeat(other.id, { state: 'idle' });
+
+  // Unpinned job has higher priority, so it's considered first; it must not
+  // take lab-pinned (which is also least-recently-used) away from the pinned job.
+  const unpinned = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ priority: 90 }) }),
+    pinnedJob = jobs.create({
+      agentId: agent.id,
+      source: 'cli',
+      spec: makeSpec({ target: { type: 'sw', labels: [], client: pinned.id }, priority: 10 })
+    });
+  scheduler.runPass();
+
+  assert.equal(jobs.get(unpinned.id).resource_id, other.id);
+  assert.equal(jobs.get(pinnedJob.id).resource_id, pinned.id);
+});
+
+test('a job with target.client is rejected (422) when the client is unknown or cannot satisfy the target', () => {
+  const { registry, agents, jobs } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' });
+  registerResource(registry, { name: 'lab-sw', type: 'sw', labels: ['board:a'] });
+
+  assert.throws(
+    () => jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', client: 'nope' } }) }),
+    /Unknown client "nope"/
+  );
+  assert.throws(
+    () => jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'hw', client: 'lab-sw' } }) }),
+    /No registered resource/
+  );
+  assert.throws(
+    () =>
+      jobs.create({
+        agentId: agent.id,
+        source: 'cli',
+        spec: makeSpec({ target: { type: 'sw', labels: ['board:b'], client: 'lab-sw' } })
       }),
     /No registered resource/
   );

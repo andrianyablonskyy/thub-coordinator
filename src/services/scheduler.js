@@ -1,6 +1,6 @@
 /**
  * @file        packages/coordinator/src/services/scheduler.js
- * @description Scheduler: matches queued jobs to idle resources by type/labels/group (README §5.4)
+ * @description Scheduler: matches queued jobs to idle resources by type/labels/group/client (README §5.4)
  *
  * @author      Andrian Yablonskyy
  * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
@@ -34,21 +34,28 @@ function createScheduler(db, { bus, events, registry, config }){
             .map(rowToJob),
 
           assignments = [],
-          claimedResourceIds = new Set();
+          claimedResourceIds = new Set(),
+          // Resources that some queued job is pinned to (`target.client`) —
+          // an unpinned job only takes one of these when nothing else fits,
+          // so it doesn't jump the pinned job's per-client queue.
+          reservedResourceIds = new Set(queued.map((j) => j.spec.target.client).filter(Boolean));
 
         for (const job of queued){
-          const candidates = registry
-            .findIdleCandidates(job.spec.target.type, job.spec.target.labels || [], job.spec.target.group)
-            .filter((r) => !claimedResourceIds.has(r.id));
+          const { type, labels = [], group, client } = job.spec.target,
+            candidates = registry
+              .findIdleCandidates(type, labels, group, client)
+              .filter((r) => !claimedResourceIds.has(r.id));
           if (candidates.length === 0){
             continue;
           }
 
-          // Least-recently-used: spread wear across benches (§5.4).
+          // Unreserved first, then least-recently-used: spread wear across benches (§5.4).
           candidates.sort((a, b) => {
-            const ta = a.last_job_finished_at ? new Date(a.last_job_finished_at).getTime() : 0,
+            const ra = reservedResourceIds.has(a.id) ? 1 : 0,
+              rb = reservedResourceIds.has(b.id) ? 1 : 0,
+              ta = a.last_job_finished_at ? new Date(a.last_job_finished_at).getTime() : 0,
               tb = b.last_job_finished_at ? new Date(b.last_job_finished_at).getTime() : 0;
-            return ta - tb;
+            return ra - rb || ta - tb;
           });
           const resource = candidates[0];
           claimedResourceIds.add(resource.id);

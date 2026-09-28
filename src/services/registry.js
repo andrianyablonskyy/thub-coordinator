@@ -468,21 +468,23 @@ function createRegistryService(db, { bus, events }){
     );
   }
 
-  function findIdleCandidates(type, labels, groupId){
+  function matchesTarget(r, labels, groupId, resourceId){
+    return labels.every((l) => r.labels.includes(l)) &&
+      (!groupId || r.group_ids.includes(groupId)) &&
+      (!resourceId || r.id === resourceId);
+  }
+
+  function findIdleCandidates(type, labels, groupId, resourceId){
     const rows = db
       .prepare('SELECT * FROM resources WHERE status = ? AND type = ?')
       .all(RESOURCE_STATES.IDLE, type)
       .map(rowToResource);
-    return rows.filter(
-      (r) => labels.every((l) => r.labels.includes(l)) && (!groupId || r.group_ids.includes(groupId))
-    );
+    return rows.filter((r) => matchesTarget(r, labels, groupId, resourceId));
   }
 
-  function everSatisfiable(type, labels, groupId){
+  function everSatisfiable(type, labels, groupId, resourceId){
     const rows = db.prepare('SELECT * FROM resources WHERE type = ?').all(type).map(rowToResource);
-    return rows.some(
-      (r) => labels.every((l) => r.labels.includes(l)) && (!groupId || r.group_ids.includes(groupId))
-    );
+    return rows.some((r) => matchesTarget(r, labels, groupId, resourceId));
   }
 
   return {

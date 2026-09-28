@@ -433,6 +433,7 @@ function createWebRouter({ services, config }){
       title: job.id,
       active: 'jobs',
       job,
+      pinnedClient: job.spec.target.client ? services.registry.get(job.spec.target.client) : null,
       artifacts,
       jobActive,
       canCancel: req.session.user.role === 'admin' && jobActive
