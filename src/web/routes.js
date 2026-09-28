@@ -408,7 +408,7 @@ function createWebRouter({ services, config }){
     }
 
     parts.push(s.coordinatorUpdate
-      ? `Coordinator v${s.coordinatorVersion} → v${s.coordinatorUpdate} available (Update app button).`
+      ? `Coordinator v${s.coordinatorVersion} → v${s.coordinatorUpdate} available.`
       : `Coordinator is up to date (v${s.coordinatorVersion}).`);
 
     const connected = services.registry.list().filter((r) => r.status !== RESOURCE_STATES.OUT_OF_SERVICE && r.last_heartbeat_at),
@@ -435,7 +435,7 @@ function createWebRouter({ services, config }){
       parts.push(`Some checks failed: ${s.error}`);
     }
     const behind = s.coordinatorUpdate || outdated.length || unknown.length;
-    return { type: behind || s.error ? 'warning' : 'success', text: parts.join(' ') };
+    return { type: behind || s.error ? 'warning' : 'success', text: parts.join('\n') };
   }));
 
   router.post('/updates/coordinator', requireAdminRole, updateAction(async (req) => {

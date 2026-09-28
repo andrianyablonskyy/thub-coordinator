@@ -48,7 +48,7 @@ block content
           td: +jobBadge(j.state)
           td= j.resource ? j.resource.name : j.resource_name ? `${j.resource_name} (removed)` : '—'
           td= fmtDate(j.created_at)
-          td(title=j.finished_at ? `Finished ${fmtDate(j.finished_at)}` : null)= j.duration_sec != null ? fmtDuration(j.duration_sec * 1000) : '—'
+          td(data-bs-toggle=j.finished_at ? 'tooltip' : null data-bs-title=j.finished_at ? `Finished ${fmtDate(j.finished_at)}` : null)= j.duration_sec != null ? fmtDuration(j.duration_sec * 1000) : '—'
           if canManage
             td.text-end
               if j.active
@@ -59,7 +59,7 @@ block content
                   onsubmit="return confirm(this.dataset.confirm)"
                 )
                   input(type="hidden" name="returnTo" value=returnTo)
-                  button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Cancel" title="Cancel this job")
+                  button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Cancel" data-bs-toggle="tooltip" data-bs-title="Cancel this job")
                     i.bi.bi-x-circle
 
   if canManage

@@ -11,4 +11,4 @@ mixin resourceBadge(status, removing)
 
 mixin jobBadge(state)
   - const map = { QUEUED: 'secondary', ASSIGNED: 'info', PREPARING: 'info', RUNNING: 'primary', PASSED: 'success', FAILED: 'danger', ERROR: 'danger', TIMEOUT: 'warning', CANCELED: 'secondary', LOST: 'danger' }
-  span.badge(class=`text-bg-${map[state] || 'secondary'}`)= state
+  span.badge(class=`text-bg-${map[state] || 'secondary'}`)&attributes(attributes)= state

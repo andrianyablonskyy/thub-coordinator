@@ -226,7 +226,7 @@ mixin resourceCard(r, groupsById, returnTo)
   - const isLoopback = (a) => /^127\./.test(a) || a === '::1' || a === 'localhost'
   - const local = ((r.host_info && r.host_info.addresses) || []).filter((a) => !isLoopback(a.address))
   - const external = r.remote_addr && !isLoopback(r.remote_addr) ? r.remote_addr : null
-  .modal.fade(id=`resource-card-${r.id}` tabindex="-1" aria-labelledby=`resource-card-${r.id}-title` aria-hidden="true")
+  .modal.fade.thub-resource-card(id=`resource-card-${r.id}` tabindex="-1" aria-labelledby=`resource-card-${r.id}-title` aria-hidden="true")
     .modal-dialog.modal-dialog-centered
       .modal-content
         .modal-header
@@ -279,7 +279,7 @@ mixin resourceCard(r, groupsById, returnTo)
             dd.col-sm-8
               if r.group_ids.length
                 each gid in r.group_ids
-                  span.badge.text-bg-info.me-1(title=gid)= groupsById[gid] ? groupsById[gid].name : `(unknown: ${gid})`
+                  span.badge.text-bg-info.me-1(data-bs-toggle="tooltip" data-bs-title=gid)= groupsById[gid] ? groupsById[gid].name : `(unknown: ${gid})`
               else
                 span.text-body-secondary —
             dt.col-sm-4 Busy source / reason
