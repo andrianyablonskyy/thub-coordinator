@@ -429,6 +429,84 @@ test('a job with target.client is rejected (422) when the client is unknown or c
   );
 });
 
+test('removing a resource keeps its job history by name and cancels jobs pinned to it', () => {
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    r = registerResource(registry, { name: 'lab-old', type: 'sw' });
+  registry.heartbeat(r.id, { state: 'idle' });
+
+  const done = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
+  scheduler.runPass();
+  assert.throws(() => registry.remove(r.id), /working on job/); // ASSIGNED: refused
+  jobs.setState(done.id, JOB_STATES.PASSED);
+  registry.heartbeat(r.id, { state: 'busy' }); // keep it from taking the pinned job below
+
+  const pinned = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', client: r.id } }) });
+  registry.remove(r.id);
+  assert.deepEqual(jobs.cancelPinnedTo(r.id, 'removed'), [pinned.id]);
+
+  assert.equal(registry.get(r.id), undefined);
+  const kept = jobs.get(done.id);
+  assert.equal(kept.resource_id, null);
+  assert.equal(kept.resource_name, 'lab-old');
+  assert.equal(jobs.get(pinned.id).state, JOB_STATES.CANCELED);
+  assert.throws(() => registry.remove(r.id), /Unknown resource/);
+});
+
+test('removing a resource running a job: stops the job now, removes once the Client confirms', () => {
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    r = registerResource(registry, { name: 'lab-busy', type: 'sw' });
+  registry.heartbeat(r.id, { state: 'idle' });
+  const running = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
+  scheduler.runPass();
+  jobs.setState(running.id, JOB_STATES.RUNNING);
+
+  assert.throws(() => jobs.removeResource(r.id), /running job/); // needs stopJob
+
+  const res = jobs.removeResource(r.id, { stopJob: true });
+  assert.equal(res.pending, true);
+  assert.equal(res.stoppedJob, running.id);
+  assert.equal(jobs.get(running.id).state, JOB_STATES.CANCELED);
+  assert.ok(registry.get(r.id).remove_requested_at); // still there: the Client hasn't heard yet
+
+  // Pending removal takes no new work, even once it reports idle.
+  registry.heartbeat(r.id, { state: 'idle' });
+  const next = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
+  scheduler.runPass();
+  assert.equal(jobs.get(next.id).state, JOB_STATES.QUEUED);
+
+  jobs.completeRemoval(r.id); // what the heartbeat route does on the Client's "no active job"
+  assert.equal(registry.get(r.id), undefined);
+  assert.equal(jobs.get(running.id).resource_name, 'lab-busy');
+});
+
+test('the sweeper finishes a pending removal whose Client never confirms', () => {
+  const { registry, agents, jobs, scheduler, heartbeatMonitor, db } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    r = registerResource(registry, { name: 'lab-silent', type: 'sw' });
+  registry.heartbeat(r.id, { state: 'idle' });
+  jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
+  scheduler.runPass();
+  jobs.removeResource(r.id, { stopJob: true });
+
+  heartbeatMonitor.sweepRemovals();
+  assert.ok(registry.get(r.id)); // not timed out yet
+
+  db.prepare('UPDATE resources SET remove_requested_at = ? WHERE id = ?').run(new Date(Date.now() - 3600e3).toISOString(), r.id);
+  heartbeatMonitor.sweepRemovals();
+  assert.equal(registry.get(r.id), undefined);
+});
+
+test('a removed Client re-registers as a fresh resource under the same name', () => {
+  const { registry } = buildTestServices(),
+    r = registerResource(registry, { name: 'lab-back', type: 'sw', clientId: 'c-back' });
+  registry.remove(r.id);
+  const again = registerResource(registry, { name: 'lab-back', type: 'sw', clientId: 'c-back' });
+  assert.notEqual(again.id, r.id);
+  assert.equal(again.name, 'lab-back');
+});
+
 test('a resource can belong to several groups at once', () => {
   const { registry, groups } = buildTestServices(),
     g1 = groups.create({ name: 'g1' }),

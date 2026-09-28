@@ -32,6 +32,82 @@ mixin resourceActions(r, returnTo)
     )
       i.bi.bi-arrow-repeat
   +updateButton(`/resources/${r.id}/update`, r.update_to, returnTo)
+  +removeResourceButton(r, returnTo)
+
+//- Remove: a plain confirm when the resource is idle; with a running job,
+//- the shared warning modal (+removeResourceModal) instead, which stops the
+//- job first (stopJob=1). Disabled once a removal is already pending.
+mixin removeResourceButton(r, returnTo)
+  if r.remove_requested_at
+    span.d-inline-block.ms-1(tabindex="0" data-bs-toggle="tooltip" data-bs-title="Removal pending — waiting for the Client to confirm its job stopped")
+      button.btn.btn-sm.btn-outline-danger(type="button" disabled style="pointer-events: none;" aria-label="Remove")
+        i.bi.bi-hourglass-split
+  else if r.activeJob
+    button.btn.btn-sm.btn-outline-danger.ms-1(
+      type="button"
+      aria-label="Remove"
+      data-bs-toggle="tooltip"
+      data-bs-title="Remove this resource from the list — it's running a job"
+      data-remove-resource=r.id
+      data-remove-name=r.name
+      data-remove-job=r.activeJob.id
+      data-remove-return=returnTo
+    )
+      i.bi.bi-trash
+  else
+    form.d-inline.ms-1(
+      method="post"
+      action=`/resources/${r.id}/remove`
+      data-confirm=`Remove ${r.name} from the list? Its job history is kept. A Client that's still running shows up again when it restarts and re-registers.`
+      onsubmit="return confirm(this.dataset.confirm)"
+    )
+      input(type="hidden" name="returnTo" value=returnTo)
+      button.btn.btn-sm.btn-outline-danger(
+        type="submit"
+        aria-label="Remove"
+        data-bs-toggle="tooltip"
+        data-bs-title="Remove this resource from the list"
+      )
+        i.bi.bi-trash
+
+//- One per page (admins): filled in by public/js/remove-resource.js from
+//- the clicked Remove button's data-remove-* attributes.
+mixin removeResourceModal()
+  .modal.fade#remove-resource-modal(tabindex="-1" aria-labelledby="remove-resource-title" aria-hidden="true")
+    .modal-dialog.modal-dialog-centered
+      .modal-content
+        .modal-header.text-bg-warning
+          h5.modal-title#remove-resource-title
+            i.bi.bi-exclamation-triangle-fill.me-2
+            | Client is running a job
+          button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+        .modal-body
+          p
+            strong(data-field="name")
+            |  is running job
+            |
+            a(data-field="job")
+            | .
+          p.mb-2 Removing it will:
+          ul.mb-2
+            li
+              | stop job
+              |
+              strong(data-field="job-text")
+              |  immediately (it ends as
+              |
+              code CANCELED
+              | ), then
+            li remove the resource as soon as its Client confirms the job stopped (at most about a minute if the Client doesn't answer).
+          p.small.text-body-secondary.mb-0 Its job history is kept. A Client that's still running shows up again when it restarts and re-registers.
+        .modal-footer
+          button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Keep it
+          form(method="post" data-field="form")
+            input(type="hidden" name="stopJob" value="1")
+            input(type="hidden" name="returnTo" data-field="return")
+            button.btn.btn-danger(type="submit")
+              i.bi.bi-stop-circle.me-1
+              | Stop job and remove
 
 //- One udev device line: path (or udev index / ST-Link serial), extra
 //- detail, and whether the node was present when the Client registered.
@@ -156,7 +232,7 @@ mixin resourceCard(r, groupsById, returnTo)
             dt.col-sm-4 Type
             dd.col-sm-8.text-uppercase= r.type
             dt.col-sm-4 Status
-            dd.col-sm-8: +resourceBadge(r.status)
+            dd.col-sm-8: +resourceBadge(r.status, r.remove_requested_at)
             +uptimeRows(r)
             dt.col-sm-4 Client version
             dd.col-sm-8: +versionCell(r.client_version, updates.latest.client, r.update_to)

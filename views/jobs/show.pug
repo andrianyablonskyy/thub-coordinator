@@ -9,7 +9,7 @@ block content
       |
       +jobBadge(job.state)
     if canCancel
-      form(method="post" action=`/jobs/${job.id}/cancel`)
+      form(method="post" action=`/jobs/${job.id}/cancel` onsubmit=`return confirm('Cancel job ${job.id}?')`)
         button.btn.btn-outline-danger.btn-sm(type="submit") Cancel
 
   dl.row
@@ -19,7 +19,7 @@ block content
       dt.col-sm-2 User
       dd.col-sm-10= job.spec.user
     dt.col-sm-2 Resource
-    dd.col-sm-10= job.resource ? job.resource.name : '—'
+    dd.col-sm-10= job.resource ? job.resource.name : job.resource_name ? `${job.resource_name} (removed)` : '—'
     dt.col-sm-2 Target
     dd.col-sm-10= `${job.spec.target.type} — ${(job.spec.target.labels || []).join(', ')}`
     if job.spec.target.client

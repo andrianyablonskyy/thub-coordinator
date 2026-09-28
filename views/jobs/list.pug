@@ -33,6 +33,8 @@ block content
         th Resource
         th Created
         th Finished
+        if canManage
+          th
     tbody
       each j in jobs
         tr
@@ -40,6 +42,18 @@ block content
           td.text-uppercase= j.source
           td= j.spec.user || '—'
           td: +jobBadge(j.state)
-          td= j.resource ? j.resource.name : '—'
+          td= j.resource ? j.resource.name : j.resource_name ? `${j.resource_name} (removed)` : '—'
           td= fmtDate(j.created_at)
           td= fmtDate(j.finished_at)
+          if canManage
+            td.text-end
+              if j.active
+                form.d-inline(
+                  method="post"
+                  action=`/jobs/${j.id}/cancel`
+                  data-confirm=`Cancel job ${j.id}?`
+                  onsubmit="return confirm(this.dataset.confirm)"
+                )
+                  input(type="hidden" name="returnTo" value=`/jobs${filterQuery}`)
+                  button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Cancel" title="Cancel this job")
+                    i.bi.bi-x-circle

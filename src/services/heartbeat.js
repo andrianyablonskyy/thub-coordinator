@@ -47,10 +47,31 @@ function createHeartbeatMonitor(db, { bus, events, registry, jobs, config }){
     }
   }
 
-  const timer = setInterval(sweepOnce, config.heartbeat.sweepIntervalSec * 1000);
+  // Resources an admin removed while they ran a job (jobs.removeResource):
+  // normally deleted by the heartbeat route once the Client reports the job
+  // stopped; this covers a Client that's gone (OUT_OF_SERVICE) or never
+  // confirms — after the time a cancel plus the runner's kill grace needs.
+  function sweepRemovals(){
+    const timeoutMs = Math.max(60, 6 * config.heartbeat.intervalSec) * 1000;
+    for (const r of registry.pendingRemovals()){
+      if (r.status === RESOURCE_STATES.OUT_OF_SERVICE || Date.now() - new Date(r.remove_requested_at).getTime() >= timeoutMs){
+        try {
+          jobs.completeRemoval(r.id, { by: 'removal-timeout' });
+        }
+        catch (err){
+          console.error(`removing ${r.name}: ${err.message}`);
+        }
+      }
+    }
+  }
+
+  const timer = setInterval(() => {
+    sweepOnce();
+    sweepRemovals();
+  }, config.heartbeat.sweepIntervalSec * 1000);
   timer.unref?.();
 
-  return { sweepOnce, stop: () => clearInterval(timer) };
+  return { sweepOnce, sweepRemovals, stop: () => clearInterval(timer) };
 }
 
 module.exports = { createHeartbeatMonitor };

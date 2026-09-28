@@ -46,7 +46,10 @@ function createAgentRouter({ services, config }){
       return res.status(404).json({ error: 'Unknown job' });
     }
     const resource = job.resource_id ? services.registry.get(job.resource_id) : null;
-    res.json({ ...job, resource: resource ? { id: resource.id, name: resource.name } : null });
+    res.json({
+      ...job,
+      resource: resource ? { id: resource.id, name: resource.name } : job.resource_name ? { id: null, name: job.resource_name } : null
+    });
   });
 
   router.get('/jobs', auth, (req, res) => {

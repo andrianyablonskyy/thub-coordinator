@@ -60,6 +60,21 @@ function createAdminRouter({ services }){
     res.json({ resourceToken: token });
   });
 
+  // Removes a resource; 409 while it runs a job unless ?stopJob=1, which
+  // cancels the job and removes the resource once the Client confirms
+  // (`pending: true`). Queued jobs pinned to it are canceled on removal.
+  router.delete('/resources/:id', (req, res, next) => {
+    try {
+      const { resource, pending, stoppedJob, canceledJobs } = services.jobs.removeResource(req.params.id, {
+        stopJob: req.query.stopJob === '1'
+      });
+      res.json({ removed: resource.id, pending, stoppedJob, canceledJobs });
+    }
+    catch (err){
+      next(err);
+    }
+  });
+
   // Cancels every QUEUED/ASSIGNED/PREPARING/RUNNING job (§13.1).
   router.post('/jobs/reset-queue', (req, res) => {
     const canceled = services.jobs.resetQueue();

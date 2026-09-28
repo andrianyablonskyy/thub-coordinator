@@ -218,6 +218,44 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     return setState(id, JOB_STATES.CANCELED);
   }
 
+  // Queued jobs pinned to a resource (`target.client`) can never run once it's
+  // removed, so they're canceled rather than left in the queue forever.
+  function cancelPinnedTo(resourceId, message){
+    const queued = db.prepare('SELECT id, spec FROM jobs WHERE state = ?').all(JOB_STATES.QUEUED)
+      .filter((row) => JSON.parse(row.spec).target?.client === resourceId);
+    for (const { id }of queued){
+      setState(id, JOB_STATES.CANCELED, { message });
+    }
+    return queued.map((row) => row.id);
+  }
+
+  // Admin "Remove" (dashboard, DELETE /admin/resources/:id). A resource
+  // that's running a job needs `stopJob`: the job is canceled at once, but
+  // the Client only hears that in its next heartbeat's commands — so the
+  // resource (and with it the Client's token) is deleted only after that
+  // (completeRemoval, from the heartbeat route or the sweeper's timeout).
+  function removeResource(resourceId, { by, stopJob = false } = {}){
+    const r = registry.get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    const job = activeForResource(resourceId);
+    if (job && !stopJob){
+      throw Object.assign(new Error(`${r.name} is running job ${job.id}`), { status: 409, jobId: job.id });
+    }
+    if (job){
+      cancel(job.id, { isAdmin: true });
+      registry.requestRemoval(resourceId, { by });
+      return { resource: r, pending: true, stoppedJob: job.id, canceledJobs: [] };
+    }
+    return { resource: r, pending: false, stoppedJob: null, canceledJobs: completeRemoval(resourceId, { by }) };
+  }
+
+  function completeRemoval(resourceId, { by } = {}){
+    const r = registry.remove(resourceId, { by });
+    return cancelPinnedTo(resourceId, `Client ${r.name} was removed`);
+  }
+
   // The job a resource is working on (ASSIGNED through RUNNING), if any —
   // for the resource card's Cancel button.
   function activeForResource(resourceId){
@@ -367,6 +405,9 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     create,
     setState,
     cancel,
+    cancelPinnedTo,
+    removeResource,
+    completeRemoval,
     activeForResource,
     applyResult,
     requeueUnacked,

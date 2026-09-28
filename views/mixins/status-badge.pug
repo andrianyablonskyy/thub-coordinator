@@ -1,6 +1,13 @@
-mixin resourceBadge(status)
+//- `removing`: the resource's remove_requested_at — removal is pending
+//- until its Client confirms its stopped job ended (jobs.removeResource).
+mixin resourceBadge(status, removing)
   - const map = { IDLE: 'success', BUSY: 'primary', OUT_OF_SERVICE: 'danger', MAINTENANCE: 'secondary', REGISTERED: 'secondary' }
   span.badge(class=`text-bg-${map[status] || 'secondary'}`)= status
+  if removing
+    span.badge.text-bg-warning.ms-1(
+      data-bs-toggle="tooltip"
+      data-bs-title="Its job was stopped; removed as soon as the Client confirms"
+    ) REMOVING
 
 mixin jobBadge(state)
   - const map = { QUEUED: 'secondary', ASSIGNED: 'info', PREPARING: 'info', RUNNING: 'primary', PASSED: 'success', FAILED: 'danger', ERROR: 'danger', TIMEOUT: 'warning', CANCELED: 'secondary', LOST: 'danger' }

@@ -284,6 +284,26 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, '/resources'));
   });
 
+  router.post('/resources/:id/remove', requireAdminRole, (req, res) => {
+    try {
+      const { resource: r, pending, stoppedJob, canceledJobs } = services.jobs.removeResource(req.params.id, {
+        by: req.session.user.username,
+        stopJob: req.body.stopJob === '1'
+      });
+      flash(
+        req,
+        'warning',
+        pending
+          ? `Stopped job ${stoppedJob} on ${r.name}; ${r.name} is removed as soon as its Client confirms the job ended.`
+          : `Removed ${r.name}.` + (canceledJobs.length ? ` Canceled job(s) queued for it: ${canceledJobs.join(', ')}.` : '')
+      );
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/resources'));
+  });
+
   router.post('/resources/:id/rotate-token', requireAdminRole, (req, res) => {
     const { generateToken, hashToken } = require('../services/tokens');
     const token = generateToken('res');
@@ -395,13 +415,19 @@ function createWebRouter({ services, config }){
     const filters = { state: req.query.state || undefined, source: req.query.source || undefined },
       jobs = services.jobs.list({ ...filters, limit: 200 }).map((j) => ({
         ...j,
-        resource: j.resource_id ? services.registry.get(j.resource_id) : null
+        resource: j.resource_id ? services.registry.get(j.resource_id) : null,
+        active: ACTIVE_JOB_STATES.has(j.state)
       }));
     res.render('jobs/list', {
       title: 'Jobs',
       active: 'jobs',
       jobs,
       filters,
+      // Keeps the list's filters across a row's Cancel.
+      filterQuery: (() => {
+        const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
+        return q ? `?${q}` : '';
+      })(),
       canManage: req.session.user.role === 'admin'
     });
   });
@@ -440,9 +466,16 @@ function createWebRouter({ services, config }){
     });
   });
 
+  // From the job page or a row on /jobs (returnTo says which).
   router.post('/jobs/:id/cancel', requireAdminRole, (req, res) => {
-    services.jobs.cancel(req.params.id, { isAdmin: true });
-    res.redirect(`/jobs/${req.params.id}`);
+    try {
+      services.jobs.cancel(req.params.id, { isAdmin: true });
+      flash(req, 'warning', `Canceled job ${req.params.id}.`);
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, `/jobs/${req.params.id}`));
   });
 
   // Plain, one-shot fetch — used by the log viewer for a job that's

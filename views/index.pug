@@ -30,7 +30,7 @@ block content
           .card-body
             h5.card-title= r.name
             p.card-text.mb-1
-              +resourceBadge(r.status)
+              +resourceBadge(r.status, r.remove_requested_at)
               |
               = ' ' + r.type.toUpperCase()
             if r.busy_source
@@ -41,5 +41,9 @@ block content
   each r in resources
     +resourceCard(r, groupsById, '/')
 
+  if user && user.role === 'admin'
+    +removeResourceModal()
+
 block scripts
   script(src="/js/resource-card.js")
+  script(src="/js/remove-resource.js")

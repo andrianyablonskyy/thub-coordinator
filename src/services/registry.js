@@ -14,7 +14,7 @@
 'use strict';
 
 const { v4: uuid } = require('uuid'),
-  { RESOURCE_STATES, BUSY_SOURCES, compareVersions } = require('@andrian.yablonskyy/thub-common'),
+  { RESOURCE_STATES, BUSY_SOURCES, ACTIVE_JOB_STATES, compareVersions } = require('@andrian.yablonskyy/thub-common'),
   { generateToken, hashToken } = require('./tokens');
 
 function rowToResource(row){
@@ -474,9 +474,44 @@ function createRegistryService(db, { bus, events }){
       (!resourceId || r.id === resourceId);
   }
 
+  // Admin: remove a resource from the registry (dashboard "Remove"). Refused
+  // while it holds an active job — cancel that first. Its finished jobs stay,
+  // keeping the resource's name (jobs.resource_name) in place of the id.
+  // A Client that's still running reappears when it next re-registers.
+  function remove(resourceId, { by } = {}){
+    const r = get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    const placeholders = [...ACTIVE_JOB_STATES].map(() => '?').join(','),
+      active = db
+        .prepare(`SELECT id FROM jobs WHERE resource_id = ? AND state IN (${placeholders}) LIMIT 1`)
+        .get(resourceId, ...ACTIVE_JOB_STATES);
+    if (active){
+      throw Object.assign(new Error(`${r.name} is working on job ${active.id} — cancel it first`), { status: 409 });
+    }
+    db.transaction(() => {
+      db.prepare('UPDATE jobs SET resource_name = ?, resource_id = NULL WHERE resource_id = ?').run(r.name, resourceId);
+      db.prepare('DELETE FROM resources WHERE id = ?').run(resourceId);
+    })();
+    events.record('resource', resourceId, 'resource.removed', { name: r.name, by });
+    return r;
+  }
+
+  // Step one of removing a resource that's running a job (jobs.removeResource):
+  // it takes no new work from here on and is deleted once the job stopped.
+  function requestRemoval(resourceId, { by } = {}){
+    db.prepare('UPDATE resources SET remove_requested_at = ? WHERE id = ?').run(new Date().toISOString(), resourceId);
+    events.record('resource', resourceId, 'resource.removal_requested', { by });
+  }
+
+  function pendingRemovals(){
+    return db.prepare('SELECT * FROM resources WHERE remove_requested_at IS NOT NULL').all().map(rowToResource);
+  }
+
   function findIdleCandidates(type, labels, groupId, resourceId){
     const rows = db
-      .prepare('SELECT * FROM resources WHERE status = ? AND type = ?')
+      .prepare('SELECT * FROM resources WHERE status = ? AND type = ? AND remove_requested_at IS NULL')
       .all(RESOURCE_STATES.IDLE, type)
       .map(rowToResource);
     return rows.filter((r) => matchesTarget(r, labels, groupId, resourceId));
@@ -504,6 +539,9 @@ function createRegistryService(db, { bus, events }){
     requestUpdateAll,
     pendingUpdate,
     assignToJob,
+    remove,
+    requestRemoval,
+    pendingRemovals,
     findIdleCandidates,
     everSatisfiable
   };

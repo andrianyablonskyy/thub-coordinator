@@ -103,6 +103,12 @@ function createResourceRouter({ services, config }){
       if (updateTo){
         commands.push({ command: 'self-update', version: updateTo });
       }
+      // Removal pending (jobs.removeResource): once the Client reports its
+      // job stopped, finish it. This response still goes out; the next
+      // heartbeat gets 401, the token being gone with the resource.
+      if (req.resource.remove_requested_at && !activeJobId){
+        services.jobs.completeRemoval(req.params.id, { by: 'removal-confirmed' });
+      }
       res.json({ serverTime: new Date().toISOString(), commands });
     }
     catch (err){
