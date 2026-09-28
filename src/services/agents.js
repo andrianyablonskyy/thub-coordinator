@@ -42,6 +42,24 @@ function createAgentsService(db, { events }){
     return { agent: get(id), token };
   }
 
+  // Dashboard "Edit": the name is only a label (the token is what
+  // authenticates), so renaming never affects anything using the agent.
+  function rename(id, name){
+    const agent = get(id),
+      trimmed = typeof name === 'string' ? name.trim() : '';
+    if (!agent){
+      throw Object.assign(new Error('Unknown agent'), { status: 404 });
+    }
+    if (!trimmed || trimmed.length > 100){
+      throw Object.assign(new Error('Agent name must be 1-100 characters'), { status: 400 });
+    }
+    if (trimmed !== agent.name){
+      db.prepare('UPDATE agents SET name = ? WHERE id = ?').run(trimmed, id);
+      events.record('agent', id, 'agent.renamed', { from: agent.name, to: trimmed });
+    }
+    return get(id);
+  }
+
   function revoke(id){
     db.prepare('UPDATE agents SET revoked_at = ? WHERE id = ?').run(new Date().toISOString(), id);
     events.record('agent', id, 'agent.revoked', {});
@@ -79,7 +97,7 @@ function createAgentsService(db, { events }){
     return ids.length;
   }
 
-  return { get, getByTokenHash, list, create, revoke, touchLastUsed, setUpdateTo, requestUpdateAll };
+  return { get, getByTokenHash, list, create, rename, revoke, touchLastUsed, setUpdateTo, requestUpdateAll };
 }
 
 module.exports = { createAgentsService };

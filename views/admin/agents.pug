@@ -29,14 +29,25 @@ block content
         tr(class=a.revoked_at ? 'opacity-50' : '')
           td= a.name
           td.text-uppercase= a.kind
-          td: +versionCell(a.version, updates.latest.agent, a.update_to)
+          td
+            +versionCell(a.version, updates.latest.agent, a.update_to)
+            //- Update only when a newer Agent is published (or Cancel, while
+            //- one is requested) — and not for a revoked token, which can't
+            //- pick it up. An unknown version can't be compared: no button.
+            if !a.revoked_at && (a.update_to || (a.version && isNewer(updates.latest.agent, a.version)))
+              +updateButton(`/admin/agents/${a.id}/update`, a.update_to, '/admin/agents')
           td= fmtDate(a.created_at)
           td= fmtDate(a.last_used_at, 'never')
           td= a.revoked_at ? 'revoked' : 'active'
           td
-            if !a.revoked_at
-              .d-flex.justify-content-end
-                +updateButton(`/admin/agents/${a.id}/update`, a.update_to, '/admin/agents')
+            .d-flex.justify-content-end
+              button.btn.btn-sm.btn-outline-secondary(
+                type="button"
+                data-bs-toggle="modal"
+                data-bs-target=`#editAgentModal-${a.id}`
+                aria-label=`Edit agent ${a.name}`
+              ) Edit
+              if !a.revoked_at
                 form.ms-1(
                   method="post"
                   action=`/admin/agents/${a.id}/revoke`
@@ -45,6 +56,21 @@ block content
                   data-confirm-ok="Revoke"
                 )
                   button.btn.btn-sm.btn-outline-danger(type="submit") Revoke
+
+            .modal(tabindex="-1" id=`editAgentModal-${a.id}` aria-labelledby=`editAgentTitle-${a.id}`)
+              .modal-dialog
+                .modal-content
+                  form(method="post" action=`/admin/agents/${a.id}/rename`)
+                    .modal-header
+                      h5.modal-title(id=`editAgentTitle-${a.id}`) Edit agent
+                      button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+                    .modal-body
+                      label.form-label(for=`agentName-${a.id}`) Name
+                      input.form-control(id=`agentName-${a.id}` type="text" name="name" value=a.name required maxlength="100")
+                      .form-text Only a label — the agent's token, and everything using it, keep working.
+                    .modal-footer
+                      button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+                      button.btn.btn-primary(type="submit") Save
 
   .modal(tabindex="-1" id="addAgentModal")
     .modal-dialog

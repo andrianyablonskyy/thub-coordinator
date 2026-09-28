@@ -37,6 +37,15 @@ function createAdminRouter({ services }){
     }
   });
 
+  router.post('/agents/:id', (req, res, next) => {
+    try {
+      res.json(services.agents.rename(req.params.id, req.body?.name));
+    }
+    catch (err){
+      next(err);
+    }
+  });
+
   router.delete('/agents/:id', (req, res) => {
     services.agents.revoke(req.params.id);
     res.status(204).end();

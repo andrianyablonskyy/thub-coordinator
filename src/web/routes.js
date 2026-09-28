@@ -661,6 +661,20 @@ function createWebRouter({ services, config }){
     res.render('admin/agents', { title: 'Agents', active: 'agents', agents: services.agents.list(), newToken: token });
   });
 
+  router.post('/admin/agents/:id/rename', requireAdminRole, (req, res) => {
+    try {
+      const before = services.agents.get(req.params.id)?.name,
+        agent = services.agents.rename(req.params.id, req.body.name);
+      if (before !== agent.name){
+        flash(req, 'success', `Renamed agent "${before}" to "${agent.name}".`);
+      }
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect('/admin/agents');
+  });
+
   router.post('/admin/agents/:id/revoke', requireAdminRole, (req, res) => {
     services.agents.revoke(req.params.id);
     res.redirect('/admin/agents');
