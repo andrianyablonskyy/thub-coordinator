@@ -20,7 +20,7 @@ const fs = require('node:fs'),
   multer = require('multer'),
   { requireAdminSession, requireAdminRole } = require('../auth'),
   { attachJobStream } = require('../api/sse'),
-  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES, isNewer, compareVersions } = require('@andrian.yablonskyy/thub-common'),
+  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES, isNewer, compareVersions, formatDateTime } = require('@andrian.yablonskyy/thub-common'),
   listPrefs = require('../services/list-prefs');
 
 // Resources page sort keys (list-prefs.js) -> comparators. Empty values
@@ -133,8 +133,10 @@ function createWebRouter({ services, config }){
         m = Math.floor((s % 3600) / 60);
       return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`;
     };
-    res.locals.fmtDate = (iso, fallback = '—') =>
-      iso ? new Date(iso).toLocaleString('en-US', { timeZone: tz }) : fallback;
+    // dd/mm/yyyy HH:MM:SS, 24-hour (thub-common formatDateTime) — the one
+    // format for every date/time label.
+    res.locals.fmtDate = (iso, fallback = '—') => formatDateTime(iso, { timeZone: tz, fallback });
+    res.locals.userTimeZone = tz;
 
     // Idle timeout (§10.1): re-applied on every request (not just login)
     // so a mid-session profile change takes effect immediately, and so

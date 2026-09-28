@@ -10,5 +10,6 @@ mixin logViewer(jobId, jobActive)
     style="height: 420px; overflow-y: auto;"
     data-job-id=jobId
     data-job-active=jobActive ? 'true' : 'false'
+    data-time-zone=userTimeZone
   )
   script(src="/js/log-viewer.js")

@@ -2,7 +2,9 @@
 //- Overview and Resources pages. `returnTo` is the page the action forms
 //- redirect back to.
 
-mixin resourceActions(r, returnTo)
+//- `opts.update: false` leaves out the Update button — the resource card
+//- shows it on its Client version line instead.
+mixin resourceActions(r, returnTo, opts = {})
   form.d-inline(method="post" action=`/resources/${r.id}/maintenance`)
     input(type="hidden" name="enabled" value=r.status === 'MAINTENANCE' ? '0' : '1')
     input(type="hidden" name="returnTo" value=returnTo)
@@ -31,7 +33,8 @@ mixin resourceActions(r, returnTo)
       data-bs-title="Invalidate the current resource token and issue a new one — the Client won't reconnect until it has it"
     )
       i.bi.bi-arrow-repeat
-  +updateButton(`/resources/${r.id}/update`, r.update_to, returnTo)
+  if opts.update !== false
+    +updateButton(`/resources/${r.id}/update`, r.update_to, returnTo)
   +removeResourceButton(r, returnTo)
 
 //- Remove: a plain confirm when the resource is idle; with a running job,
@@ -168,7 +171,8 @@ mixin capabilitiesList(caps)
 //- Host uptime and the Client's current task/status with its duration,
 //- both from the last heartbeat. Measured up to now — or, for a Client
 //- that stopped heartbeating, up to its last heartbeat.
-mixin uptimeRows(r)
+//- `returnTo`: where the Task / status line's Cancel button redirects.
+mixin uptimeRows(r, returnTo)
   - const stale = r.status === 'OUT_OF_SERVICE' && r.last_heartbeat_at
   - const ref = stale ? new Date(r.last_heartbeat_at).getTime() : Date.now()
   - const activityLabel = { idle: 'Idle', job: 'Running job', locked: 'Locked locally', 'update-hold': 'Holding for self-update' }
@@ -193,27 +197,30 @@ mixin uptimeRows(r)
         span.text-body-secondary.small.ms-1 (at last heartbeat)
     else
       span.text-body-secondary —
+    if user.role === 'admin'
+      +cancelActivityButton(r, returnTo)
 
 //- Cancel the Client's current activity (its job, a local lock or a
-//- self-update hold); disabled while it's idle.
+//- self-update hold) — icon only, on the card's Task / status line, and
+//- only while there's something to cancel.
 mixin cancelActivityButton(r, returnTo)
   - const state = r.activity && r.activity.state
   - const what = r.activeJob ? `job ${r.activeJob.id}` : state === 'locked' ? 'the local lock' : state === 'update-hold' ? 'the self-update' : null
   if what
-    form.d-inline.ms-1(
+    form.d-inline.ms-2(
       method="post"
       action=`/resources/${r.id}/cancel-activity`
-      onsubmit=`return confirm('Cancel ${what} on ${r.name}?')`
+      data-confirm=`Cancel ${what} on ${r.name}?`
+      onsubmit="return confirm(this.dataset.confirm)"
     )
       input(type="hidden" name="returnTo" value=returnTo)
-      button.btn.btn-sm.btn-outline-danger(type="submit" data-bs-toggle="tooltip" data-bs-title=`Cancel ${what}`)
-        i.bi.bi-x-octagon.me-1
-        | Cancel
-  else
-    span.d-inline-block.ms-1(tabindex="0" data-bs-toggle="tooltip" data-bs-title="Nothing to cancel — the Client is idle")
-      button.btn.btn-sm.btn-outline-danger(type="button" disabled style="pointer-events: none;")
-        i.bi.bi-x-octagon.me-1
-        | Cancel
+      button.btn.btn-sm.btn-outline-danger(
+        type="submit"
+        aria-label=`Cancel ${what}`
+        data-bs-toggle="tooltip"
+        data-bs-title=`Cancel ${what}`
+      )
+        i.bi.bi-x-octagon
 
 mixin resourceCard(r, groupsById, returnTo)
   - const isLoopback = (a) => /^127\./.test(a) || a === '::1' || a === 'localhost'
@@ -233,9 +240,15 @@ mixin resourceCard(r, groupsById, returnTo)
             dd.col-sm-8.text-uppercase= r.type
             dt.col-sm-4 Status
             dd.col-sm-8: +resourceBadge(r.status, r.remove_requested_at)
-            +uptimeRows(r)
+            +uptimeRows(r, returnTo)
             dt.col-sm-4 Client version
-            dd.col-sm-8: +versionCell(r.client_version, updates.latest.client, r.update_to)
+            dd.col-sm-8
+              +versionCell(r.client_version, updates.latest.client, r.update_to)
+              //- Admins: Update only when a newer Client is published (or
+              //- Cancel, while one is requested). An unknown version (too
+              //- old to report it) can't be compared, so no button.
+              if user.role === 'admin' && (r.update_to || (r.client_version && isNewer(updates.latest.client, r.client_version)))
+                +updateButton(`/resources/${r.id}/update`, r.update_to, returnTo)
             dt.col-sm-4 IP addresses
             dd.col-sm-8
               if !local.length && !external
@@ -276,5 +289,4 @@ mixin resourceCard(r, groupsById, returnTo)
             if user.role === 'admin'
               dt.col-sm-4 Actions
               dd.col-sm-8.mb-0
-                +resourceActions(r, returnTo)
-                +cancelActivityButton(r, returnTo)
+                +resourceActions(r, returnTo, { update: false })

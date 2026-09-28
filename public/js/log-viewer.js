@@ -21,13 +21,34 @@
   const jobId = pre.dataset.jobId,
     jobActive = pre.dataset.jobActive === 'true',
     filter = document.getElementById('stream-filter'),
-    lines = [];
+    lines = [],
+    // Same dd/mm/yyyy HH:MM:SS, 24-hour format and profile time zone as
+    // every server-rendered date (thub-common formatDateTime).
+    timeFormat = new Intl.DateTimeFormat('en-GB', {
+      timeZone: pre.dataset.timeZone || undefined,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23'
+    });
+
+  function fmtTime(iso){
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())){
+      return iso;
+    }
+    const p = Object.fromEntries(timeFormat.formatToParts(d).map(({ type, value }) => [type, value]));
+    return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}:${p.second}`;
+  }
 
   function render(){
     const wanted = filter.value;
     pre.textContent = lines
       .filter((l) => !wanted || l.stream === wanted)
-      .map((l) => `[${l.ts}] [${l.stream}] ${l.line}`)
+      .map((l) => `[${fmtTime(l.ts)}] [${l.stream}] ${l.line}`)
       .join('\n');
     pre.scrollTop = pre.scrollHeight;
   }
