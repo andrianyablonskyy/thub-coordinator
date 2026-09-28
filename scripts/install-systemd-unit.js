@@ -48,6 +48,7 @@ function renderUpdateUnits(user, paths){
     unitPath = (name) => path.join(__dirname, '..', 'systemd', name);
   return {
     [UPDATE_PATH_UNIT]: fs.readFileSync(unitPath(UPDATE_PATH_UNIT), 'utf8')
+      .replace(/^PathExists=.*$/m, `PathExists=${paths.updateRequestFile}`)
       .replace(/^PathModified=.*$/m, `PathModified=${paths.updateRequestFile}`),
     // npm is a `#!/usr/bin/env node` script, so this node goes first on PATH.
     [UPDATE_SERVICE_UNIT]: fs.readFileSync(unitPath(UPDATE_SERVICE_UNIT), 'utf8')

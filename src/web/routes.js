@@ -103,6 +103,18 @@ function createWebRouter({ services, config }){
     res.locals.messages = req.session?.flash || [];
     // Latest published versions (README §10.2) — navbar, Agents, Resources.
     res.locals.updates = services.updates.status();
+    // A failed Coordinator self-update: shown to each admin once, as an
+    // error toast (never auto-closes) — on a page view, not the polling
+    // endpoint or a POST whose redirect would drop it.
+    const updateError = res.locals.updates.coordinatorUpdateError;
+    if (updateError && user?.role === 'admin' && req.method === 'GET' && req.path !== '/updates/status' &&
+      req.session.seenUpdateError !== updateError.at){
+      req.session.seenUpdateError = updateError.at;
+      res.locals.messages = [
+        ...res.locals.messages,
+        { type: 'danger', text: `Coordinator update to v${updateError.version} failed: ${updateError.message}` }
+      ];
+    }
     res.locals.isNewer = isNewer;
     res.locals.currentPath = req.originalUrl;
     if (req.session){
@@ -427,8 +439,20 @@ function createWebRouter({ services, config }){
   router.post('/updates/coordinator', requireAdminRole, updateAction(async (req) => {
     const version = services.updates.requestCoordinatorUpdate(req.session.user.username);
     console.log(`Coordinator self-update to v${version} requested by ${req.session.user.username}`);
-    return `Updating the Coordinator to v${version} — the dashboard restarts in a minute or two; reload the page then.`;
+    return `Updating the Coordinator to v${version} — this page reloads by itself once it's back up.`;
   }));
+
+  // Polled by public/js/update-watch.js while a Coordinator update is
+  // pending: a new `coordinatorVersion` (the restart happened) or a cleared
+  // `pending` (it failed) tells the page to reload.
+  router.get('/updates/status', (req, res) => {
+    const s = services.updates.status();
+    res.set('Cache-Control', 'no-store').json({
+      coordinatorVersion: s.coordinatorVersion,
+      pending: s.coordinatorPending,
+      error: s.coordinatorUpdateError
+    });
+  });
 
   router.post('/resources/update-all', requireAdminRole, updateAction(async () => {
     const version = await services.updates.targetVersion('client'),

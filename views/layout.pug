@@ -52,7 +52,14 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
             if user && user.role === 'admin' && updates.coordinatorUpdate
               li.nav-item.d-flex.align-items-center.me-3
                 if updates.coordinatorPending
-                  button.btn.btn-sm.btn-warning(type="button" disabled)
+                  //- public/js/update-watch.js polls /updates/status and
+                  //- reloads the page once the new version is up (or the
+                  //- update failed, to show why).
+                  button.btn.btn-sm.btn-warning#coordinator-update-pending(
+                    type="button"
+                    disabled
+                    data-current-version=coordinatorVersion
+                  )
                     span.spinner-border.spinner-border-sm.me-1(aria-hidden="true")
                     = `Updating app to ${updates.coordinatorPending}…`
                 else
@@ -140,4 +147,6 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
     script(src="/js/tooltips.js")
     script(src="/js/toasts.js")
     script(src="/js/copy-to-clipboard.js")
+    if user && user.role === 'admin' && updates.coordinatorPending
+      script(src="/js/update-watch.js")
     block scripts

@@ -1,11 +1,14 @@
 [Unit]
 Description=TestHub Coordinator self-update request watcher
 
-# PathModified= is rewritten by scripts/install-systemd-unit.js to the
-# update-request.json in the Coordinator's dataDir. The dashboard's
+# PathExists=/PathModified= are rewritten by scripts/install-systemd-unit.js
+# to the update-request.json in the Coordinator's dataDir. The dashboard's
 # "Update app" button writes it; this starts thub-coordinator-update.service
-# (as root) to install the requested version.
+# (as root) to install the requested version. PathExists= also catches a
+# request written while this watch wasn't active (e.g. mid-reinstall) — the
+# helper deletes the file, so it doesn't re-trigger.
 [Path]
+PathExists=/var/lib/thub/.thub/update-request.json
 PathModified=/var/lib/thub/.thub/update-request.json
 Unit=thub-coordinator-update.service
 
