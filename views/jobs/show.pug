@@ -27,6 +27,9 @@ block content
       dd.col-sm-10= pinnedClient ? pinnedClient.name : job.spec.target.client
     dt.col-sm-2 Created
     dd.col-sm-10= fmtDate(job.created_at)
+    if job.duration_sec != null
+      dt.col-sm-2 Duration
+      dd.col-sm-10(title=`Finished ${fmtDate(job.finished_at)}`)= fmtDuration(job.duration_sec * 1000)
     if job.message
       dt.col-sm-2 Message
       dd.col-sm-10= job.message

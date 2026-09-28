@@ -32,7 +32,7 @@ block content
         th State
         th Resource
         th Created
-        th Finished
+        th Duration
         if canManage
           th
     tbody
@@ -44,7 +44,7 @@ block content
           td: +jobBadge(j.state)
           td= j.resource ? j.resource.name : j.resource_name ? `${j.resource_name} (removed)` : '—'
           td= fmtDate(j.created_at)
-          td= fmtDate(j.finished_at)
+          td(title=j.finished_at ? `Finished ${fmtDate(j.finished_at)}` : null)= j.duration_sec != null ? fmtDuration(j.duration_sec * 1000) : '—'
           if canManage
             td.text-end
               if j.active

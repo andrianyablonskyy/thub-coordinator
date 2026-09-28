@@ -167,6 +167,24 @@ test('default priority follows the job source; an explicit one is kept', () => {
   assert.equal(jobs.create({ agentId: agent.id, source: 'ci', spec: makeSpec({ priority: 90 }) }).priority, 90);
 });
 
+test('duration is stored once when a job finishes, from its start; none if it never ran', () => {
+  const { registry, agents, jobs, scheduler, db } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    r = registerResource(registry, { name: 'lab-sw-01', type: 'sw' });
+  registry.heartbeat(r.id, { state: 'idle' });
+
+  const ran = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
+  scheduler.runPass();
+  jobs.setState(ran.id, JOB_STATES.RUNNING);
+  db.prepare('UPDATE jobs SET started_at = ? WHERE id = ?').run(new Date(Date.now() - 125e3).toISOString(), ran.id);
+  jobs.setState(ran.id, JOB_STATES.PASSED);
+  assert.equal(jobs.get(ran.id).duration_sec, 125);
+
+  const never = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
+  jobs.cancel(never.id, { isAdmin: true });
+  assert.equal(jobs.get(never.id).duration_sec, null);
+});
+
 test('admin resetQueue cancels every active job and leaves finished ones alone', () => {
   const { registry, agents, jobs, scheduler } = buildTestServices(),
     { agent } = agents.create({ name: 'ci', kind: 'ci' }),

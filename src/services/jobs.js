@@ -157,8 +157,10 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
       params.push(now);
     }
     if (TERMINAL_JOB_STATES.has(state)){
-      fields.push('finished_at = ?');
-      params.push(now);
+      // Duration is computed once, here, and stored — never derived at
+      // display time. Measured from started_at (RUNNING), like the timeout.
+      fields.push('finished_at = ?', 'duration_sec = ?');
+      params.push(now, job.started_at ? Math.max(0, Math.round((Date.parse(now) - Date.parse(job.started_at)) / 1000)) : null);
     }
     if (extra.message !== undefined){
       fields.push('message = ?');
@@ -173,9 +175,11 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
       params.push(JSON.stringify(extra.summary));
     }
     if (state === JOB_STATES.QUEUED){
-      // Requeue: drop the previous assignment so the scheduler treats it fresh.
-      fields.push('resource_id = ?', 'assigned_at = ?', 'attempt = attempt + 1');
-      params.push(null, null);
+      // Requeue: drop the previous assignment (and its start time, so the
+      // next attempt's duration/timeout count from its own start) so the
+      // scheduler treats it fresh.
+      fields.push('resource_id = ?', 'assigned_at = ?', 'started_at = ?', 'attempt = attempt + 1');
+      params.push(null, null, null);
     }
 
     params.push(id);
