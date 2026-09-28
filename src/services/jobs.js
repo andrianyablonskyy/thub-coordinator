@@ -202,6 +202,16 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     return setState(id, JOB_STATES.CANCELED);
   }
 
+  // The job a resource is working on (ASSIGNED through RUNNING), if any —
+  // for the resource card's Cancel button.
+  function activeForResource(resourceId){
+    const placeholders = [...ACTIVE_JOB_STATES].map(() => '?').join(','),
+      row = db.prepare(
+        `SELECT id FROM jobs WHERE resource_id = ? AND state IN (${placeholders}) ORDER BY created_at DESC LIMIT 1`
+      ).get(resourceId, ...ACTIVE_JOB_STATES);
+    return row ? get(row.id) : null;
+  }
+
   // Resource: POST /jobs/:id/result — final verdict from the test runner.
   function applyResult(id, resourceId, { state, exitCode, summary }){
     const job = get(id);
@@ -341,6 +351,7 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     create,
     setState,
     cancel,
+    activeForResource,
     applyResult,
     requeueUnacked,
     markLost,

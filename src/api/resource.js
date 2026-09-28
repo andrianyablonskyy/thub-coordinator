@@ -84,7 +84,7 @@ function createResourceRouter({ services, config }){
 
   router.post('/resources/:id/heartbeat', auth, requireOwnResource, (req, res, next) => {
     try {
-      const { state, activeJobId, localLock, metrics, addresses } = req.body;
+      const { state, activeJobId, localLock, metrics, addresses, hostUptimeSec, activity } = req.body;
       services.registry.heartbeat(req.params.id, {
         state,
         activeJobId,
@@ -92,7 +92,9 @@ function createResourceRouter({ services, config }){
         metrics,
         addresses,
         remoteAddr: req.ip,
-        clientVersion: appVersion(req, 'client')
+        clientVersion: appVersion(req, 'client'),
+        hostUptimeSec,
+        activity
       });
       const commands = services.commands.drain(req.params.id),
         // Repeated on every heartbeat until the Client reports the new

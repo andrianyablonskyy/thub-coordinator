@@ -89,6 +89,56 @@ mixin capabilitiesList(caps)
         if caps.hw.power.method === 'uhubctl' && caps.hw.power.hub
           span.text-body-secondary.small.ms-2= `hub ${caps.hw.power.hub} port ${caps.hw.power.port}`
 
+//- Host uptime and the Client's current task/status with its duration,
+//- both from the last heartbeat. Measured up to now — or, for a Client
+//- that stopped heartbeating, up to its last heartbeat.
+mixin uptimeRows(r)
+  - const stale = r.status === 'OUT_OF_SERVICE' && r.last_heartbeat_at
+  - const ref = stale ? new Date(r.last_heartbeat_at).getTime() : Date.now()
+  - const activityLabel = { idle: 'Idle', job: 'Running job', locked: 'Locked locally', 'update-hold': 'Holding for self-update' }
+  dt.col-sm-4 Host uptime
+  dd.col-sm-8
+    if r.host_booted_at
+      = fmtDuration(ref - new Date(r.host_booted_at).getTime())
+      span.text-body-secondary.small.ms-2= `booted ${fmtDate(r.host_booted_at)}`
+      if stale
+        span.text-body-secondary.small.ms-1 (at last heartbeat)
+    else
+      span.text-body-secondary —
+  dt.col-sm-4 Task / status
+  dd.col-sm-8
+    if r.activity
+      = activityLabel[r.activity.state] || r.activity.state
+      if r.activity.jobId
+        a.ms-1(href=`/jobs/${r.activity.jobId}`)= r.activity.jobId
+      = ` for ${fmtDuration(ref - new Date(r.activity.since).getTime())}`
+      span.text-body-secondary.small.ms-2= `since ${fmtDate(r.activity.since)}`
+      if stale
+        span.text-body-secondary.small.ms-1 (at last heartbeat)
+    else
+      span.text-body-secondary —
+
+//- Cancel the Client's current activity (its job, a local lock or a
+//- self-update hold); disabled while it's idle.
+mixin cancelActivityButton(r, returnTo)
+  - const state = r.activity && r.activity.state
+  - const what = r.activeJob ? `job ${r.activeJob.id}` : state === 'locked' ? 'the local lock' : state === 'update-hold' ? 'the self-update' : null
+  if what
+    form.d-inline.ms-1(
+      method="post"
+      action=`/resources/${r.id}/cancel-activity`
+      onsubmit=`return confirm('Cancel ${what} on ${r.name}?')`
+    )
+      input(type="hidden" name="returnTo" value=returnTo)
+      button.btn.btn-sm.btn-outline-danger(type="submit" data-bs-toggle="tooltip" data-bs-title=`Cancel ${what}`)
+        i.bi.bi-x-octagon.me-1
+        | Cancel
+  else
+    span.d-inline-block.ms-1(tabindex="0" data-bs-toggle="tooltip" data-bs-title="Nothing to cancel — the Client is idle")
+      button.btn.btn-sm.btn-outline-danger(type="button" disabled style="pointer-events: none;")
+        i.bi.bi-x-octagon.me-1
+        | Cancel
+
 mixin resourceCard(r, groupsById, returnTo)
   - const isLoopback = (a) => /^127\./.test(a) || a === '::1' || a === 'localhost'
   - const local = ((r.host_info && r.host_info.addresses) || []).filter((a) => !isLoopback(a.address))
@@ -107,6 +157,7 @@ mixin resourceCard(r, groupsById, returnTo)
             dd.col-sm-8.text-uppercase= r.type
             dt.col-sm-4 Status
             dd.col-sm-8: +resourceBadge(r.status)
+            +uptimeRows(r)
             dt.col-sm-4 Client version
             dd.col-sm-8: +versionCell(r.client_version, updates.latest.client, r.update_to)
             dt.col-sm-4 IP addresses
@@ -150,3 +201,4 @@ mixin resourceCard(r, groupsById, returnTo)
               dt.col-sm-4 Actions
               dd.col-sm-8.mb-0
                 +resourceActions(r, returnTo)
+                +cancelActivityButton(r, returnTo)

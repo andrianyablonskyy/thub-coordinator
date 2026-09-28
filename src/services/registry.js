@@ -26,7 +26,8 @@ function rowToResource(row){
     labels: JSON.parse(row.labels || '[]'),
     group_ids: JSON.parse(row.group_ids || '[]'),
     host_info: row.host_info ? JSON.parse(row.host_info) : null,
-    capabilities: row.capabilities ? JSON.parse(row.capabilities) : null
+    capabilities: row.capabilities ? JSON.parse(row.capabilities) : null,
+    activity: row.activity ? JSON.parse(row.activity) : null
   };
 }
 
@@ -96,6 +97,26 @@ function sanitizeCapabilities(caps){
     };
   }
   return null;
+}
+
+// Heartbeat durations (README §10) arrive as seconds relative to "now" on
+// the Client and are anchored to the Coordinator's clock here. Anything
+// negative, non-numeric or over ~10 years is ignored.
+const ACTIVITY_STATES = new Set(['idle', 'job', 'locked', 'update-hold']),
+  MAX_DURATION_SEC = 10 * 365 * 86400;
+
+function secondsAgo(now, sec){
+  return Number.isFinite(sec) && sec >= 0 && sec < MAX_DURATION_SEC ? new Date(now - sec * 1000).toISOString() : null;
+}
+
+function sanitizeActivity(now, activity){
+  if (!activity || !ACTIVITY_STATES.has(activity.state)){
+    return null;
+  }
+  const since = secondsAgo(now, activity.durationSec);
+  return since
+    ? { state: activity.state, jobId: activity.state === 'job' ? str(activity.jobId, 64) : null, since }
+    : null;
 }
 
 function createRegistryService(db, { bus, events }){
@@ -266,7 +287,10 @@ function createRegistryService(db, { bus, events }){
   }
 
   // Reconcile status from a heartbeat's self-reported state (§5.1).
-  function heartbeat(resourceId, { state, activeJobId, localLock, metrics, addresses, remoteAddr, clientVersion = null } = {}){
+  function heartbeat(
+    resourceId,
+    { state, activeJobId, localLock, metrics, addresses, remoteAddr, clientVersion = null, hostUptimeSec, activity } = {}
+  ){
     const resource = get(resourceId);
     if (!resource){
       throw Object.assign(new Error('Unknown resource'), { status: 404 });
@@ -298,23 +322,29 @@ function createRegistryService(db, { bus, events }){
       busyReason = null;
     }
 
-    // Older Clients don't send addresses — keep whatever registration stored.
-    const cleanAddresses = sanitizeAddresses(addresses),
+    const now = Date.now(),
+      cleanActivity = sanitizeActivity(now, activity),
+
+      // Older Clients don't send addresses — keep whatever registration stored.
+      cleanAddresses = sanitizeAddresses(addresses),
       hostInfo = cleanAddresses ? { ...(resource.host_info || {}), addresses: cleanAddresses } : resource.host_info;
 
     db.prepare(
       `UPDATE resources
        SET last_heartbeat_at = ?, status = ?, busy_source = ?, busy_reason = ?, host_info = ?,
-           remote_addr = COALESCE(?, remote_addr), client_version = COALESCE(?, client_version)
+           remote_addr = COALESCE(?, remote_addr), client_version = COALESCE(?, client_version),
+           host_booted_at = COALESCE(?, host_booted_at), activity = COALESCE(?, activity)
        WHERE id = ?`
     ).run(
-      new Date().toISOString(),
+      new Date(now).toISOString(),
       nextStatus,
       busySource,
       busyReason,
       hostInfo ? JSON.stringify(hostInfo) : null,
       normalizeRemoteAddr(remoteAddr),
       clientVersion,
+      secondsAgo(now, hostUptimeSec),
+      cleanActivity ? JSON.stringify(cleanActivity) : null,
       resourceId
     );
     completeUpdateIfDone(resourceId);

@@ -53,6 +53,11 @@ function createWebRouter({ services, config }){
     return typeof target === 'string' && /^\/(?![\/\\])/.test(target) ? target : fallback;
   }
 
+  // The job each resource is on (if any), for the resource card's Cancel.
+  function withActiveJobs(resources){
+    return resources.map((r) => ({ ...r, activeJob: services.jobs.activeForResource(r.id) }));
+  }
+
   router.use((req, res, next) => {
     const user = req.session?.user || null;
     res.locals.user = user;
@@ -69,6 +74,14 @@ function createWebRouter({ services, config }){
     // without this every user would see the *server's* local time — not
     // their own (§10.1). Falls back to UTC for the (rare) pre-login page.
     const tz = user?.timezone || 'UTC';
+    // "3d 4h", "5h 12m", "12m 5s", "8s" — resource card uptime/durations.
+    res.locals.fmtDuration = (ms) => {
+      const s = Math.max(0, Math.floor(ms / 1000)),
+        d = Math.floor(s / 86400),
+        h = Math.floor((s % 86400) / 3600),
+        m = Math.floor((s % 3600) / 60);
+      return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`;
+    };
     res.locals.fmtDate = (iso, fallback = '—') =>
       iso ? new Date(iso).toLocaleString('en-US', { timeZone: tz }) : fallback;
 
@@ -204,7 +217,7 @@ function createWebRouter({ services, config }){
   });
 
   router.get('/', (req, res) => {
-    const resources = services.registry.list(),
+    const resources = withActiveJobs(services.registry.list()),
       queueLength = services.jobs.list({ state: JOB_STATES.QUEUED, limit: 1000 }).length,
       dayAgo = new Date(Date.now() - 86400 * 1000).toISOString(),
       jobsLast24h = services.jobs
@@ -220,13 +233,52 @@ function createWebRouter({ services, config }){
     res.render('resources/list', {
       title: 'Resources',
       active: 'resources',
-      resources: services.registry.list(),
+      resources: withActiveJobs(services.registry.list()),
       groupsById
     });
   });
 
   router.post('/resources/:id/maintenance', requireAdminRole, (req, res) => {
     services.registry.setMaintenance(req.params.id, req.body.enabled === '1');
+    res.redirect(returnTo(req, '/resources'));
+  });
+
+  // Cancel whatever the Client is doing (resource card): its job, a manual
+  // local lock, or a self-update hold (README §10). The Client applies the
+  // lock/update ones via heartbeat commands; a job is canceled right here.
+  router.post('/resources/:id/cancel-activity', requireAdminRole, (req, res) => {
+    const r = services.registry.get(req.params.id),
+      job = r && services.jobs.activeForResource(r.id),
+      activity = r?.activity?.state;
+    try {
+      if (!r){
+        throw Object.assign(new Error('Unknown resource'), { status: 404 });
+      }
+      if (job){
+        services.jobs.cancel(job.id, { isAdmin: true });
+        flash(req, 'warning', `Canceled job ${job.id} on ${r.name}.`);
+      }
+      else if (activity === 'locked'){
+        services.commands.push(r.id, { command: 'unlock' });
+        flash(req, 'warning', `Releasing the local lock on ${r.name} (on its next heartbeat).`);
+      }
+      else if (activity === 'update-hold'){
+        services.commands.push(r.id, { command: 'cancel-update' });
+        if (r.update_to){
+          services.registry.setUpdateTo(r.id, null);
+        }
+        flash(req, 'warning', `Canceling the self-update on ${r.name}'s host (on its next heartbeat).`);
+      }
+      else {
+        flash(req, 'info', `${r.name} isn't doing anything to cancel.`);
+      }
+      if (!job && ['locked', 'update-hold'].includes(activity)){
+        services.events.record('resource', r.id, 'resource.activity_canceled', { activity, by: req.session.user.username });
+      }
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
     res.redirect(returnTo(req, '/resources'));
   });
 
