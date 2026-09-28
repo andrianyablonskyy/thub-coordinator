@@ -37,7 +37,13 @@ block content
             if !a.revoked_at
               .d-flex.justify-content-end
                 +updateButton(`/admin/agents/${a.id}/update`, a.update_to, '/admin/agents')
-                form.ms-1(method="post" action=`/admin/agents/${a.id}/revoke` onsubmit="return confirm('Revoke this agent token?')")
+                form.ms-1(
+                  method="post"
+                  action=`/admin/agents/${a.id}/revoke`
+                  data-confirm=`Revoke the token of agent "${a.name}"? Everything using it — a CI pipeline, a developer's thub — gets 401 from then on. This cannot be undone.`
+                  data-confirm-title="Revoke agent token?"
+                  data-confirm-ok="Revoke"
+                )
                   button.btn.btn-sm.btn-outline-danger(type="submit") Revoke
 
   .modal(tabindex="-1" id="addAgentModal")

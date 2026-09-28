@@ -9,7 +9,14 @@ block content
       |
       +jobBadge(job.state)(class="thub-heading-badge ms-1")
     if canCancel
-      form(method="post" action=`/jobs/${job.id}/cancel` onsubmit=`return confirm('Cancel job ${job.id}?')`)
+      form(
+        method="post"
+        action=`/jobs/${job.id}/cancel`
+        data-confirm=`Cancel job ${job.id}? It ends as CANCELED; if it's running, its Client stops it.`
+        data-confirm-title="Cancel job?"
+        data-confirm-ok="Cancel job"
+        data-confirm-dismiss="Keep it"
+      )
         button.btn.btn-outline-danger.btn-sm(type="submit") Cancel
 
   dl.row

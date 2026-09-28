@@ -41,7 +41,13 @@ block content
             if canManage
               td
                 button.btn.btn-sm.btn-outline-secondary(type="button" data-bs-toggle="modal" data-bs-target=`#editGroupModal-${g.id}`) Edit
-                form.d-inline.ms-1(method="post" action=`/groups/${g.id}/delete` onsubmit="return confirm('Delete this group? Any resource listing it will just stop matching on it.')")
+                form.d-inline.ms-1(
+                  method="post"
+                  action=`/groups/${g.id}/delete`
+                  data-confirm=`Delete group "${g.name}"? Resources listing it just stop matching on it, and jobs targeting it (--group) can no longer be scheduled.`
+                  data-confirm-title="Delete group?"
+                  data-confirm-ok="Delete group"
+                )
                   button.btn.btn-sm.btn-outline-danger(type="submit") Delete
 
               .modal(tabindex="-1" id=`editGroupModal-${g.id}`)

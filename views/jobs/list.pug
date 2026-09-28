@@ -55,8 +55,10 @@ block content
                 form.d-inline(
                   method="post"
                   action=`/jobs/${j.id}/cancel`
-                  data-confirm=`Cancel job ${j.id}?`
-                  onsubmit="return confirm(this.dataset.confirm)"
+                  data-confirm=`Cancel job ${j.id}? It ends as CANCELED; if it's running, its Client stops it.`
+                  data-confirm-title="Cancel job?"
+                  data-confirm-ok="Cancel job"
+                  data-confirm-dismiss="Keep it"
                 )
                   input(type="hidden" name="returnTo" value=returnTo)
                   button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Cancel" data-bs-toggle="tooltip" data-bs-title="Cancel this job")

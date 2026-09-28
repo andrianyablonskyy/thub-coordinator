@@ -37,7 +37,10 @@ mixin updatesToolbar(app, label, returnTo)
       form.d-inline(
         method="post"
         action=app === 'agent' ? '/admin/agents/update-all' : '/resources/update-all'
-        onsubmit=`return confirm('Request a self-update of every ${label} to the latest version?')`
+        data-confirm=`Request a self-update of every ${label} to the latest version${updates.latest[app] ? ` (v${updates.latest[app]})` : ''}?`
+        data-confirm-title=`Update all ${label}?`
+        data-confirm-ok="Request update"
+        data-confirm-tone="primary"
       )
         input(type="hidden" name="returnTo" value=returnTo)
         button.btn.btn-sm.btn-outline-primary(type="submit" disabled=!updates.latest[app])

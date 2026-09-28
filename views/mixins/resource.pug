@@ -24,7 +24,14 @@ mixin resourceActions(r, returnTo, opts = {})
         data-bs-title="Take this resource out of rotation for maintenance — the scheduler will skip it"
       )
         i.bi.bi-tools
-  form.d-inline.ms-1(method="post" action=`/resources/${r.id}/rotate-token` onsubmit="return confirm('Rotate token? The Client will need the new one.')")
+  form.d-inline.ms-1(
+    method="post"
+    action=`/resources/${r.id}/rotate-token`
+    data-confirm=`Issue a new token for ${r.name}? Its current token stops working at once, and the Client won't reconnect until it has the new one.`
+    data-confirm-title="Rotate resource token?"
+    data-confirm-ok="Rotate token"
+    data-confirm-tone="warning"
+  )
     input(type="hidden" name="returnTo" value=returnTo)
     button.btn.btn-sm.btn-outline-warning(
       type="submit"
@@ -62,7 +69,8 @@ mixin removeResourceButton(r, returnTo)
       method="post"
       action=`/resources/${r.id}/remove`
       data-confirm=`Remove ${r.name} from the list? Its job history is kept. A Client that's still running shows up again when it restarts and re-registers.`
-      onsubmit="return confirm(this.dataset.confirm)"
+      data-confirm-title=`Remove ${r.name}?`
+      data-confirm-ok="Remove"
     )
       input(type="hidden" name="returnTo" value=returnTo)
       button.btn.btn-sm.btn-outline-danger(
@@ -211,7 +219,9 @@ mixin cancelActivityButton(r, returnTo)
       method="post"
       action=`/resources/${r.id}/cancel-activity`
       data-confirm=`Cancel ${what} on ${r.name}?`
-      onsubmit="return confirm(this.dataset.confirm)"
+      data-confirm-title=`Cancel ${what}?`
+      data-confirm-ok=`Cancel ${what}`
+      data-confirm-dismiss="Keep it"
     )
       input(type="hidden" name="returnTo" value=returnTo)
       button.btn.btn-sm.btn-outline-danger(
