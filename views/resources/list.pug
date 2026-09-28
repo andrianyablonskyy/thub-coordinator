@@ -2,6 +2,7 @@ extends ../layout
 include ../mixins/status-badge
 include ../mixins/resource
 include ../mixins/updates
+include ../mixins/list-controls
 
 block content
   h1.h4.mb-3 Resources
@@ -11,17 +12,19 @@ block content
   .mb-3
     +updatesToolbar('client', 'clients', '/resources')
 
+  +listToolbar(list, 'resources')
+
   table.table.table-hover.align-middle
     thead
       tr
-        th Name
-        th Type
-        th Version
-        th Status
+        +sortHeader(list, 'name', 'Name')
+        +sortHeader(list, 'type', 'Type')
+        +sortHeader(list, 'version', 'Version', 'desc')
+        +sortHeader(list, 'status', 'Status')
         th Labels
         th Groups
         th Busy source / reason
-        th Last heartbeat
+        +sortHeader(list, 'heartbeat', 'Last heartbeat', 'desc')
         if user.role === 'admin'
           th Actions
     tbody
@@ -44,10 +47,10 @@ block content
           td= fmtDate(r.last_heartbeat_at, 'never')
           if user.role === 'admin'
             td
-              +resourceActions(r, '/resources')
+              +resourceActions(r, list.pageUrl())
 
   each r in resources
-    +resourceCard(r, groupsById, '/resources')
+    +resourceCard(r, groupsById, list.pageUrl())
 
   if user && user.role === 'admin'
     +removeResourceModal()

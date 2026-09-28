@@ -1,0 +1,57 @@
+//- Pagination and sorting for the dashboard's list pages (Jobs, Resources;
+//- README §10.1). `list` comes from routes.js listView(): prefs {size, sort,
+//- dir}, pagination {page, pages, total, from, to}, pageSizes, urlFor(changes)
+//- (link with params changed; size/sort changes restart at page 1).
+
+//- Shown above the table: "Showing 26–50 of 312 jobs", the page-size
+//- picker and the page links.
+mixin listToolbar(list, noun)
+  - const p = list.pagination
+  .d-flex.flex-wrap.align-items-center.justify-content-between.gap-2.mb-2
+    .d-flex.align-items-center.gap-2
+      span.small.text-body-secondary
+        if p.total
+          | Showing #{p.from}–#{p.to} of #{p.total} #{noun}
+        else
+          | No #{noun}
+      label.small.text-body-secondary.mb-0(for="list-page-size") Show
+      select.form-select.form-select-sm.w-auto#list-page-size(
+        aria-label="Records per page"
+        onchange="location.href = this.value"
+      )
+        each s in list.pageSizes
+          option(value=list.urlFor({ size: s }) selected=list.prefs.size === s)= s === 'all' ? 'All' : s
+    if p.pages > 1
+      +pager(list)
+
+//- First / previous / a window of pages around the current one / next / last.
+mixin pager(list)
+  - const p = list.pagination
+  - const from = Math.max(1, Math.min(p.page - 2, p.pages - 4))
+  - const to = Math.min(p.pages, from + 4)
+  nav(aria-label="Pages")
+    ul.pagination.pagination-sm.mb-0
+      li.page-item(class=p.page === 1 ? 'disabled' : null)
+        a.page-link(href=list.pageUrl({ page: 1 }) aria-label="First page") «
+      li.page-item(class=p.page === 1 ? 'disabled' : null)
+        a.page-link(href=list.pageUrl({ page: p.page - 1 }) aria-label="Previous page") ‹
+      - for (let n = from; n <= to; n++)
+        li.page-item(class=n === p.page ? 'active' : null aria-current=n === p.page ? 'page' : null)
+          a.page-link(href=list.pageUrl({ page: n }))= n
+      li.page-item(class=p.page === p.pages ? 'disabled' : null)
+        a.page-link(href=list.pageUrl({ page: p.page + 1 }) aria-label="Next page") ›
+      li.page-item(class=p.page === p.pages ? 'disabled' : null)
+        a.page-link(href=list.pageUrl({ page: p.pages }) aria-label="Last page") »
+
+//- A sortable column header: click to sort by it, again to flip direction.
+//- `firstDir` is the direction a column starts in (desc for times/durations).
+mixin sortHeader(list, key, label, firstDir)
+  - const active = list.prefs.sort === key
+  - const nextDir = active ? (list.prefs.dir === 'asc' ? 'desc' : 'asc') : (firstDir || 'asc')
+  th(aria-sort=active ? (list.prefs.dir === 'asc' ? 'ascending' : 'descending') : null)
+    a.link-body-emphasis.text-decoration-none.text-nowrap(href=list.urlFor({ sort: key, dir: nextDir }))
+      = label
+      if active
+        i.bi.ms-1(class=list.prefs.dir === 'asc' ? 'bi-caret-up-fill' : 'bi-caret-down-fill')
+      else
+        i.bi.bi-arrow-down-up.ms-1.text-body-tertiary.small

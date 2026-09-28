@@ -1,5 +1,6 @@
 extends ../layout
 include ../mixins/status-badge
+include ../mixins/list-controls
 
 block content
   .d-flex.justify-content-between.align-items-center.mb-3
@@ -23,16 +24,18 @@ block content
         option(value="ci" selected=filters.source === 'ci') ci
         option(value="cli" selected=filters.source === 'cli') cli
 
+  +listToolbar(list, 'jobs')
+
   table.table.table-hover.align-middle
     thead
       tr
-        th Job
-        th Source
-        th User
-        th State
-        th Resource
-        th Created
-        th Duration
+        +sortHeader(list, 'id', 'Job')
+        +sortHeader(list, 'source', 'Source')
+        +sortHeader(list, 'user', 'User')
+        +sortHeader(list, 'state', 'State')
+        +sortHeader(list, 'resource', 'Resource')
+        +sortHeader(list, 'created', 'Created', 'desc')
+        +sortHeader(list, 'duration', 'Duration', 'desc')
         if canManage
           th
     tbody
@@ -54,6 +57,6 @@ block content
                   data-confirm=`Cancel job ${j.id}?`
                   onsubmit="return confirm(this.dataset.confirm)"
                 )
-                  input(type="hidden" name="returnTo" value=`/jobs${filterQuery}`)
+                  input(type="hidden" name="returnTo" value=returnTo)
                   button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Cancel" title="Cancel this job")
                     i.bi.bi-x-circle

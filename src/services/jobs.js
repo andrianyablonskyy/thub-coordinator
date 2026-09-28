@@ -13,7 +13,8 @@
 
 'use strict';
 
-const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/thub-common');
+const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/thub-common'),
+  { paginate } = require('./list-prefs');
 
 function rowToJob(row){
   if (!row){
@@ -77,6 +78,44 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     sql += ' ORDER BY created_at DESC LIMIT ?';
     params.push(limit);
     return db.prepare(sql).all(...params).map(rowToJob);
+  }
+
+  // Dashboard /jobs (§10): one sorted page plus the total, both in SQL so a
+  // long history never has to be loaded whole. `sort` is a list-prefs key.
+  const PAGE_SORT_SQL = {
+    id: 'jobs.id',
+    source: 'jobs.source',
+    user: 'json_extract(jobs.spec, \'$.user\')',
+    state: 'jobs.state',
+    resource: 'COALESCE(r.name, jobs.resource_name)',
+    created: 'jobs.created_at',
+    duration: 'jobs.duration_sec'
+  };
+
+  function page({ state, source, sort = 'created', dir = 'desc', size = 25, page: pageNo = 1 } = {}){
+    const where = [],
+      params = [];
+    if (state){
+      where.push('jobs.state = ?');
+      params.push(state);
+    }
+    if (source){
+      where.push('jobs.source = ?');
+      params.push(source);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '',
+      column = PAGE_SORT_SQL[sort] || PAGE_SORT_SQL.created,
+      order = dir === 'asc' ? 'ASC' : 'DESC',
+      total = db.prepare(`SELECT COUNT(*) AS n FROM jobs ${whereSql}`).get(...params).n,
+      pagination = paginate(total, size, pageNo),
+      // Empty values (no user, never ran, …) last either way; created_at
+      // breaks ties so paging is stable.
+      rows = db.prepare(
+        `SELECT jobs.* FROM jobs LEFT JOIN resources r ON r.id = jobs.resource_id ${whereSql}
+         ORDER BY ${column} IS NULL, ${column} ${order}, jobs.created_at DESC
+         LIMIT ? OFFSET ?`
+      ).all(...params, pagination.limit, pagination.offset);
+    return { rows: rows.map(rowToJob), pagination };
   }
 
   function countQueuedForAgent(agentId){
@@ -406,6 +445,7 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
   return {
     get,
     list,
+    page,
     create,
     setState,
     cancel,

@@ -14,7 +14,8 @@
 'use strict';
 
 const crypto = require('node:crypto'),
-  { v4: uuid } = require('uuid');
+  { v4: uuid } = require('uuid'),
+  { normalize: normalizeListPrefs } = require('./list-prefs');
 
 function hashPassword(password){
   const salt = crypto.randomBytes(16).toString('hex'),
@@ -44,8 +45,19 @@ function toProfile(row){
     avatarPath: row.avatar_path,
     timezone: row.timezone,
     theme: row.theme,
-    sessionTimeoutMin: row.session_timeout_min
+    sessionTimeoutMin: row.session_timeout_min,
+    listPrefs: parseListPrefs(row.list_prefs)
   };
+}
+
+function parseListPrefs(json){
+  try {
+    const prefs = JSON.parse(json || '{}');
+    return prefs && typeof prefs === 'object' && !Array.isArray(prefs) ? prefs : {};
+  }
+  catch {
+    return {};
+  }
 }
 
 // §10: dashboard login uses its own admin/viewer account table with
@@ -157,6 +169,18 @@ function createAdminUsersService(db){
     return getById(id);
   }
 
+  // Remembers one list page's view (size/sort/dir, §10.1) for this user;
+  // stored normalized, so only valid values ever reach the profile.
+  function setListPrefs(id, list, prefs){
+    const row = db.prepare('SELECT list_prefs FROM admin_users WHERE id = ?').get(id);
+    if (!row){
+      throw Object.assign(new Error('Unknown user'), { status: 404 });
+    }
+    const all = { ...parseListPrefs(row.list_prefs), [list]: normalizeListPrefs(list, prefs) };
+    db.prepare('UPDATE admin_users SET list_prefs = ? WHERE id = ?').run(JSON.stringify(all), id);
+    return getById(id);
+  }
+
   return {
     getByUsername,
     getById,
@@ -166,6 +190,7 @@ function createAdminUsersService(db){
     changePassword,
     verify,
     updateProfile,
+    setListPrefs,
     SESSION_TIMEOUT_OPTIONS_MIN,
     THEMES
   };

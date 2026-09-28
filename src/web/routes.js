@@ -20,12 +20,25 @@ const fs = require('node:fs'),
   multer = require('multer'),
   { requireAdminSession, requireAdminRole } = require('../auth'),
   { attachJobStream } = require('../api/sse'),
-  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES, isNewer } = require('@andrian.yablonskyy/thub-common');
+  { RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES, isNewer, compareVersions } = require('@andrian.yablonskyy/thub-common'),
+  listPrefs = require('../services/list-prefs');
 
-// §10.1: avatar uploads are small, single images — a hard size cap and an
-// allow-list of image mimetypes, same spirit as the join-key/token checks
-// elsewhere (reject outright rather than trying to sanitize).
-const AVATAR_MAX_BYTES = 2 * 1024 * 1024,
+// Resources page sort keys (list-prefs.js) -> comparators. Empty values
+// (never heartbeated, no version reported) sort last in both directions.
+const RESOURCE_SORT_VALUE = {
+    name: (r) => r.name,
+    type: (r) => r.type,
+    version: (r) => r.client_version,
+    status: (r) => r.status,
+    heartbeat: (r) => r.last_heartbeat_at
+  },
+  compareResourceValues = (sort, a, b) =>
+    sort === 'version' ? compareVersions(a, b) : String(a).localeCompare(String(b), undefined, { numeric: true }),
+
+  // §10.1: avatar uploads are small, single images — a hard size cap and an
+  // allow-list of image mimetypes, same spirit as the join-key/token checks
+  // elsewhere (reject outright rather than trying to sanitize).
+  AVATAR_MAX_BYTES = 2 * 1024 * 1024,
   AVATAR_EXT_BY_MIMETYPE = {
     'image/png': 'png',
     'image/jpeg': 'jpg',
@@ -53,6 +66,30 @@ function createWebRouter({ services, config }){
   function returnTo(req, fallback){
     const target = req.body.returnTo;
     return typeof target === 'string' && /^\/(?![\/\\])/.test(target) ? target : fallback;
+  }
+
+  // A list page's view (§10.1): the user's stored size/sort/dir, overridden
+  // by ?size/?sort/?dir — and a change is saved straight to their profile,
+  // so it's what they get next time on any device. ?page isn't saved.
+  function listView(req, res, list, extraQuery = {}){
+    const user = req.session.user,
+      { prefs, changed } = listPrefs.fromQuery(list, req.query, user.listPrefs?.[list]);
+    if (changed){
+      req.session.user = services.adminUsers.setListPrefs(user.id, list, prefs);
+      res.locals.user = req.session.user;
+    }
+    const base = { ...extraQuery, size: prefs.size, sort: prefs.sort, dir: prefs.dir },
+      // Link to this list with some params changed; changing size or sort
+      // restarts at page 1. Empty params are dropped.
+      urlFor = (changes = {}) => {
+        const q = { ...base, ...changes };
+        if (('size' in changes || 'sort' in changes) && !('page' in changes)){
+          delete q.page;
+        }
+        const qs = new URLSearchParams(Object.entries(q).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString();
+        return `${req.baseUrl}${req.path}${qs ? `?${qs}` : ''}`;
+      };
+    return { prefs, urlFor, pageSizes: listPrefs.PAGE_SIZES };
   }
 
   // The job each resource is on (if any), for the resource card's Cancel.
@@ -231,12 +268,26 @@ function createWebRouter({ services, config }){
   });
 
   router.get('/resources', (req, res) => {
-    const groupsById = Object.fromEntries(services.groups.list().map((g) => [g.id, g]));
+    const groupsById = Object.fromEntries(services.groups.list().map((g) => [g.id, g])),
+      view = listView(req, res, 'resources'),
+      { sort, dir, size } = view.prefs,
+      value = RESOURCE_SORT_VALUE[sort],
+      sorted = services.registry.list().sort((a, b) => {
+        const va = value(a),
+          vb = value(b);
+        if (va == null || vb == null){
+          return (va == null) - (vb == null);
+        }
+        return (dir === 'asc' ? 1 : -1) * compareResourceValues(sort, va, vb) || a.name.localeCompare(b.name);
+      }),
+      pagination = listPrefs.paginate(sorted.length, size, req.query.page),
+      pageUrl = (changes) => view.urlFor({ page: pagination.page, ...changes });
     res.render('resources/list', {
       title: 'Resources',
       active: 'resources',
-      resources: withActiveJobs(services.registry.list()),
-      groupsById
+      resources: withActiveJobs(sorted.slice(pagination.offset, pagination.offset + pagination.limit)),
+      groupsById,
+      list: { ...view, pagination, pageUrl }
     });
   });
 
@@ -413,21 +464,22 @@ function createWebRouter({ services, config }){
 
   router.get('/jobs', (req, res) => {
     const filters = { state: req.query.state || undefined, source: req.query.source || undefined },
-      jobs = services.jobs.list({ ...filters, limit: 200 }).map((j) => ({
+      view = listView(req, res, 'jobs', filters),
+      { rows, pagination } = services.jobs.page({ ...filters, ...view.prefs, page: req.query.page }),
+      jobs = rows.map((j) => ({
         ...j,
         resource: j.resource_id ? services.registry.get(j.resource_id) : null,
         active: ACTIVE_JOB_STATES.has(j.state)
-      }));
+      })),
+      pageUrl = (changes) => view.urlFor({ page: pagination.page, ...changes });
     res.render('jobs/list', {
       title: 'Jobs',
       active: 'jobs',
       jobs,
       filters,
-      // Keeps the list's filters across a row's Cancel.
-      filterQuery: (() => {
-        const q = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
-        return q ? `?${q}` : '';
-      })(),
+      list: { ...view, pagination, pageUrl },
+      // A row's Cancel comes back to this exact view (filters, sort, page).
+      returnTo: pageUrl(),
       canManage: req.session.user.role === 'admin'
     });
   });
