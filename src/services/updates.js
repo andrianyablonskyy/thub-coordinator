@@ -46,7 +46,8 @@ function createUpdatesService({ config }){
       state.latest = { ...state.latest, ...latest };
       state.checkedAt = new Date().toISOString();
       state.error = errors.length ? errors.join('; ') : null;
-      return status();
+      // What this check itself got — `latest` keeps earlier results.
+      return { ...status(), fetched: Object.keys(latest) };
     })().finally(() => {
       inFlight = null;
     });

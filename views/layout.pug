@@ -37,6 +37,18 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                 li.nav-item
                   a.nav-link(href="/admin/agents" class=active === 'agents' ? 'active' : '') Agents
           ul.navbar-nav
+            if user && user.role === 'admin'
+              li.nav-item.d-flex.align-items-center.me-2
+                form(method="post" action="/updates/check" onsubmit="this.querySelector('button').disabled = true; this.querySelector('i').className = 'spinner-border spinner-border-sm';")
+                  input(type="hidden" name="returnTo" value=currentPath)
+                  button.btn.btn-sm.btn-outline-secondary(
+                    type="submit"
+                    aria-label="Check for updates"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="bottom"
+                    data-bs-title=updates.checkedAt ? `Check for updates now — the Coordinator and connected resources (last checked ${fmtDate(updates.checkedAt)})` : 'Check for updates now — the Coordinator and connected resources'
+                  )
+                    i.bi.bi-arrow-repeat
             if user && user.role === 'admin' && updates.coordinatorUpdate
               li.nav-item.d-flex.align-items-center.me-3
                 if updates.coordinatorPending

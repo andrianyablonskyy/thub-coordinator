@@ -300,7 +300,10 @@ function createWebRouter({ services, config }){
   function updateAction(fn){
     return async (req, res) => {
       try {
-        flash(req, 'info', await fn(req));
+        // `fn` returns the message, or { type, text } for another severity.
+        const result = await fn(req),
+          { type, text } = typeof result === 'string' ? { type: 'info', text: result } : result;
+        flash(req, type, text);
       }
       catch (err){
         flash(req, 'danger', err.message);
@@ -309,10 +312,45 @@ function createWebRouter({ services, config }){
     };
   }
 
+  // Check now (navbar, Agents and Resources pages): fetch the latest
+  // versions, then report whether the Coordinator and the connected
+  // (heartbeating) Clients are behind — as a warning if anything is.
   router.post('/updates/check', requireAdminRole, updateAction(async () => {
     const s = await services.updates.checkNow(),
-      found = Object.entries(s.latest).map(([app, v]) => `${app} v${v}`).join(', ');
-    return s.error ? `Version check: ${found || 'nothing found'} (errors: ${s.error})` : `Latest versions: ${found}.`;
+      parts = [];
+    if (!s.fetched.length){
+      return { type: 'danger', text: `Update check failed — the npm registry couldn't be reached (${s.error}). Nothing was checked.` };
+    }
+
+    parts.push(s.coordinatorUpdate
+      ? `Coordinator v${s.coordinatorVersion} → v${s.coordinatorUpdate} available (Update app button).`
+      : `Coordinator is up to date (v${s.coordinatorVersion}).`);
+
+    const connected = services.registry.list().filter((r) => r.status !== RESOURCE_STATES.OUT_OF_SERVICE && r.last_heartbeat_at),
+      outdated = connected.filter((r) => r.client_version && isNewer(s.latest.client, r.client_version)),
+      unknown = connected.filter((r) => !r.client_version),
+      names = (list) => list.slice(0, 5).map((r) => `${r.name}${r.client_version ? ` (v${r.client_version})` : ''}`).join(', ') +
+        (list.length > 5 ? `, +${list.length - 5} more` : '');
+    if (!s.latest.client){
+      parts.push('Latest Client version unknown.');
+    }
+    else if (!connected.length){
+      parts.push('No connected resources.');
+    }
+    else if (outdated.length){
+      parts.push(`${outdated.length} of ${connected.length} connected resource(s) can update to Client v${s.latest.client}: ${names(outdated)}.`);
+    }
+    else {
+      parts.push(`All ${connected.length} connected resource(s) run the latest Client (v${s.latest.client}).`);
+    }
+    if (unknown.length){
+      parts.push(`Version unknown (Client too old to report it): ${names(unknown)}.`);
+    }
+    if (s.error){
+      parts.push(`Some checks failed: ${s.error}`);
+    }
+    const behind = s.coordinatorUpdate || outdated.length || unknown.length;
+    return { type: behind || s.error ? 'warning' : 'success', text: parts.join(' ') };
   }));
 
   router.post('/updates/coordinator', requireAdminRole, updateAction(async (req) => {
