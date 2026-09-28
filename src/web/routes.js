@@ -40,9 +40,11 @@ const AVATAR_MAX_BYTES = 2 * 1024 * 1024,
 function createWebRouter({ services, config }){
   const router = express.Router();
 
-  function flash(req, type, text){
+  // Shown as a toast (layout.pug): `danger` stays until closed, `warning`
+  // closes after 30 s, `info`/`success` after 10 s — unless `sticky`.
+  function flash(req, type, text, { sticky = false } = {}){
     req.session.flash = req.session.flash || [];
-    req.session.flash.push({ type, text });
+    req.session.flash.push({ type, text, ...(sticky ? { sticky } : {}) });
   }
 
   // Where a resource action (maintenance, rotate token) came from — the
@@ -107,7 +109,7 @@ function createWebRouter({ services, config }){
     const { username, password } = req.body,
       user = services.adminUsers.verify(username, password);
     if (!user){
-      return res.status(401).render('login', { title: 'Sign in', error: 'Invalid credentials' });
+      return res.status(401).render('login', { title: 'Sign in', messages: [{ type: 'danger', text: 'Invalid credentials' }] });
     }
     req.session.user = user;
     req.session.cookie.maxAge = user.sessionTimeoutMin * 60 * 1000;
@@ -287,7 +289,8 @@ function createWebRouter({ services, config }){
     const token = generateToken('res');
     services.db.prepare('UPDATE resources SET token_hash = ? WHERE id = ?').run(hashToken(token), req.params.id);
     services.events.record('resource', req.params.id, 'resource.token_rotated', {});
-    flash(req, 'warning', `New resource token (copy it now): ${token}`);
+    // Sticky: shown only once, so it mustn't close before it's copied.
+    flash(req, 'warning', `New resource token (copy it now): ${token}`, { sticky: true });
     res.redirect(returnTo(req, '/resources'));
   });
 

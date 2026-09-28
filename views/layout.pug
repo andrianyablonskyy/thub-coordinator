@@ -91,13 +91,37 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                     data-bs-title="Sign out of the dashboard"
                   )
                     i.bi.bi-box-arrow-right
-    main.container.py-4
-      if messages && messages.length
+    //- Flash messages as toasts (public/js/toasts.js): errors stay until
+    //- closed, warnings close after 30 s, info/success after 10 s. Rendered
+    //- visible (.show), so they're readable even if the script fails.
+    if messages && messages.length
+      .toast-container.position-fixed.end-0.p-3(style="top: 3.5rem; z-index: 1090;")
         each m in messages
-          .alert(class=`alert-${m.type || 'info'}`)= m.text
+          - const type = ['danger', 'warning', 'info', 'success'].includes(m.type) ? m.type : 'info'
+          - const icon = { danger: 'x-octagon-fill', warning: 'exclamation-triangle-fill', info: 'info-circle-fill', success: 'check-circle-fill' }[type]
+          .toast.show.border-0(
+            class=`text-bg-${type}`
+            role=type === 'danger' ? 'alert' : 'status'
+            aria-live=type === 'danger' ? 'assertive' : 'polite'
+            aria-atomic="true"
+            data-thub-toast=type
+            data-sticky=m.sticky ? '1' : false
+          )
+            .d-flex
+              .toast-body.d-flex.gap-2
+                i.bi(class=`bi-${icon}`)
+                span= m.text
+              button.btn-close.me-2.m-auto(
+                type="button"
+                class=type === 'danger' || type === 'success' ? 'btn-close-white' : ''
+                data-bs-dismiss="toast"
+                aria-label="Close"
+              )
+    main.container.py-4
       block content
     script(src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js")
     script(src="/js/theme.js")
     script(src="/js/tooltips.js")
+    script(src="/js/toasts.js")
     script(src="/js/copy-to-clipboard.js")
     block scripts
