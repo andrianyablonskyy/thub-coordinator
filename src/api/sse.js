@@ -74,7 +74,7 @@ function attachJobStream(req, res, { jobId, services, config }){
       return;
     }
     const { type, labels = [], group, client } = job.spec.target,
-      reason = registry.waitingReason(type, labels, group, client, { jobImage: Boolean(job.spec.image) });
+      reason = registry.waitingReason(type, labels, group, client);
     if (reason && reason !== lastReason){
       writeEvent('waiting', { reason });
     }

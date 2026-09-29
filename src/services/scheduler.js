@@ -15,11 +15,6 @@
 
 const { JOB_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/thub-common');
 
-// What a job needs a Client to have opted in to (registry matchesTarget).
-function jobNeeds(spec){
-  return { jobImage: Boolean(spec.image) };
-}
-
 function rowToJob(row){
   return { ...row, spec: JSON.parse(row.spec) };
 }
@@ -48,7 +43,7 @@ function createScheduler(db, { bus, events, registry, config }){
         for (const job of queued){
           const { type, labels = [], group, client } = job.spec.target,
             candidates = registry
-              .findIdleCandidates(type, labels, group, client, jobNeeds(job.spec))
+              .findIdleCandidates(type, labels, group, client)
               .filter((r) => !claimedResourceIds.has(r.id));
           if (candidates.length === 0){
             continue;

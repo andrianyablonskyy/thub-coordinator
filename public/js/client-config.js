@@ -1,7 +1,7 @@
 /**
  * @file        packages/coordinator/public/js/client-config.js
  * @description Dashboard: the resource card's Capabilities form — add/remove device rows, and turn the form into
- *              the Client's hw/sw config section (JSON) on Save
+ *              an HW Client's hw-devices config section (JSON) on Save
  *
  * @author      Andrian Yablonskyy
  * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
@@ -41,18 +41,8 @@
     });
   }
 
+  // An HW Client's hw-devices section (the only Clients with a form).
   function sectionFrom(form){
-    if (form.dataset.clientConfig === 'sw'){
-      return compact({
-        image: text(form, 'image'),
-        registry: text(form, 'registry'),
-        cpus: num(form, 'cpus'),
-        memory: text(form, 'memory'),
-        cmd: text(form, 'cmd') ? text(form, 'cmd').split(/\s+/) : undefined,
-        allowDockerHub: val(form, 'allowDockerHub').checked,
-        allowJobImages: val(form, 'allowJobImages').checked
-      });
-    }
     return {
       stlinks: rows(form, 'stlinks'),
       uarts: rows(form, 'uarts'),

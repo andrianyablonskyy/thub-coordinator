@@ -15,7 +15,7 @@
 
 const { v4: uuid } = require('uuid'),
   { RESOURCE_STATES, BUSY_SOURCES, ACTIVE_JOB_STATES, compareVersions, parseCron, validateClientConfig, importClientConfigFile,
-    shareableClientConfigFile } = require('@andrian.yablonskyy/thub-common'),
+    shareableClientConfigFile, HW_DEVICES_SECTION } = require('@andrian.yablonskyy/thub-common'),
   { generateToken, hashToken } = require('./tokens');
 
 function rowToResource(row){
@@ -89,18 +89,9 @@ function sanitizeCapabilities(caps){
 }
 
 function sanitizeTypedCapabilities(caps){
+  // An SW Client has no settings to report (older ones still send some).
   if (caps.sw && typeof caps.sw === 'object'){
-    const sw = caps.sw;
-    return {
-      sw: {
-        image: str(sw.image),
-        registry: str(sw.registry),
-        allowDockerHub: sw.allowDockerHub === true,
-        allowJobImages: sw.allowJobImages === true,
-        cpus: num(sw.cpus),
-        memory: str(sw.memory, 16)
-      }
-    };
+    return { sw: {} };
   }
   if (caps.hw && typeof caps.hw === 'object'){
     const hw = caps.hw;
@@ -536,13 +527,10 @@ function createRegistryService(db, { bus, events }){
     );
   }
 
-  // `needs`: what a job brings that a Client must have opted in to run —
-  // jobImage (the job's own Docker image; sw.allowJobImages).
-  function matchesTarget(r, labels, groupId, resourceId, needs = {}){
+  function matchesTarget(r, labels, groupId, resourceId){
     return labels.every((l) => r.labels.includes(l)) &&
       (!groupId || r.group_ids.includes(groupId)) &&
-      (!resourceId || r.id === resourceId) &&
-      (!needs.jobImage || r.capabilities?.sw?.allowJobImages === true);
+      (!resourceId || r.id === resourceId);
   }
 
   // Admin: remove a resource from the registry (dashboard "Remove"). Refused
@@ -691,7 +679,7 @@ function createRegistryService(db, { bus, events }){
     }
     const desired = section || r.config_desired || r.client_config;
     if (!desired){
-      throw Object.assign(new Error(`Can't import this config into ${r.name}: it has no "${r.type}" section, and the Client hasn't reported one`),
+      throw Object.assign(new Error(`Can't import this config into ${r.name}: it has no "${HW_DEVICES_SECTION}" section, and the Client hasn't reported one`),
         { status: 400 });
     }
     const revision = r.config_revision + 1;
@@ -710,9 +698,10 @@ function createRegistryService(db, { bus, events }){
     if (!r){
       throw Object.assign(new Error('Unknown resource'), { status: 404 });
     }
-    const base = r.client_config_file || { name: r.reported_name || r.name, type: r.type, labels: r.labels },
-      section = r.config_desired || r.client_config;
-    return { ...base, ...(pendingImport(r) || {}), type: r.type, ...(section ? { [r.type]: section } : {}) };
+    // Re-shared: a file stored from an older Client may still say hw / sw.
+    const base = shareableClientConfigFile(r.client_config_file || { name: r.reported_name || r.name, type: r.type, labels: r.labels }),
+      section = r.type === 'hw' ? r.config_desired || r.client_config : null;
+    return { ...base, ...(pendingImport(r) || {}), type: r.type, ...(section ? { [HW_DEVICES_SECTION]: section } : {}) };
   }
 
   // Scheduled host reboot (resource card): a cron expression, validated
@@ -746,20 +735,19 @@ function createRegistryService(db, { bus, events }){
     return { cron: r.reboot_schedule || null };
   }
 
-  function findIdleCandidates(type, labels, groupId, resourceId, needs){
+  function findIdleCandidates(type, labels, groupId, resourceId){
     const rows = db
       .prepare('SELECT * FROM resources WHERE status = ? AND type = ? AND remove_requested_at IS NULL')
       .all(RESOURCE_STATES.IDLE, type)
       .map(rowToResource);
-    return rows.filter((r) => matchesTarget(r, labels, groupId, resourceId, needs));
+    return rows.filter((r) => matchesTarget(r, labels, groupId, resourceId));
   }
 
   // Why a queued job isn't assigned yet, in words — for the Agent and the
   // dashboard (null when an idle Client fits: the next scheduler pass takes
   // it, or higher-priority jobs are ahead). Names each matching Client that
-  // isn't free and what it's doing, and — for a job's own Docker image —
-  // the idle ones that don't allow that (sw.allowJobImages).
-  function waitingReason(type, labels, groupId, resourceId, needs = {}){
+  // isn't free and what it's doing.
+  function waitingReason(type, labels, groupId, resourceId){
     const matching = db.prepare('SELECT * FROM resources WHERE type = ?').all(type).map(rowToResource)
         .filter((r) => matchesTarget(r, labels, groupId, resourceId)),
       free = (r) => r.status === RESOURCE_STATES.IDLE && !r.remove_requested_at,
@@ -772,25 +760,12 @@ function createRegistryService(db, { bus, events }){
     if (!matching.length){
       return `no ${kind} Client matches this job's target`;
     }
-    if (needs.jobImage){
-      const allowing = matching.filter((r) => matchesTarget(r, labels, groupId, resourceId, needs)),
-        refusing = matching.filter((r) => !allowing.includes(r) && free(r));
-      if (!allowing.some(free)){
-        return `no idle ${kind} Client runs job-supplied Docker images — ` +
-          (allowing.length ? `the ones that do: ${names(allowing)}` : 'none does') +
-          (refusing.length
-            ? `; idle, but not allowing them: ${refusing.map((r) => r.name).join(', ')} ` +
-              '(enable "Run jobs\' own images" on its Emulator config tab, or sw.allowJobImages in its config)'
-            : '');
-      }
-      return null;
-    }
     return matching.some(free) ? null : `every matching ${kind} Client is taken: ${names(matching)}`;
   }
 
-  function everSatisfiable(type, labels, groupId, resourceId, needs){
+  function everSatisfiable(type, labels, groupId, resourceId){
     const rows = db.prepare('SELECT * FROM resources WHERE type = ?').all(type).map(rowToResource);
-    return rows.some((r) => matchesTarget(r, labels, groupId, resourceId, needs));
+    return rows.some((r) => matchesTarget(r, labels, groupId, resourceId));
   }
 
   return {

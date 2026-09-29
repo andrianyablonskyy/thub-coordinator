@@ -88,86 +88,55 @@ mixin capabilitiesStatus(r)
         span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=r.config_error) refused by the Client
 
 //- The Client's config, as tabs of the resource card next to Details:
-//- HW — ST-Link, UART, DUT USB; SW —
-//- Emulator; both — Reboot (the schedule, its own Save). The capability tabs
-//- share one form and one "Save capabilities"; a tab with unsaved changes
-//- shows ⚠ (public/js/client-config.js).
+//- HW — ST-Link, UART, DUT USB (its hw-devices section); both — Reboot (the
+//- schedule, its own Save). An SW Client has no settings of its own. The
+//- device tabs share one form and one "Save capabilities"; a tab with
+//- unsaved changes shows ⚠ (public/js/client-config.js).
 mixin configTabItems(r)
   - const p = `cfg-${r.id}`
-  - const tabs = r.type === 'hw' ? [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB']] : [['emulator', 'Emulator']]
-  each t in tabs
-    +configTab(p, t[0], t[1])
+  if r.type === 'hw'
+    each t in [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB']]
+      +configTab(p, t[0], t[1])
   +configTab(p, 'reboot', 'Reboot')
 
 mixin configPanes(r, returnTo)
   - const p = `cfg-${r.id}`
   - const current = r.config_desired || r.client_config
   - const canEdit = user.role === 'admin'
-  if !current
-    each t in (r.type === 'hw' ? [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB']] : [['emulator', 'Emulator']])
+  if r.type !== 'hw'
+    //- no device tabs
+  else if !current
+    each t in [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB']]
       +configPane(p, t[0])
-        p.small.text-body-secondary.mb-0 This Client is too old to report its config — update it to edit its capabilities here.
+        p.small.text-body-secondary.mb-0 This Client is too old to report its config — update it to edit its devices here.
   else
     form(
       method="post"
       action=`/resources/${r.id}/config`
-      data-client-config=r.type
-      data-confirm=`Apply these capabilities to ${r.name}? The Client writes them to its config file on its next heartbeat and restarts once it has no job running.`
-      data-confirm-title="Save Client capabilities?"
+      data-client-config="hw"
+      data-confirm=`Apply these devices to ${r.name}? The Client writes them to its config file on its next heartbeat and restarts once it has no job running.`
+      data-confirm-title="Save Client devices?"
       data-confirm-ok="Save"
       data-confirm-tone="primary"
     )
       input(type="hidden" name="returnTo" value=returnTo)
       input(type="hidden" name="config")
       fieldset(disabled=!canEdit)
-        if r.type === 'sw'
-          +configPane(p, 'emulator')
-            +capabilitiesStatus(r)
-            .row.g-2
-              .col-sm-6
-                label.form-label.small.mb-0 Image
-                input.form-control.form-control-sm.font-monospace(data-f="image" value=current.image || '' placeholder="dut-emulator:2026.08")
-              .col-sm-6
-                label.form-label.small.mb-0 Registry
-                input.form-control.form-control-sm.font-monospace(data-f="registry" value=current.registry || '' placeholder="registry.lab:5000")
-              .col-sm-3
-                label.form-label.small.mb-0 CPUs
-                input.form-control.form-control-sm(data-f="cpus" type="number" step="0.1" min="0.1" value=current.cpus != null ? current.cpus : '' placeholder="2")
-              .col-sm-3
-                label.form-label.small.mb-0 Memory
-                input.form-control.form-control-sm(data-f="memory" value=current.memory || '' placeholder="2g")
-              .col-sm-6
-                label.form-label.small.mb-0 Container command
-                input.form-control.form-control-sm.font-monospace(
-                  data-f="cmd"
-                  value=(current.cmd || []).join(' ')
-                  placeholder="--firmware /downloads/app.bin"
-                  title="For the image above (not a job's own); space-separated"
-                )
-              .col-12.d-flex.gap-4.mt-2
-                .form-check
-                  input.form-check-input(type="checkbox" data-f="allowDockerHub" id=`cc-${r.id}-hub` checked=current.allowDockerHub === true)
-                  label.form-check-label.small(for=`cc-${r.id}-hub`) Pull from Docker Hub
-                .form-check
-                  input.form-check-input(type="checkbox" data-f="allowJobImages" id=`cc-${r.id}-jobimg` checked=current.allowJobImages === true)
-                  label.form-check-label.small(for=`cc-${r.id}-jobimg`) Run jobs' own images (--docker-image)
-            +saveCapabilities(canEdit)
-        else
-          +configPane(p, 'stlinks')
-            +capabilitiesStatus(r)
-            +deviceTable('stlinks', 'ST-Link probes', current.stlinks || [], ['Device', 'Serial', 'udev devpath'])
-            .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-stlink) or a /dev path. The serial is looked up from the udev symlink when empty.
-            +saveCapabilities(canEdit)
-          +configPane(p, 'uarts')
-            +capabilitiesStatus(r)
-            +deviceTable('uarts', 'UARTs', current.uarts || [], ['Device', 'Baud rate', 'udev devpath'])
-            .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-uart) or a /dev path. Baud rate: 115200 when empty.
-            +saveCapabilities(canEdit)
-          +configPane(p, 'usbs')
-            +capabilitiesStatus(r)
-            +deviceTable('usbs', 'DUT USB devices', current.usbs || [], ['Device', 'udev devpath'])
-            .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-usb) or a /dev path. udev devpath: the USB port it's plugged into.
-            +saveCapabilities(canEdit)
+        +configPane(p, 'stlinks')
+          +capabilitiesStatus(r)
+          +deviceTable('stlinks', 'ST-Link probes', current.stlinks || [], ['Device', 'Serial', 'udev devpath'])
+          .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-stlink) or a /dev path. The serial is looked up from the udev symlink when empty.
+          +saveCapabilities(canEdit)
+        +configPane(p, 'uarts')
+          +capabilitiesStatus(r)
+          +deviceTable('uarts', 'UARTs', current.uarts || [], ['Device', 'Baud rate', 'udev devpath'])
+          .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-uart) or a /dev path. Baud rate: 115200 when empty.
+          +saveCapabilities(canEdit)
+        +configPane(p, 'usbs')
+          +capabilitiesStatus(r)
+          +deviceTable('usbs', 'DUT USB devices', current.usbs || [], ['Device', 'udev devpath'])
+          .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-usb) or a /dev path. udev devpath: the USB port it's plugged into.
+          +saveCapabilities(canEdit)
   +configPane(p, 'reboot')
     dl.row.mb-0
       +rebootScheduleRow(r, returnTo)

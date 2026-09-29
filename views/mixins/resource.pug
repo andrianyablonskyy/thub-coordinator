@@ -133,22 +133,12 @@ mixin capDevice(d, detail)
       ) missing
 
 //- What the Client reported it can drive at registration (HW: udev
-//- devices; SW: emulator image and limits).
+//- devices; SW: nothing of its own — it runs each job's DUT image).
 mixin capabilitiesList(caps)
   if !caps
     span.text-body-secondary —
   else if caps.sw
-    ul.list-unstyled.mb-0
-      li
-        span.text-body-secondary.small.me-2 Image
-        code= caps.sw.image || '—'
-      li
-        span.text-body-secondary.small.me-2 Source
-        = caps.sw.registry ? caps.sw.registry : 'no local registry'
-        = caps.sw.allowDockerHub ? ', then Docker Hub' : ' (Docker Hub off)'
-      li
-        span.text-body-secondary.small.me-2 Limits
-        = `${caps.sw.cpus || '—'} CPU, ${caps.sw.memory || '—'}`
+    span.text-body-secondary Runs each job's own DUT image (--docker-image), 2 CPUs / 2 GB
   else if caps.hw
     - const kinds = [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'USB']]
     - const empty = kinds.every(([k]) => !(caps.hw[k] || []).length)

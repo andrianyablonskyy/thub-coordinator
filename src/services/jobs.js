@@ -149,20 +149,8 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
       spec.target.client = resource.id;
     }
 
-    // A job-supplied Docker image needs an SW Client that opted in — say so,
-    // rather than the generic "no resource can satisfy".
-    const needs = { jobImage: Boolean(spec.image) },
-      { type, labels, group, client } = spec.target;
-    if (needs.jobImage && registry.everSatisfiable(type, labels, group, client) && !registry.everSatisfiable(type, labels, group, client, needs)){
-      throw Object.assign(
-        new Error(
-          `No matching SW Client runs job-supplied Docker images (${spec.image}) — enable it on a Client ` +
-            'with "sw": { "allowJobImages": true } in its config'
-        ),
-        { status: 422 }
-      );
-    }
-    if (!registry.everSatisfiable(type, labels, group, client, needs)){
+    const { type, labels, group, client } = spec.target;
+    if (!registry.everSatisfiable(type, labels, group, client)){
       throw Object.assign(
         new Error(
           `No registered resource can ever satisfy type=${spec.target.type} labels=${spec.target.labels.join(',')}` +

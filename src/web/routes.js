@@ -752,7 +752,7 @@ function createWebRouter({ services, config }){
       pinnedClient: job.spec.target.client ? services.registry.get(job.spec.target.client) : null,
       waitingReason: job.state === JOB_STATES.QUEUED
         ? services.registry.waitingReason(job.spec.target.type, job.spec.target.labels || [], job.spec.target.group,
-          job.spec.target.client, { jobImage: Boolean(job.spec.image) })
+          job.spec.target.client)
         : null,
       artifacts,
       jobActive,

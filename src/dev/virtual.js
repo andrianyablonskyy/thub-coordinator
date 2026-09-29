@@ -29,9 +29,7 @@ const DEV_AGENT_NAME = 'virtual-agent',
       name: 'virtual-sw-01',
       type: 'sw',
       labels: ['virtual', 'emulator'],
-      capabilities: {
-        sw: { image: 'dut-emulator:dev', registry: null, allowDockerHub: true, allowJobImages: true, cpus: 2, memory: '2g' }
-      },
+      capabilities: { sw: {} },
       address: '10.0.0.41'
     },
     {
@@ -186,15 +184,10 @@ function startVirtualClients(services, config){
       labels: def.labels,
       hostInfo: { hostname: `${def.name}.virtual`, platform: 'linux', addresses: [{ iface: 'eth0', address: def.address, family: 'IPv4' }], timeZone: 'UTC' },
       capabilities: { ...def.capabilities, rebootSupported: false },
-      // Its "config file": the hw/sw section, as a real Client reports it.
+      // Its editable section as a real Client reports it: an HW Client's
+      // hw-devices; an SW Client has none ({}).
       config: def.type === 'sw'
-        ? {
-          image: def.capabilities.sw.image,
-          allowDockerHub: def.capabilities.sw.allowDockerHub,
-          allowJobImages: def.capabilities.sw.allowJobImages,
-          cpus: def.capabilities.sw.cpus,
-          memory: def.capabilities.sw.memory
-        }
+        ? {}
         : {
           stlinks: [{ index: 1, serial: '066DFF485457725187092834', devpath: '3.3.4.3.1' }],
           uarts: [{ index: 1, baudRate: 115200, devpath: '3.3.3.2' }],

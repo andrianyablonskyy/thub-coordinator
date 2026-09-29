@@ -524,52 +524,32 @@ test('a removed Client re-registers as a fresh resource under the same name', ()
   assert.equal(again.name, 'lab-back');
 });
 
-test('a job-supplied Docker image only goes to SW Clients that allow it; otherwise 422', () => {
+test('a job-supplied Docker image runs on any matching SW Client (no opt-in any more)', () => {
   const { registry, agents, jobs, scheduler } = buildTestServices(),
     { agent } = agents.create({ name: 'dev', kind: 'cli' }),
-    imageJob = { target: { type: 'sw', labels: [] }, image: 'alpine', command: './run.sh' },
-    strict = registerResource(registry, { name: 'sw-strict', type: 'sw' });
-  registry.heartbeat(strict.id, { state: 'idle' });
-
-  assert.throws(() => jobs.create({ agentId: agent.id, source: 'cli', spec: imageJob }), /allowJobImages/);
-
+    r = registerResource(registry, { name: 'sw-any', type: 'sw' });
+  registry.heartbeat(r.id, { state: 'idle' });
+  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: { target: { type: 'sw', labels: [] }, image: 'alpine', command: './run.sh' } });
+  scheduler.runPass();
+  assert.equal(jobs.get(job.id).resource_id, r.id);
+  // An older Client still reporting its sw settings: they're dropped.
   const { resourceId } = registry.registerAuto({
-    clientId: 'c-open', name: 'sw-open', type: 'sw', labels: [], capabilities: { sw: { image: 'emu', allowJobImages: true } }
+    clientId: 'c-old', name: 'sw-old', type: 'sw', labels: [], capabilities: { sw: { image: 'emu', allowJobImages: false } }
   });
-  registry.heartbeat(resourceId, { state: 'idle' });
-  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: imageJob });
-  scheduler.runPass();
-  assert.equal(jobs.get(job.id).resource_id, resourceId); // not sw-strict, though it's idle too
-
-  const fileJob = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
-  scheduler.runPass();
-  assert.equal(jobs.get(fileJob.id).resource_id, strict.id); // jobs without an image still go anywhere
+  assert.deepEqual(registry.get(resourceId).capabilities.sw, {});
 });
 
-test('waiting reason: says why a queued job has no Client — a job image nobody idle allows, or every match taken', () => {
-  const { registry, db } = buildTestServices(),
-    reason = (needs) => registry.waitingReason('sw', [], undefined, undefined, needs),
-    strict = registerResource(registry, { name: 'sw-strict', type: 'sw' }),
-    { resourceId: open } = registry.registerAuto({
-      clientId: 'c-open', name: 'sw-open', type: 'sw', labels: [], capabilities: { sw: { image: 'emu', allowJobImages: true } }
-    });
-  registry.heartbeat(strict.id, { state: 'idle' });
-  db.prepare('UPDATE resources SET status = ? WHERE id = ?').run(RESOURCE_STATES.OUT_OF_SERVICE, open);
+test('waiting reason: says why a queued job has no Client — every match taken, or none matching', () => {
+  const { registry } = buildTestServices(),
+    reason = () => registry.waitingReason('sw', [], undefined, undefined),
+    a = registerResource(registry, { name: 'sw-a', type: 'sw' }),
+    b = registerResource(registry, { name: 'sw-b', type: 'sw' });
+  registry.heartbeat(a.id, { state: 'idle' });
+  assert.equal(reason(), null); // sw-a can take it
 
-  assert.equal(
-    reason({ jobImage: true }),
-    'no idle SW Client runs job-supplied Docker images — the ones that do: sw-open (offline); idle, but not allowing them: sw-strict ' +
-      '(enable "Run jobs\' own images" on its Emulator config tab, or sw.allowJobImages in its config)'
-  );
-  assert.equal(reason({}), null); // sw-strict can take a job without an image
-
-  registry.heartbeat(open, { state: 'idle' });
-  assert.equal(reason({ jobImage: true }), null);
-
-  registry.assignToJob(open, 'cli');
-  registry.assignToJob(strict.id, 'cli');
-  assert.equal(reason({}), 'every matching SW Client is taken: sw-strict (busy), sw-open (busy)');
-  assert.equal(registry.waitingReason('hw', [], undefined, undefined, {}), 'no HW Client matches this job\'s target');
+  registry.assignToJob(a.id, 'cli');
+  assert.equal(reason(), 'every matching SW Client is taken: sw-a (busy), sw-b (not connected yet)');
+  assert.equal(registry.waitingReason('hw', [], undefined, undefined), 'no HW Client matches this job\'s target');
 });
 
 test('--env: the Client gets the values; the Agent API sees them masked; they\'re dropped when the job ends (not on a requeued LOST)', () => {
@@ -664,60 +644,74 @@ test('reboot now: refused offline or without a helper; cancels a running job fir
   assert.equal(after.message, 'Canceled: user reboot request');
 });
 
-test('capabilities from the dashboard: reported config stored, saved at a new revision, resent until applied', () => {
+test('devices from the dashboard: reported hw-devices stored, saved at a new revision, resent until applied', () => {
   const { registry } = buildTestServices(),
     { resourceId } = registry.registerAuto({
-      clientId: 'c-cfg', name: 'lab-cfg', type: 'sw', labels: [], capabilities: { sw: { image: 'emu' } },
-      config: { image: 'emu:1', cpus: 2, memory: '2g' }
+      clientId: 'c-cfg', name: 'lab-cfg', type: 'hw', labels: [], capabilities: { hw: { stlinks: [], uarts: [], usbs: [] } },
+      config: { stlinks: [], uarts: [{ index: 1 }], usbs: [] }
     });
-  assert.deepEqual(registry.get(resourceId).client_config, { image: 'emu:1', cpus: 2, memory: '2g' });
+  assert.deepEqual(registry.get(resourceId).client_config, { stlinks: [], uarts: [{ index: 1 }], usbs: [] });
   assert.equal(registry.pendingConfig(resourceId), null);
 
-  assert.throws(() => registry.setClientConfig(resourceId, { memory: 'lots' }), /Invalid SW config: sw\.memory/);
-  const saved = registry.setClientConfig(resourceId, { image: 'emu:2', cpus: 1, memory: '1g', allowJobImages: true });
+  assert.throws(() => registry.setClientConfig(resourceId, { uarts: [{ path: '/tmp/x' }] }), /Invalid HW config: hw-devices\.uarts\.0\.path/);
+  const saved = registry.setClientConfig(resourceId, { uarts: [{ index: 2, baudRate: 9600 }] });
   assert.equal(saved.config_revision, 1);
-  assert.deepEqual(registry.pendingConfig(resourceId), { revision: 1, type: 'sw', config: { image: 'emu:2', cpus: 1, memory: '1g', allowJobImages: true } });
+  assert.deepEqual(registry.pendingConfig(resourceId), { revision: 1, type: 'hw', config: { uarts: [{ index: 2, baudRate: 9600 }] } });
 
   registry.heartbeat(resourceId, { state: 'idle' }); // an older Client: reports nothing
   assert.equal(registry.pendingConfig(resourceId).revision, 1);
   registry.heartbeat(resourceId, { state: 'idle', configRevision: 1 });
   assert.equal(registry.pendingConfig(resourceId), null);
 
-  registry.setClientConfig(resourceId, { image: 'emu:3' });
+  registry.setClientConfig(resourceId, { usbs: [{ index: 1 }] });
   registry.heartbeat(resourceId, { state: 'idle', configRevision: 2, configError: 'Config revision 2 refused: bad' });
   assert.equal(registry.pendingConfig(resourceId), null); // refused ones aren't resent
   assert.match(registry.get(resourceId).config_error, /refused: bad/);
+
+  // An SW Client has no settings: only an empty section is accepted.
+  const sw = registerResource(registry, { name: 'sw1', type: 'sw' });
+  assert.throws(() => registry.setClientConfig(sw.id, { image: 'emu' }), /SW Client has no settings of its own/);
 });
 
 test('config export/import: exported from the reported file (+ what\'s pending); an import goes out with set-config until applied', () => {
   const { registry } = buildTestServices(),
     { resourceId } = registry.registerAuto({
-      clientId: 'c-io', name: 'dut1', type: 'sw', labels: [], capabilities: { sw: { image: 'emu' } },
-      config: { image: 'emu:1' },
-      configFile: { coordinatorUrl: 'https://c', name: 'dut1', joinKey: 'k', type: 'sw', labels: [], sw: { image: 'emu:1', registryAuth: { password: 'x' } },
-        artifactory: { token: 'secret', allowedArtifactPrefixes: [] } }
+      clientId: 'c-io', name: 'dut1', type: 'hw', labels: [], capabilities: { hw: { stlinks: [], uarts: [], usbs: [] } },
+      config: { uarts: [{ index: 1 }] },
+      // An older Client: `hw`, plus legacy sections that never show up again.
+      configFile: { coordinatorUrl: 'https://c', name: 'dut1', joinKey: 'k', type: 'hw', labels: [], hw: { uarts: [{ index: 1 }] },
+        sw: { image: 'emu:1', registryAuth: { password: 'x' } }, artifactory: { token: 'secret', allowedArtifactPrefixes: [] } }
     });
   assert.deepEqual(registry.exportClientConfig(resourceId), {
-    coordinatorUrl: 'https://c', name: 'dut1', joinKey: 'k', type: 'sw', labels: [], sw: { image: 'emu:1' }, artifactory: { allowedArtifactPrefixes: [] }
+    coordinatorUrl: 'https://c', name: 'dut1', joinKey: 'k', type: 'hw', labels: [], 'hw-devices': { uarts: [{ index: 1 }] }
   });
 
   const { resource, ignored } = registry.importClientConfig(resourceId, {
-    coordinatorUrl: 'https://evil', name: 'other', joinKey: 'x', type: 'sw', labels: ['board:b'], sources: { allowedPrefixes: ['*'] }, sw: { image: 'emu:2' }
+    coordinatorUrl: 'https://evil', name: 'other', joinKey: 'x', type: 'hw', labels: ['board:b'], sources: { allowedPrefixes: ['*'] },
+    'hw-devices': { usbs: [{ index: 2 }] }
   }, { by: 'admin' });
-  assert.deepEqual(ignored, ['coordinatorUrl', 'name', 'joinKey']);
+  assert.deepEqual(ignored, ['sources', 'coordinatorUrl', 'name', 'joinKey']);
   assert.equal(resource.config_revision, 1);
   assert.deepEqual(registry.pendingConfig(resourceId),
-    { revision: 1, type: 'sw', config: { image: 'emu:2' }, file: { labels: ['board:b'], sources: { allowedPrefixes: ['*'] } } });
+    { revision: 1, type: 'hw', config: { usbs: [{ index: 2 }] }, file: { labels: ['board:b'] } });
   const exported = registry.exportClientConfig(resourceId);
-  assert.deepEqual([exported.coordinatorUrl, exported.name, exported.labels, exported.sw], ['https://c', 'dut1', ['board:b'], { image: 'emu:2' }]);
+  assert.deepEqual([exported.coordinatorUrl, exported.name, exported.labels, exported['hw-devices'], exported.hw],
+    ['https://c', 'dut1', ['board:b'], { usbs: [{ index: 2 }] }, undefined]);
 
-  registry.setClientConfig(resourceId, { image: 'emu:3' }); // a Config tab Save meanwhile: the import still goes with it
-  assert.deepEqual(registry.pendingConfig(resourceId).file, { labels: ['board:b'], sources: { allowedPrefixes: ['*'] } });
+  registry.setClientConfig(resourceId, { usbs: [{ index: 3 }] }); // a Config tab Save meanwhile: the import still goes with it
+  assert.deepEqual(registry.pendingConfig(resourceId).file, { labels: ['board:b'] });
   registry.heartbeat(resourceId, { state: 'idle', configRevision: 2 });
   assert.equal(registry.pendingConfig(resourceId), null);
 
-  assert.throws(() => registry.importClientConfig(resourceId, { type: 'hw' }), /HW Client config, but this is a SW Client/);
-  assert.throws(() => registry.importClientConfig(resourceId, { sw: { cpus: -1 } }), /sw\.cpus/);
+  assert.throws(() => registry.importClientConfig(resourceId, { type: 'sw' }), /SW Client config, but this is a HW Client/);
+  assert.throws(() => registry.importClientConfig(resourceId, { 'hw-devices': { uarts: [{ path: '/tmp/x' }] } }), /hw-devices\.uarts/);
+
+  // An SW Client: nothing of its own to import or export, the rest applies.
+  const sw = registry.registerAuto({ clientId: 'c-sw', name: 'sw1', type: 'sw', labels: [], capabilities: { sw: {} }, config: {},
+    configFile: { name: 'sw1', type: 'sw', labels: [] } }).resourceId;
+  assert.deepEqual(registry.importClientConfig(sw, { type: 'sw', labels: ['x'], sw: { image: 'emu' } }).ignored, ['sw']);
+  assert.deepEqual(registry.pendingConfig(sw), { revision: 1, type: 'sw', config: {}, file: { labels: ['x'] } });
+  assert.deepEqual(registry.exportClientConfig(sw), { name: 'sw1', type: 'sw', labels: ['x'] });
 });
 
 test('HW capabilities: no power control — reported relays/power dropped, and refused on Save', () => {

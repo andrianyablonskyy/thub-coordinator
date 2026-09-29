@@ -48,7 +48,7 @@
       else {
         const present = IGNORED.filter((k) => k in parsed);
         form.dataset.confirm = `Import ${file.name} into ${form.dataset.resourceName}? ` +
-          'It replaces the Client\'s config (capabilities, labels, groups, sources, …); the Client writes it on its next heartbeat ' +
+          'It replaces the Client\'s config (capabilities, labels, groups, heartbeat settings, …); the Client writes it on its next heartbeat ' +
           'and restarts once it has no job running.\n\n' +
           `Ignored: joinKey, coordinatorUrl and name${present.length ? ` (in this file: ${present.join(', ')})` : ''}, ` +
           'and the Client\'s id, file paths and secrets — each Client keeps its own.';
