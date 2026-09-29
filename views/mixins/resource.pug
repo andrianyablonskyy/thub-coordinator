@@ -150,6 +150,14 @@ mixin capabilitiesList(caps)
         ul.list-unstyled.mb-0.ms-2
           each d in caps.hw[pair[0]]
             +capDevice(d, pair[0] === 'uarts' && d.baudRate ? `${d.baudRate} baud` : null)
+  if caps && caps.docker
+    .small.text-body-secondary.mt-1 Docker
+    .ms-2
+      if caps.docker.available
+        span= caps.docker.version ? `available (${caps.docker.version})` : 'available'
+      else
+        span.badge.text-bg-warning(data-bs-toggle="tooltip" data-bs-title=caps.docker.reason || 'unknown reason') not available
+        span.small.text-body-secondary.ms-2 jobs can't run docker here
 
 //- Host uptime and the Client's current task/status with its duration,
 //- both from the last heartbeat. Measured up to now — or, for a Client

@@ -81,6 +81,13 @@ function sanitizeCapabilities(caps){
   return typed
     ? {
       ...typed,
+      // Whether a job's command can use Docker on the host; unknown (null)
+      // for older Clients.
+      docker: caps.docker && typeof caps.docker === 'object'
+        ? caps.docker.available === true
+          ? { available: true, version: str(caps.docker.version, 64) }
+          : { available: false, reason: str(caps.docker.reason, 300) }
+        : null,
       // Whether the host has the root reboot helper (thub-client-reboot.path)
       // a scheduled reboot needs; unknown (null) for older Clients.
       rebootSupported: typeof caps.rebootSupported === 'boolean' ? caps.rebootSupported : null

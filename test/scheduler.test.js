@@ -725,6 +725,17 @@ test('HW capabilities: no power control — reported relays/power dropped, and r
   assert.throws(() => registry.setClientConfig(resourceId, { power: null }), /must NOT have additional properties/);
 });
 
+test('Docker availability from registration is kept (and sanitized) for the resource card', () => {
+  const { registry } = buildTestServices(),
+    reg = (docker) => registry.get(registry.registerAuto({
+      clientId: `c-${Math.random()}`, name: `n${Math.random()}`.slice(0, 12), type: 'hw', labels: [],
+      capabilities: { hw: {}, ...(docker === undefined ? {} : { docker }) }
+    }).resourceId).capabilities.docker;
+  assert.deepEqual(reg({ available: true, version: '27.1.1', extra: 'x' }), { available: true, version: '27.1.1' });
+  assert.deepEqual(reg({ available: false, reason: 'docker isn\'t installed' }), { available: false, reason: 'docker isn\'t installed' });
+  assert.equal(reg(undefined), null); // an older Client
+});
+
 test('rename from the dashboard: kept across re-registration, unique, and resettable to the Client\'s own name', () => {
   const { registry } = buildTestServices(),
     reg = (name) => registry.get(registry.registerAuto({ clientId: 'c-ren', name, type: 'sw', labels: [] }).resourceId),
