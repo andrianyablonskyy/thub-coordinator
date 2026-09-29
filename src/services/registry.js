@@ -701,6 +701,40 @@ function createRegistryService(db, { bus, events }){
     return rows.filter((r) => matchesTarget(r, labels, groupId, resourceId, needs));
   }
 
+  // Why a queued job isn't assigned yet, in words — for the Agent and the
+  // dashboard (null when an idle Client fits: the next scheduler pass takes
+  // it, or higher-priority jobs are ahead). Names each matching Client that
+  // isn't free and what it's doing, and — for a job's own Docker image —
+  // the idle ones that don't allow that (sw.allowJobImages).
+  function waitingReason(type, labels, groupId, resourceId, needs = {}){
+    const matching = db.prepare('SELECT * FROM resources WHERE type = ?').all(type).map(rowToResource)
+        .filter((r) => matchesTarget(r, labels, groupId, resourceId)),
+      free = (r) => r.status === RESOURCE_STATES.IDLE && !r.remove_requested_at,
+      what = (r) => (r.remove_requested_at
+        ? 'being removed'
+        : { [RESOURCE_STATES.BUSY]: 'busy', [RESOURCE_STATES.OUT_OF_SERVICE]: 'offline', [RESOURCE_STATES.MAINTENANCE]: 'in maintenance',
+          [RESOURCE_STATES.REGISTERED]: 'not connected yet' }[r.status] || r.status.toLowerCase()),
+      names = (rs) => rs.map((r) => `${r.name} (${what(r)})`).join(', '),
+      kind = type.toUpperCase();
+    if (!matching.length){
+      return `no ${kind} Client matches this job's target`;
+    }
+    if (needs.jobImage){
+      const allowing = matching.filter((r) => matchesTarget(r, labels, groupId, resourceId, needs)),
+        refusing = matching.filter((r) => !allowing.includes(r) && free(r));
+      if (!allowing.some(free)){
+        return `no idle ${kind} Client runs job-supplied Docker images — ` +
+          (allowing.length ? `the ones that do: ${names(allowing)}` : 'none does') +
+          (refusing.length
+            ? `; idle, but not allowing them: ${refusing.map((r) => r.name).join(', ')} ` +
+              '(enable "Run jobs\' own images" on its Emulator config tab, or sw.allowJobImages in its config)'
+            : '');
+      }
+      return null;
+    }
+    return matching.some(free) ? null : `every matching ${kind} Client is taken: ${names(matching)}`;
+  }
+
   function everSatisfiable(type, labels, groupId, resourceId, needs){
     const rows = db.prepare('SELECT * FROM resources WHERE type = ?').all(type).map(rowToResource);
     return rows.some((r) => matchesTarget(r, labels, groupId, resourceId, needs));
@@ -734,7 +768,8 @@ function createRegistryService(db, { bus, events }){
     requestRemoval,
     pendingRemovals,
     findIdleCandidates,
-    everSatisfiable
+    everSatisfiable,
+    waitingReason
   };
 }
 

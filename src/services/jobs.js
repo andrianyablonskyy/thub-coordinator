@@ -13,7 +13,7 @@
 
 'use strict';
 
-const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/thub-common'),
+const { validateJobSpec, maskEnv, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/thub-common'),
   { paginate } = require('./list-prefs'),
   // Named in spec errors: a field the Agent sends but this thub-common
   // doesn't know means the Coordinator needs an update.
@@ -248,6 +248,10 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
       bus.emit('job.queued', { jobId: id });
     }
     if (TERMINAL_JOB_STATES.has(state)){
+      // A LOST job may be requeued (markLost), and needs its env for that.
+      if (state !== JOB_STATES.LOST){
+        forgetEnv(id);
+      }
       bus.emit('job.finished', { jobId: id, state });
       // LOST means the resource is presumed OUT_OF_SERVICE (that's why the
       // job went LOST) — it only comes back via a real heartbeat (§4.1),
@@ -378,12 +382,28 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     if (job.state === JOB_STATES.LOST || TERMINAL_JOB_STATES.has(job.state)){
       return job;
     }
-    const spec = job.spec;
     setState(id, JOB_STATES.LOST);
     if (config.scheduler.requeueOnLost && job.attempt < 2){
       return setState(id, JOB_STATES.QUEUED);
     }
+    forgetEnv(id);
     return get(id);
+  }
+
+  // A finished job's `--env` values (registry passwords etc.) aren't kept:
+  // only the names stay, masked.
+  function forgetEnv(id){
+    const row = db.prepare('SELECT spec FROM jobs WHERE id = ?').get(id),
+      spec = row && JSON.parse(row.spec);
+    if (spec?.env){
+      db.prepare('UPDATE jobs SET spec = ? WHERE id = ?').run(JSON.stringify({ ...spec, env: maskEnv(spec.env) }), id);
+    }
+  }
+
+  // A job as the Agent API shows it: `--env` values masked (any Agent token
+  // can read any job; only the Client running it gets them).
+  function publicJob(job){
+    return job?.spec?.env ? { ...job, spec: { ...job.spec, env: maskEnv(job.spec.env) } } : job;
   }
 
   function checkTimeouts(){
@@ -513,6 +533,7 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
 
   return {
     get,
+    publicJob,
     list,
     page,
     create,

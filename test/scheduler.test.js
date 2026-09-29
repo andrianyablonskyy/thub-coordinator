@@ -546,6 +546,52 @@ test('a job-supplied Docker image only goes to SW Clients that allow it; otherwi
   assert.equal(jobs.get(fileJob.id).resource_id, strict.id); // jobs without an image still go anywhere
 });
 
+test('waiting reason: says why a queued job has no Client — a job image nobody idle allows, or every match taken', () => {
+  const { registry, db } = buildTestServices(),
+    reason = (needs) => registry.waitingReason('sw', [], undefined, undefined, needs),
+    strict = registerResource(registry, { name: 'sw-strict', type: 'sw' }),
+    { resourceId: open } = registry.registerAuto({
+      clientId: 'c-open', name: 'sw-open', type: 'sw', labels: [], capabilities: { sw: { image: 'emu', allowJobImages: true } }
+    });
+  registry.heartbeat(strict.id, { state: 'idle' });
+  db.prepare('UPDATE resources SET status = ? WHERE id = ?').run(RESOURCE_STATES.OUT_OF_SERVICE, open);
+
+  assert.equal(
+    reason({ jobImage: true }),
+    'no idle SW Client runs job-supplied Docker images — the ones that do: sw-open (offline); idle, but not allowing them: sw-strict ' +
+      '(enable "Run jobs\' own images" on its Emulator config tab, or sw.allowJobImages in its config)'
+  );
+  assert.equal(reason({}), null); // sw-strict can take a job without an image
+
+  registry.heartbeat(open, { state: 'idle' });
+  assert.equal(reason({ jobImage: true }), null);
+
+  registry.assignToJob(open, 'cli');
+  registry.assignToJob(strict.id, 'cli');
+  assert.equal(reason({}), 'every matching SW Client is taken: sw-strict (busy), sw-open (busy)');
+  assert.equal(registry.waitingReason('hw', [], undefined, undefined, {}), 'no HW Client matches this job\'s target');
+});
+
+test('--env: the Client gets the values; the Agent API sees them masked; they\'re dropped when the job ends (not on a requeued LOST)', () => {
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'dev', kind: 'cli' }),
+    r = registerResource(registry, { name: 'sw-env', type: 'sw' }),
+    env = { DOCKER_REGISTRY: 'registry.lab:5000', DOCKER_USERNAME: 'ci', DOCKER_PASSWORD: 's3cret' };
+  registry.heartbeat(r.id, { state: 'idle' });
+
+  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ env }) });
+  assert.deepEqual(jobs.get(job.id).spec.env, env); // what the Client is handed
+  assert.deepEqual(jobs.publicJob(jobs.get(job.id)).spec.env, { DOCKER_REGISTRY: '***', DOCKER_USERNAME: '***', DOCKER_PASSWORD: '***' });
+
+  scheduler.runPass();
+  jobs.markLost(job.id); // requeued: still needs them
+  assert.equal(jobs.get(job.id).state, JOB_STATES.QUEUED);
+  assert.deepEqual(jobs.get(job.id).spec.env, env);
+
+  jobs.cancel(job.id, { isAdmin: true });
+  assert.deepEqual(jobs.get(job.id).spec.env, { DOCKER_REGISTRY: '***', DOCKER_USERNAME: '***', DOCKER_PASSWORD: '***' });
+});
+
 test('every job carries its command and runs on any matching Client; an old-Agent spec is refused', () => {
   const { registry, agents, jobs, scheduler } = buildTestServices(),
     { agent } = agents.create({ name: 'dev', kind: 'cli' }),

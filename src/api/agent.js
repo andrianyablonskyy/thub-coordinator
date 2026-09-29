@@ -47,7 +47,7 @@ function createAgentRouter({ services, config }){
     }
     const resource = job.resource_id ? services.registry.get(job.resource_id) : null;
     res.json({
-      ...job,
+      ...services.jobs.publicJob(job),
       resource: resource ? { id: resource.id, name: resource.name } : job.resource_name ? { id: null, name: job.resource_name } : null
     });
   });
@@ -60,13 +60,13 @@ function createAgentRouter({ services, config }){
       mine: req.query.mine === 'true' || req.query.mine === '1',
       limit: req.query.limit ? Number(req.query.limit) : undefined
     });
-    res.json({ jobs });
+    res.json({ jobs: jobs.map(services.jobs.publicJob) });
   });
 
   router.post('/jobs/:id/cancel', auth, (req, res, next) => {
     try {
       const job = services.jobs.cancel(req.params.id, { agentId: req.agent.id, isAdmin: false });
-      res.json(job);
+      res.json(services.jobs.publicJob(job));
     }
     catch (err){
       next(err);

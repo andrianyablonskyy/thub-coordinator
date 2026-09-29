@@ -714,6 +714,10 @@ function createWebRouter({ services, config }){
       active: 'jobs',
       job,
       pinnedClient: job.spec.target.client ? services.registry.get(job.spec.target.client) : null,
+      waitingReason: job.state === JOB_STATES.QUEUED
+        ? services.registry.waitingReason(job.spec.target.type, job.spec.target.labels || [], job.spec.target.group,
+          job.spec.target.client, { jobImage: Boolean(job.spec.image) })
+        : null,
       artifacts,
       jobActive,
       canCancel: req.session.user.role === 'admin' && jobActive

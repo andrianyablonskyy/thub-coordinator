@@ -13,7 +13,9 @@
 
 'use strict';
 
-const { TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/thub-common');
+const { TERMINAL_JOB_STATES, JOB_STATES } = require('@andrian.yablonskyy/thub-common');
+
+const WAITING_CHECK_MS = 15_000;
 
 // §6.4: log / state / end events, resumable via Last-Event-ID (§7: "the
 // Agent reconnects with exponential backoff and resumes from the last seq").
@@ -62,7 +64,26 @@ function attachJobStream(req, res, { jobId, services, config }){
   const resourceName = (id) => (id ? registry.get(id)?.name : undefined);
   writeEvent('state', { state: current.state, resource: resourceName(current.resource_id) });
 
-  const onLog = (entry) => {
+  // While QUEUED: why no Client has taken it yet (`waiting`), re-checked
+  // as Clients come and go; sent again only when the reason changes.
+  let lastReason = null;
+  function checkWaiting(){
+    const job = jobs.get(jobId);
+    if (job?.state !== JOB_STATES.QUEUED){
+      lastReason = null;
+      return;
+    }
+    const { type, labels = [], group, client } = job.spec.target,
+      reason = registry.waitingReason(type, labels, group, client, { jobImage: Boolean(job.spec.image) });
+    if (reason && reason !== lastReason){
+      writeEvent('waiting', { reason });
+    }
+    lastReason = reason;
+  }
+  checkWaiting();
+  const waitingTimer = setInterval(checkWaiting, WAITING_CHECK_MS),
+
+    onLog = (entry) => {
       if (entry.jobId === jobId){
         writeEvent('log', { ts: entry.ts, stream: entry.stream, line: entry.line }, entry.seq);
       }
@@ -82,6 +103,7 @@ function attachJobStream(req, res, { jobId, services, config }){
     };
 
   function cleanup(){
+    clearInterval(waitingTimer);
     bus.off('job.log', onLog);
     bus.off('job.state', onState);
     bus.off('job.finished', onFinished);
