@@ -14,7 +14,11 @@
 'use strict';
 
 const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/thub-common'),
-  { paginate } = require('./list-prefs');
+  { paginate } = require('./list-prefs'),
+  // Named in spec errors: a field the Agent sends but this thub-common
+  // doesn't know means the Coordinator needs an update.
+  VERSIONS = `Coordinator v${require('../../package.json').version}, ` +
+    `thub-common v${require('@andrian.yablonskyy/thub-common/package.json').version}`;
 
 function rowToJob(row){
   if (!row){
@@ -131,7 +135,7 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
       rawSpec?.priority === undefined ? { ...rawSpec, priority: DEFAULT_PRIORITY[source] } : rawSpec
     );
     if (!valid){
-      throw Object.assign(new Error(`Invalid job spec: ${errors.join('; ')}`), { status: 400 });
+      throw Object.assign(new Error(`Invalid job spec (${VERSIONS}): ${errors.join('; ')}`), { status: 400 });
     }
     spec.source = source;
 

@@ -90,6 +90,14 @@ function buildServices(config){
   };
 }
 
+function commonPath(){
+  return path.dirname(require.resolve('@andrian.yablonskyy/thub-common/package.json'));
+}
+
+function commonVersion(){
+  return require('@andrian.yablonskyy/thub-common/package.json').version;
+}
+
 function createApp(config, services){
   const app = express();
   app.set('view engine', 'pug');
@@ -98,6 +106,10 @@ function createApp(config, services){
   app.locals.services = services;
   // Shown in every dashboard page's footer (layout.pug).
   app.locals.coordinatorVersion = require('../package.json').version;
+  // The thub-common this process actually loaded (it validates job specs):
+  // installs keep the one they got, so it can lag behind — shown on the
+  // dashboard and logged at startup to make that visible.
+  app.locals.commonVersion = commonVersion();
 
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -162,6 +174,7 @@ function start(configPath){
   const server = app.listen(config.port, config.host, () => {
     console.log(`Config: ${config.configPath || '(built-in defaults)'}; data: ${config.dataDir}`);
     console.log(`TestHub Coordinator listening on http://${config.host}:${config.port}`);
+    console.log(`Coordinator v${require('../package.json').version}, thub-common v${commonVersion()} (${commonPath()})`);
   });
 
   return { app, server, services, config };

@@ -12,7 +12,12 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
       .container-fluid
         a.navbar-brand.d-flex.flex-column.lh-1.py-1(href="/")
           span TestHub
-          small.text-body-secondary.fw-normal.mt-1(style="font-size: .7rem;")
+          small.text-body-secondary.fw-normal.mt-1(
+            style="font-size: .7rem;"
+            data-bs-toggle="tooltip"
+            data-bs-placement="bottom"
+            data-bs-title=`Coordinator v${coordinatorVersion} · thub-common v${commonVersion} (validates job specs)`
+          )
             | ver. #{coordinatorVersion}
             if user && user.role !== 'admin' && updates.coordinatorUpdate
               span.badge.text-bg-warning.ms-1(
