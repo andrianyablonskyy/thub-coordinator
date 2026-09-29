@@ -720,6 +720,17 @@ test('config export/import: exported from the reported file (+ what\'s pending);
   assert.throws(() => registry.importClientConfig(resourceId, { sw: { cpus: -1 } }), /sw\.cpus/);
 });
 
+test('HW capabilities: no power control — reported relays/power dropped, and refused on Save', () => {
+  const { registry } = buildTestServices(),
+    { resourceId } = registry.registerAuto({
+      clientId: 'c-hw', name: 'hw1', type: 'hw', labels: [],
+      capabilities: { hw: { stlinks: [], uarts: [], usbs: [], relays: [{ channel: 0 }], power: { method: 'uhubctl', hub: '1-1', port: 2 } } }
+    });
+  assert.deepEqual(registry.get(resourceId).capabilities.hw, { stlinks: [], uarts: [], usbs: [] });
+  assert.throws(() => registry.setClientConfig(resourceId, { relays: [{ channel: 0 }] }), /must NOT have additional properties/);
+  assert.throws(() => registry.setClientConfig(resourceId, { power: null }), /must NOT have additional properties/);
+});
+
 test('rename from the dashboard: kept across re-registration, unique, and resettable to the Client\'s own name', () => {
   const { registry } = buildTestServices(),
     reg = (name) => registry.get(registry.registerAuto({ clientId: 'c-ren', name, type: 'sw', labels: [] }).resourceId),

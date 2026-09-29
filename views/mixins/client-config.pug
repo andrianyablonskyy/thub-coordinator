@@ -20,14 +20,6 @@ mixin deviceRow(kind, d)
       button.btn.btn-sm.btn-outline-secondary(type="button" data-remove-row aria-label="Remove row")
         i.bi.bi-x-lg
 
-mixin relayRow(rl)
-  tr(data-row="relays")
-    td: input.form-control.form-control-sm(data-f="channel" type="number" min="0" max="7" value=rl ? rl.channel : '' required)
-    td: input.form-control.form-control-sm(data-f="baseUrl" type="url" value=rl && rl.baseUrl || '' placeholder="http://localhost:3000")
-    td.text-end
-      button.btn.btn-sm.btn-outline-secondary(type="button" data-remove-row aria-label="Remove row")
-        i.bi.bi-x-lg
-
 mixin deviceTable(kind, title, rows, columns)
   .d-flex.justify-content-between.align-items-center.mb-1
     strong.small= title
@@ -42,15 +34,9 @@ mixin deviceTable(kind, title, rows, columns)
         th
     tbody
       each d in rows
-        if kind === 'relays'
-          +relayRow(d)
-        else
-          +deviceRow(kind, d)
+        +deviceRow(kind, d)
   template(data-template=kind)
-    if kind === 'relays'
-      +relayRow(null)
-    else
-      +deviceRow(kind, null)
+    +deviceRow(kind, null)
 
 //- The ⚠ shown on a config (sub-)tab while its data differs from what was
 //- loaded — public/js/client-config.js toggles it.
@@ -102,13 +88,13 @@ mixin capabilitiesStatus(r)
         span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=r.config_error) refused by the Client
 
 //- The Client's config, as tabs of the resource card next to Details:
-//- HW — ST-Link, UART, DUT USB, Power (relays + power control); SW —
+//- HW — ST-Link, UART, DUT USB; SW —
 //- Emulator; both — Reboot (the schedule, its own Save). The capability tabs
 //- share one form and one "Save capabilities"; a tab with unsaved changes
 //- shows ⚠ (public/js/client-config.js).
 mixin configTabItems(r)
   - const p = `cfg-${r.id}`
-  - const tabs = r.type === 'hw' ? [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB'], ['power', 'Power']] : [['emulator', 'Emulator']]
+  - const tabs = r.type === 'hw' ? [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB']] : [['emulator', 'Emulator']]
   each t in tabs
     +configTab(p, t[0], t[1])
   +configTab(p, 'reboot', 'Reboot')
@@ -118,7 +104,7 @@ mixin configPanes(r, returnTo)
   - const current = r.config_desired || r.client_config
   - const canEdit = user.role === 'admin'
   if !current
-    each t in (r.type === 'hw' ? [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB'], ['power', 'Power']] : [['emulator', 'Emulator']])
+    each t in (r.type === 'hw' ? [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB']] : [['emulator', 'Emulator']])
       +configPane(p, t[0])
         p.small.text-body-secondary.mb-0 This Client is too old to report its config — update it to edit its capabilities here.
   else
@@ -167,7 +153,6 @@ mixin configPanes(r, returnTo)
                   label.form-check-label.small(for=`cc-${r.id}-jobimg`) Run jobs' own images (--docker-image)
             +saveCapabilities(canEdit)
         else
-          - const power = current.power || {}
           +configPane(p, 'stlinks')
             +capabilitiesStatus(r)
             +deviceTable('stlinks', 'ST-Link probes', current.stlinks || [], ['Device', 'Serial', 'udev devpath'])
@@ -182,23 +167,6 @@ mixin configPanes(r, returnTo)
             +capabilitiesStatus(r)
             +deviceTable('usbs', 'DUT USB devices', current.usbs || [], ['Device', 'udev devpath'])
             .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-usb) or a /dev path. udev devpath: the USB port it's plugged into.
-            +saveCapabilities(canEdit)
-          +configPane(p, 'power')
-            +capabilitiesStatus(r)
-            +deviceTable('relays', 'Relay channels', current.relays || [], ['Channel (0-7)', 'Board URL'])
-            strong.small.d-block.mt-3.mb-1 Power control
-            .row.g-2(data-power)
-              .col-sm-3
-                select.form-select.form-select-sm(data-f="method" aria-label="Power method")
-                  option(value="" selected=!power.method) none
-                  option(value="uhubctl" selected=power.method === 'uhubctl') uhubctl
-                  option(value="relay" selected=power.method === 'relay') relay
-              .col-sm-3
-                input.form-control.form-control-sm(data-f="hub" value=power.hub || '' placeholder="hub (uhubctl)")
-              .col-sm-2
-                input.form-control.form-control-sm(data-f="port" type="number" min="1" value=power.port != null ? power.port : '' placeholder="port")
-              .col-sm-4
-                input.form-control.form-control-sm(data-f="baseUrl" type="url" value=power.baseUrl || '' placeholder="relay URL")
             +saveCapabilities(canEdit)
   +configPane(p, 'reboot')
     dl.row.mb-0

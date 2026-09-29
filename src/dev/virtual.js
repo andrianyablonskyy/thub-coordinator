@@ -43,9 +43,7 @@ const DEV_AGENT_NAME = 'virtual-agent',
         hw: {
           stlinks: [{ path: '/dev/thub/dut1-stlink', index: 1, serial: '066DFF485457725187092834', present: true }],
           uarts: [{ path: '/dev/thub/dut1-uart', index: 1, baudRate: 115200, present: true }],
-          usbs: [{ path: '/dev/thub/dut1-usb', index: 1, present: false }],
-          relays: [{ channel: 0, baseUrl: 'http://localhost:3000' }],
-          power: { method: 'relay' }
+          usbs: [{ path: '/dev/thub/dut1-usb', index: 1, present: false }]
         }
       },
       address: '10.0.0.42'
@@ -200,9 +198,7 @@ function startVirtualClients(services, config){
         : {
           stlinks: [{ index: 1, serial: '066DFF485457725187092834', devpath: '3.3.4.3.1' }],
           uarts: [{ index: 1, baudRate: 115200, devpath: '3.3.3.2' }],
-          usbs: [{ index: 1 }],
-          relays: [{ channel: 0, baseUrl: 'http://localhost:3000' }],
-          power: { method: 'relay' }
+          usbs: [{ index: 1 }]
         },
       remoteAddr: '127.0.0.1',
       clientVersion: version

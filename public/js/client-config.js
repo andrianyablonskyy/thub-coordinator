@@ -24,9 +24,6 @@
 
   function rows(form, kind){
     return [...form.querySelectorAll(`[data-table="${kind}"] tbody [data-row]`)].map((tr) => {
-      if (kind === 'relays'){
-        return compact({ channel: num(tr, 'channel'), baseUrl: text(tr, 'baseUrl') });
-      }
       let extra = {};
       try {
         extra = JSON.parse(tr.dataset.extra || '{}');
@@ -56,14 +53,10 @@
         allowJobImages: val(form, 'allowJobImages').checked
       });
     }
-    const power = form.querySelector('[data-power]'),
-      method = text(power, 'method');
     return {
       stlinks: rows(form, 'stlinks'),
       uarts: rows(form, 'uarts'),
-      usbs: rows(form, 'usbs'),
-      relays: rows(form, 'relays'),
-      power: method ? compact({ method, hub: text(power, 'hub'), port: num(power, 'port'), baseUrl: text(power, 'baseUrl') }) : null
+      usbs: rows(form, 'usbs')
     };
   }
 

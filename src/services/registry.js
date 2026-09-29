@@ -103,15 +103,12 @@ function sanitizeTypedCapabilities(caps){
     };
   }
   if (caps.hw && typeof caps.hw === 'object'){
-    const hw = caps.hw,
-      power = hw.power && typeof hw.power === 'object' ? hw.power : null;
+    const hw = caps.hw;
     return {
       hw: {
         stlinks: capList(hw.stlinks).map(device),
         uarts: capList(hw.uarts).map(device),
-        usbs: capList(hw.usbs).map(device),
-        relays: capList(hw.relays).map((r) => ({ channel: num(r?.channel), baseUrl: str(r?.baseUrl) })),
-        power: power ? { method: str(power.method, 32), hub: str(power.hub, 64), port: num(power.port) } : null
+        usbs: capList(hw.usbs).map(device)
       }
     };
   }

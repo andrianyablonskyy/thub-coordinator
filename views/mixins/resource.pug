@@ -133,7 +133,7 @@ mixin capDevice(d, detail)
       ) missing
 
 //- What the Client reported it can drive at registration (HW: udev
-//- devices, relays, power; SW: emulator image and limits).
+//- devices; SW: emulator image and limits).
 mixin capabilitiesList(caps)
   if !caps
     span.text-body-secondary —
@@ -151,29 +151,15 @@ mixin capabilitiesList(caps)
         = `${caps.sw.cpus || '—'} CPU, ${caps.sw.memory || '—'}`
   else if caps.hw
     - const kinds = [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'USB']]
-    - const empty = kinds.every(([k]) => !caps.hw[k].length) && !caps.hw.relays.length && !caps.hw.power
+    - const empty = kinds.every(([k]) => !(caps.hw[k] || []).length)
     if empty
       span.text-body-secondary no devices configured
     each pair in kinds
-      if caps.hw[pair[0]].length
+      if (caps.hw[pair[0]] || []).length
         .small.text-body-secondary.mt-1= pair[1]
         ul.list-unstyled.mb-0.ms-2
           each d in caps.hw[pair[0]]
             +capDevice(d, pair[0] === 'uarts' && d.baudRate ? `${d.baudRate} baud` : null)
-    if caps.hw.relays.length
-      .small.text-body-secondary.mt-1 Relays
-      ul.list-unstyled.mb-0.ms-2
-        each rl in caps.hw.relays
-          li
-            = `channel ${rl.channel}`
-            if rl.baseUrl
-              code.ms-2= rl.baseUrl
-    if caps.hw.power
-      .small.text-body-secondary.mt-1 Power
-      .ms-2
-        = caps.hw.power.method
-        if caps.hw.power.method === 'uhubctl' && caps.hw.power.hub
-          span.text-body-secondary.small.ms-2= `hub ${caps.hw.power.hub} port ${caps.hw.power.port}`
 
 //- Host uptime and the Client's current task/status with its duration,
 //- both from the last heartbeat. Measured up to now — or, for a Client
