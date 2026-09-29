@@ -35,6 +35,7 @@ const path = require('node:path'),
   { createCommandsService } = require('./services/commands'),
   { createRetentionService } = require('./services/retention'),
   { createCleanupService } = require('./services/cleanup'),
+  { startDevMode } = require('./dev/virtual'),
   { createUpdatesService } = require('./services/updates'),
 
   { createAgentRouter } = require('./api/agent'),
@@ -154,6 +155,9 @@ function start(configPath){
     app = createApp(config, services);
 
   ensureBootstrapAdmin(services);
+  // DEV_MODE=1 plus THUB_BOOTSTRAP_ADMIN_PASSWORD only: virtual agent,
+  // Clients and jobs to work on the dashboard with (src/dev/virtual.js).
+  services.dev = startDevMode(services, config);
 
   const server = app.listen(config.port, config.host, () => {
     console.log(`Config: ${config.configPath || '(built-in defaults)'}; data: ${config.dataDir}`);

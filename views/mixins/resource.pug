@@ -302,61 +302,92 @@ mixin resourceCard(r, groupsById, returnTo)
   - const local = ((r.host_info && r.host_info.addresses) || []).filter((a) => !isLoopback(a.address))
   - const external = r.remote_addr && !isLoopback(r.remote_addr) ? r.remote_addr : null
   .modal.fade.thub-resource-card(id=`resource-card-${r.id}` tabindex="-1" aria-labelledby=`resource-card-${r.id}-title` aria-hidden="true")
-    .modal-dialog.modal-dialog-centered
+    .modal-dialog.modal-dialog-centered.modal-lg
       .modal-content
         .modal-header
           h5.modal-title(id=`resource-card-${r.id}-title`)= r.name
           button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
-        .modal-body
-          dl.row.mb-0
-            dt.col-sm-4 Name
-            dd.col-sm-8= r.name
-            dt.col-sm-4 Type
-            dd.col-sm-8.text-uppercase= r.type
-            dt.col-sm-4 Status
-            dd.col-sm-8: +resourceBadge(r.status, r.remove_requested_at)
-            +uptimeRows(r, returnTo)
-            +rebootScheduleRow(r, returnTo)
-            dt.col-sm-4 Client version
-            dd.col-sm-8: +versionWithUpdate(r.client_version, updates.latest.client, r.update_to, `/resources/${r.id}/update`, returnTo, true, r.activity && r.activity.state === 'update-hold')
-            dt.col-sm-4 IP addresses
-            dd.col-sm-8
-              if !local.length && !external
-                span.text-body-secondary —
-              ul.list-unstyled.mb-0
-                each a in local
-                  li
-                    code= a.address
-                    span.text-body-secondary.small.ms-2= a.iface ? `${a.iface} · ${a.family}` : a.family
-                if external
-                  li
-                    code= external
-                    span.text-body-secondary.small.ms-2(
-                      data-bs-toggle="tooltip"
-                      data-bs-title="The address the Coordinator last saw this Client connect from"
-                    ) external
-            dt.col-sm-4 Capabilities
-            dd.col-sm-8
-              +capabilitiesList(r.capabilities)
-            dt.col-sm-4 Labels
-            dd.col-sm-8
-              if r.labels.length
-                each l in r.labels
-                  span.badge.text-bg-light.border.me-1= l
-              else
-                span.text-body-secondary —
-            dt.col-sm-4 Groups
-            dd.col-sm-8
-              if r.group_ids.length
-                each gid in r.group_ids
-                  span.badge.text-bg-info.me-1(data-bs-toggle="tooltip" data-bs-title=gid)= groupsById[gid] ? groupsById[gid].name : `(unknown: ${gid})`
-              else
-                span.text-body-secondary —
-            dt.col-sm-4 Busy source / reason
-            dd.col-sm-8= r.busy_source ? `${r.busy_source}${r.busy_reason ? ' — ' + r.busy_reason : ''}` : '—'
-            dt.col-sm-4 Last heartbeat
-            dd.col-sm-8= fmtDate(r.last_heartbeat_at, 'never')
-            if user.role === 'admin'
-              dt.col-sm-4 Actions
-              dd.col-sm-8.mb-0
-                +resourceActions(r, returnTo)
+        .modal-body.pt-2
+          //- Details: what the Client is and reports. Config: settings sent
+          //- to it (today the scheduled reboot); read-only for viewers.
+          ul.nav.nav-tabs.mb-3(role="tablist")
+            li.nav-item(role="presentation")
+              button.nav-link.active(
+                id=`rc-${r.id}-details-tab`
+                type="button"
+                role="tab"
+                data-bs-toggle="tab"
+                data-bs-target=`#rc-${r.id}-details`
+                aria-controls=`rc-${r.id}-details`
+                aria-selected="true"
+              ) Details
+            li.nav-item(role="presentation")
+              button.nav-link(
+                id=`rc-${r.id}-config-tab`
+                type="button"
+                role="tab"
+                data-bs-toggle="tab"
+                data-bs-target=`#rc-${r.id}-config`
+                aria-controls=`rc-${r.id}-config`
+                aria-selected="false"
+              ) Config
+          .tab-content
+            .tab-pane.fade.show.active(id=`rc-${r.id}-details` role="tabpanel" aria-labelledby=`rc-${r.id}-details-tab` tabindex="0")
+              +resourceDetails(r, groupsById, returnTo, local, external)
+            .tab-pane.fade(id=`rc-${r.id}-config` role="tabpanel" aria-labelledby=`rc-${r.id}-config-tab` tabindex="0")
+              dl.row.mb-0
+                +rebootScheduleRow(r, returnTo)
+
+//- The resource card's Details tab.
+mixin resourceDetails(r, groupsById, returnTo, local, external)
+  dl.row.mb-0
+    dt.col-sm-4 Name
+    dd.col-sm-8= r.name
+    dt.col-sm-4 Type
+    dd.col-sm-8.text-uppercase= r.type
+    dt.col-sm-4 Status
+    dd.col-sm-8: +resourceBadge(r.status, r.remove_requested_at)
+    +uptimeRows(r, returnTo)
+    dt.col-sm-4 Client version
+    dd.col-sm-8: +versionWithUpdate(r.client_version, updates.latest.client, r.update_to, `/resources/${r.id}/update`, returnTo, true, r.activity && r.activity.state === 'update-hold')
+    dt.col-sm-4 IP addresses
+    dd.col-sm-8
+      if !local.length && !external
+        span.text-body-secondary —
+      ul.list-unstyled.mb-0
+        each a in local
+          li
+            code= a.address
+            span.text-body-secondary.small.ms-2= a.iface ? `${a.iface} · ${a.family}` : a.family
+        if external
+          li
+            code= external
+            span.text-body-secondary.small.ms-2(
+              data-bs-toggle="tooltip"
+              data-bs-title="The address the Coordinator last saw this Client connect from"
+            ) external
+    dt.col-sm-4 Capabilities
+    dd.col-sm-8.resource-capabilities
+      +capabilitiesList(r.capabilities)
+    dt.col-sm-4 Labels
+    dd.col-sm-8
+      if r.labels.length
+        each l in r.labels
+          span.badge.text-bg-light.border.me-1= l
+      else
+        span.text-body-secondary —
+    dt.col-sm-4 Groups
+    dd.col-sm-8
+      if r.group_ids.length
+        each gid in r.group_ids
+          span.badge.text-bg-info.me-1(data-bs-toggle="tooltip" data-bs-title=gid)= groupsById[gid] ? groupsById[gid].name : `(unknown: ${gid})`
+      else
+        span.text-body-secondary —
+    dt.col-sm-4 Busy source / reason
+    dd.col-sm-8= r.busy_source ? `${r.busy_source}${r.busy_reason ? ' — ' + r.busy_reason : ''}` : '—'
+    dt.col-sm-4 Last heartbeat
+    dd.col-sm-8= fmtDate(r.last_heartbeat_at, 'never')
+    if user.role === 'admin'
+      dt.col-sm-4 Actions
+      dd.col-sm-8.mb-0
+        +resourceActions(r, returnTo)
