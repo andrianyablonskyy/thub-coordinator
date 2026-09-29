@@ -74,7 +74,7 @@ test('jobs.page sorts and pages in SQL, with empty values last', () => {
       jobs.create({
         agentId: agent.id,
         source: 'cli',
-        spec: { target: { type: 'sw' }, firmware: { url: 'https://x/a' }, tests: { url: 'https://x/t' }, ...(user ? { user } : {}) }
+        spec: { target: { type: 'sw' }, command: './run.sh', ...(user ? { user } : {}) }
       }).id),
 
     byUser = (dir) => jobs.page({ sort: 'user', dir, size: 'all' }).rows.map((j) => j.spec.user ?? null);

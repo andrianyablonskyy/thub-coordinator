@@ -17,7 +17,7 @@ const { JOB_STATES, BUSY_SOURCES } = require('@andrian.yablonskyy/thub-common');
 
 // What a job needs a Client to have opted in to (registry matchesTarget).
 function jobNeeds(spec){
-  return { jobImage: Boolean(spec.firmware?.image), jobCommand: Boolean(spec.tests?.command) };
+  return { jobImage: Boolean(spec.image) };
 }
 
 function rowToJob(row){

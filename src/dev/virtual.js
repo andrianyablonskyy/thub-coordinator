@@ -30,8 +30,7 @@ const DEV_AGENT_NAME = 'virtual-agent',
       type: 'sw',
       labels: ['virtual', 'emulator'],
       capabilities: {
-        sw: { image: 'dut-emulator:dev', registry: null, allowDockerHub: true, allowJobImages: true, cpus: 2, memory: '2g' },
-        allowJobCommands: true
+        sw: { image: 'dut-emulator:dev', registry: null, allowDockerHub: true, allowJobImages: true, cpus: 2, memory: '2g' }
       },
       address: '10.0.0.41'
     },
@@ -47,8 +46,7 @@ const DEV_AGENT_NAME = 'virtual-agent',
           usbs: [{ path: '/dev/thub/dut1-usb', index: 1, present: false }],
           relays: [{ channel: 0, baseUrl: 'http://localhost:3000' }],
           power: { method: 'relay' }
-        },
-        allowJobCommands: false
+        }
       },
       address: '10.0.0.42'
     }
@@ -69,12 +67,12 @@ const DEV_AGENT_NAME = 'virtual-agent',
     [0.1, 'cli', 'sw', 'PASSED', 73, 'alice']
   ],
   LOG_SCRIPT = [
-    ['runner', 'downloading firmware (virtual)'],
-    ['runner', 'downloading tests (virtual)'],
+    ['runner', 'downloading app.bin (virtual)'],
+    ['runner', 'cloning yourorg/firmware-tests at main (virtual)'],
     ['flash', 'st-flash write app.bin 0x08000000 ... done (virtual)'],
     ['uart', '[BOOT] app v1.4.0-dev'],
     ['uart', '[INIT] peripherals ok'],
-    ['runner', 'running: run-tests.sh --suite default'],
+    ['runner', 'running: sh -c "./ci/run.sh"'],
     ['runner', 'test_boot ............ ok'],
     ['runner', 'test_uart_echo ....... ok'],
     ['runner', 'test_flash_crc ....... ok'],
@@ -83,8 +81,10 @@ const DEV_AGENT_NAME = 'virtual-agent',
 
   spec = (type, user, extra = {}) => ({
     target: { type, labels: ['virtual'] },
-    firmware: type === 'sw' ? { image: 'alpine:3.20' } : { url: 'https://artifactory.example.com/fw-local/app/1.4.0-dev/app.bin' },
-    tests: { url: 'https://artifactory.example.com/fw-local/app/1.4.0-dev/tests.tar.gz', suite: 'default' },
+    command: './ci/run.sh',
+    downloads: [{ url: 'https://artifactory.example.com/fw-local/app/1.4.0-dev/app.bin' }],
+    ...(type === 'sw' ? { image: 'alpine:3.20' } : {}),
+    git: { url: 'https://github.com/yourorg/firmware-tests.git', ref: 'main', depth: 1 },
     ...(user ? { user } : {}),
     meta: { repo: 'yourorg/firmware', branch: 'main', virtual: true },
     ...extra
@@ -278,7 +278,7 @@ function startDevMode(services, config, env = process.env){
     '*** DEV MODE (DEV_MODE=1): virtual Clients virtual-sw-01 / virtual-hw-01 are running in-process' +
       `${seeded ? `, and ${seeded} past jobs + 3 live ones were seeded` : ''}.\n` +
       `*** Virtual agent token: ${DEV_AGENT_TOKEN}\n` +
-      `***   e.g. thub --url ${config.publicUrl} --token ${DEV_AGENT_TOKEN} run --type sw --image alpine --tests https://x/t.tgz`
+      `***   e.g. thub --url ${config.publicUrl} --token ${DEV_AGENT_TOKEN} run --type sw --docker-image alpine --command 'uname -a'`
   );
   return virtual;
 }

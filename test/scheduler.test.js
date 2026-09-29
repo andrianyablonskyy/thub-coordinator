@@ -68,8 +68,7 @@ function registerResource(registry, { name, type, labels = [], groups = [], clie
 function makeSpec(overrides = {}){
   return {
     target: { type: 'sw', labels: [] },
-    firmware: { url: 'https://x/app.bin' },
-    tests: { url: 'https://x/tests.tar.gz' },
+    command: './run.sh',
     ...overrides
   };
 }
@@ -528,7 +527,7 @@ test('a removed Client re-registers as a fresh resource under the same name', ()
 test('a job-supplied Docker image only goes to SW Clients that allow it; otherwise 422', () => {
   const { registry, agents, jobs, scheduler } = buildTestServices(),
     { agent } = agents.create({ name: 'dev', kind: 'cli' }),
-    imageJob = { target: { type: 'sw', labels: [] }, firmware: { image: 'alpine' }, tests: { url: 'https://x/t.tar.gz' } },
+    imageJob = { target: { type: 'sw', labels: [] }, image: 'alpine', command: './run.sh' },
     strict = registerResource(registry, { name: 'sw-strict', type: 'sw' });
   registry.heartbeat(strict.id, { state: 'idle' });
 
@@ -544,25 +543,25 @@ test('a job-supplied Docker image only goes to SW Clients that allow it; otherwi
 
   const fileJob = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
   scheduler.runPass();
-  assert.equal(jobs.get(fileJob.id).resource_id, strict.id); // firmware URLs still go anywhere
+  assert.equal(jobs.get(fileJob.id).resource_id, strict.id); // jobs without an image still go anywhere
 });
 
-test('a job-supplied command only goes to Clients with allowJobCommands; otherwise 422 naming it', () => {
+test('every job carries its command and runs on any matching Client; an old-Agent spec is refused', () => {
   const { registry, agents, jobs, scheduler } = buildTestServices(),
     { agent } = agents.create({ name: 'dev', kind: 'cli' }),
-    commandJob = makeSpec({ tests: { url: 'https://x/t.tar.gz', command: 'make test' } }),
-    plain = registerResource(registry, { name: 'sw-plain', type: 'sw' });
-  registry.heartbeat(plain.id, { state: 'idle' });
+    r = registerResource(registry, { name: 'sw-any', type: 'sw' });
+  registry.heartbeat(r.id, { state: 'idle' });
 
-  assert.throws(() => jobs.create({ agentId: agent.id, source: 'cli', spec: commandJob }), /allowJobCommands/);
-
-  const { resourceId } = registry.registerAuto({
-    clientId: 'c-cmd', name: 'sw-cmd', type: 'sw', labels: [], capabilities: { sw: { image: 'emu' }, allowJobCommands: true }
-  });
-  registry.heartbeat(resourceId, { state: 'idle' });
-  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: commandJob });
+  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ command: 'make test', args: ['-j4'] }) });
   scheduler.runPass();
-  assert.equal(jobs.get(job.id).resource_id, resourceId);
+  assert.equal(jobs.get(job.id).resource_id, r.id);
+  assert.equal(jobs.get(job.id).spec.command, 'make test');
+
+  assert.throws(
+    () => jobs.create({ agentId: agent.id, source: 'cli', spec: { target: { type: 'sw' }, firmware: { url: 'https://x/a' }, tests: { url: 'https://x/t' } } }),
+    /older Agent.*--command/
+  );
+  assert.throws(() => jobs.create({ agentId: agent.id, source: 'cli', spec: { target: { type: 'sw' } } }), /command/);
 });
 
 test('reboot schedule: validated, then resent on heartbeats until the Client reports applying it', () => {

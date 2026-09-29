@@ -67,7 +67,6 @@ const MAX_DEVICES = 8,
     present: typeof d?.present === 'boolean' ? d.present : null
   });
 
-// Plus `allowJobCommands` (either type): runs a job's own `tests.command`.
 function sanitizeCapabilities(caps){
   if (!caps || typeof caps !== 'object'){
     return null;
@@ -76,7 +75,6 @@ function sanitizeCapabilities(caps){
   return typed
     ? {
       ...typed,
-      allowJobCommands: caps.allowJobCommands === true,
       // Whether the host has the root reboot helper (thub-client-reboot.path)
       // a scheduled reboot needs; unknown (null) for older Clients.
       rebootSupported: typeof caps.rebootSupported === 'boolean' ? caps.rebootSupported : null
@@ -498,14 +496,12 @@ function createRegistryService(db, { bus, events }){
   }
 
   // `needs`: what a job brings that a Client must have opted in to run —
-  // jobImage (firmware.image; sw.allowJobImages) and jobCommand
-  // (tests.command; allowJobCommands).
+  // jobImage (the job's own Docker image; sw.allowJobImages).
   function matchesTarget(r, labels, groupId, resourceId, needs = {}){
     return labels.every((l) => r.labels.includes(l)) &&
       (!groupId || r.group_ids.includes(groupId)) &&
       (!resourceId || r.id === resourceId) &&
-      (!needs.jobImage || r.capabilities?.sw?.allowJobImages === true) &&
-      (!needs.jobCommand || r.capabilities?.allowJobCommands === true);
+      (!needs.jobImage || r.capabilities?.sw?.allowJobImages === true);
   }
 
   // Admin: remove a resource from the registry (dashboard "Remove"). Refused

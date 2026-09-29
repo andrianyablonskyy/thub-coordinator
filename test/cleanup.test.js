@@ -55,7 +55,7 @@ function setup(jobRetention = 'forever'){
 
   // A job that finished at `finishedAt` (or is still queued, if null), with a log line.
   function job(finishedAt){
-    const spec = { target: { type: 'sw' }, firmware: { url: 'https://x/a' }, tests: { url: 'https://x/t' } },
+    const spec = { target: { type: 'sw' }, command: './run.sh' },
       j = jobs.create({ agentId: agent.id, source: 'cli', spec });
     db.prepare('INSERT INTO job_logs (job_id, seq, ts, stream, line) VALUES (?, 1, ?, \'runner\', ?)').run(j.id, NOW.toISOString(), 'x'.repeat(2000));
     if (finishedAt){
