@@ -1,6 +1,6 @@
 #log-viewer {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   white-space: pre-wrap;
   word-break: break-all;
 }
@@ -39,19 +39,12 @@
   text-align: left;
 }
 
-/* Resource card (views/mixins/resource.pug): 30% wider than Bootstrap's
-   default 500px modal. Only applies from 576px up, like Bootstrap's own
-   width — below that the modal fills the screen as before. */
-.modal.thub-resource-card {
-  --bs-modal-width: calc(500px * 1.3);
-}
-
 /* A status badge inside a page heading (e.g. the job page's state): badges
    are 0.75em of their parent, which in an h4 makes them oversized — keep
    it close to the badges in tables, centered on the heading text. */
 .thub-heading-badge {
-  font-size: 0.55em;
-  vertical-align: middle;
+  font-size: 0.6rem;
+  vertical-align: super;
 }
 
 /* Toast text (layout.pug): "\n" in a flash message is a line break, and a
@@ -60,4 +53,8 @@
   white-space: pre-line;
   overflow-wrap: anywhere;
   min-width: 0;
+}
+
+.resource-capabilities {
+  font-size: 0.75rem;
 }
