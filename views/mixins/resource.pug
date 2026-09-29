@@ -417,6 +417,47 @@ mixin rebootButton(r, returnTo)
       )
         i.bi.bi-power
 
+//- Export / Import the Client's config file as JSON (card's Actions row,
+//- icons only). Import: public/js/config-import.js reads the chosen file
+//- into the form and submits it (confirmed first); the Client applies it on
+//- its next heartbeat. A Client that doesn't report its config file is too
+//- old to apply more than the hw/sw section — Import is off for it.
+mixin configTransferButtons(r, returnTo)
+  a.btn.btn-sm.btn-outline-secondary.ms-1(
+    href=`/resources/${r.id}/config/export`
+    download
+    aria-label=`Export ${r.name}'s config`
+    data-bs-toggle="tooltip"
+    data-bs-title="Export the Client's config file (JSON; its secrets left out)"
+  )
+    i.bi.bi-download
+  if !r.client_config_file
+    span.d-inline-block.ms-1(tabindex="0" data-bs-toggle="tooltip" data-bs-title="Import unavailable: this Client is too old to report its config file — update it")
+      button.btn.btn-sm.btn-outline-secondary(type="button" disabled style="pointer-events: none;" aria-label="Import config")
+        i.bi.bi-upload
+  else
+    form.d-inline.ms-1(
+      method="post"
+      action=`/resources/${r.id}/config/import`
+      data-config-import
+      data-resource-name=r.name
+      data-confirm-title=`Import config into ${r.name}?`
+      data-confirm-ok="Import"
+      data-confirm-tone="primary"
+    )
+      input(type="hidden" name="returnTo" value=returnTo)
+      input(type="hidden" name="file")
+      input(type="hidden" name="fileName")
+      input.d-none(type="file" accept=".json,application/json" data-config-import-file)
+      button.btn.btn-sm.btn-outline-secondary(
+        type="button"
+        aria-label=`Import a config into ${r.name}`
+        data-config-import-pick
+        data-bs-toggle="tooltip"
+        data-bs-title="Import a config file (JSON) — joinKey, coordinatorUrl and name in it are ignored"
+      )
+        i.bi.bi-upload
+
 //- The resource card's Details tab.
 mixin resourceDetails(r, groupsById, returnTo, local, external)
   dl.row.mb-0
@@ -500,3 +541,4 @@ mixin resourceDetails(r, groupsById, returnTo, local, external)
       dd.col-sm-8.mb-0
         +resourceActions(r, returnTo)
         +rebootButton(r, returnTo)
+        +configTransferButtons(r, returnTo)

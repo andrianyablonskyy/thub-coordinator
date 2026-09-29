@@ -14,7 +14,8 @@
 'use strict';
 
 const { v4: uuid } = require('uuid'),
-  { RESOURCE_STATES, BUSY_SOURCES, ACTIVE_JOB_STATES, compareVersions, parseCron, validateClientConfig } = require('@andrian.yablonskyy/thub-common'),
+  { RESOURCE_STATES, BUSY_SOURCES, ACTIVE_JOB_STATES, compareVersions, parseCron, validateClientConfig, importClientConfigFile,
+    shareableClientConfigFile } = require('@andrian.yablonskyy/thub-common'),
   { generateToken, hashToken } = require('./tokens');
 
 function rowToResource(row){
@@ -29,6 +30,8 @@ function rowToResource(row){
     capabilities: row.capabilities ? JSON.parse(row.capabilities) : null,
     client_config: row.client_config ? JSON.parse(row.client_config) : null,
     config_desired: row.config_desired ? JSON.parse(row.config_desired) : null,
+    client_config_file: row.client_config_file ? JSON.parse(row.client_config_file) : null,
+    config_import: row.config_import ? JSON.parse(row.config_import) : null,
     usb_scan: row.usb_scan ? JSON.parse(row.usb_scan) : null,
     activity: row.activity ? JSON.parse(row.activity) : null
   };
@@ -195,7 +198,8 @@ function createRegistryService(db, { bus, events }){
   // Config tab. Stored as reported, if it's a plain object of sane size.
   // A dashboard rename (name_override) wins over the name the Client
   // presents; that one is kept as reported_name.
-  function registerAuto({ config, ...registration }){
+  // And `configFile`: the whole config file (secrets excluded), for Export.
+  function registerAuto({ config, configFile, ...registration }){
     const known = registration.clientId ? getByClientId(registration.clientId) : null,
       result = registerAutoInner({ ...registration, name: known?.name_override || registration.name });
     db.prepare('UPDATE resources SET reported_name = ? WHERE id = ?').run(registration.name, result.resourceId);
@@ -203,6 +207,12 @@ function createRegistryService(db, { bus, events }){
       const json = JSON.stringify(config);
       if (json.length <= 64 * 1024){
         db.prepare('UPDATE resources SET client_config = ? WHERE id = ?').run(json, result.resourceId);
+      }
+    }
+    if (configFile && typeof configFile === 'object' && !Array.isArray(configFile)){
+      const json = JSON.stringify(shareableClientConfigFile(configFile));
+      if (json.length <= 64 * 1024){
+        db.prepare('UPDATE resources SET client_config_file = ? WHERE id = ?').run(json, result.resourceId);
       }
     }
     return result;
@@ -653,13 +663,59 @@ function createRegistryService(db, { bus, events }){
     return get(resourceId);
   }
 
-  // { revision, type, config } while the Client hasn't applied the saved one.
+  // { revision, type, config[, file] } while the Client hasn't applied the
+  // saved one; `file`: an import's other fields, until it's applied.
   function pendingConfig(resourceId){
     const r = get(resourceId);
     if (!r || !r.config_desired || r.config_applied_revision >= r.config_revision){
       return null;
     }
-    return { revision: r.config_revision, type: r.type, config: r.config_desired };
+    const file = pendingImport(r);
+    return { revision: r.config_revision, type: r.type, config: r.config_desired, ...(file ? { file } : {}) };
+  }
+
+  function pendingImport(r){
+    return r.config_import && r.config_import.revision > r.config_applied_revision ? r.config_import.fields : null;
+  }
+
+  // Import (resource card): a whole config file, as the Client's next config
+  // revision — its hw/sw section as if saved on the Config tabs (the one
+  // already there if the file has none), its other fields besides. Never
+  // taken from it: joinKey, coordinatorUrl, name, the Client's identity and
+  // host paths, secrets (importClientConfigFile). Returns { resource, ignored }.
+  function importClientConfig(resourceId, file, { by } = {}){
+    const r = get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    const { valid, errors, section, fields, ignored } = importClientConfigFile(r.type, file);
+    if (!valid){
+      throw Object.assign(new Error(`Can't import this config into ${r.name}: ${errors.join('; ')}`), { status: 400 });
+    }
+    const desired = section || r.config_desired || r.client_config;
+    if (!desired){
+      throw Object.assign(new Error(`Can't import this config into ${r.name}: it has no "${r.type}" section, and the Client hasn't reported one`),
+        { status: 400 });
+    }
+    const revision = r.config_revision + 1;
+    db.prepare(`UPDATE resources SET config_desired = ?, config_revision = ?, config_error = NULL, config_import = ?
+                WHERE id = ?`).run(JSON.stringify(desired), revision, JSON.stringify({ revision, fields }), resourceId);
+    events.record('resource', resourceId, 'resource.config_imported', { by, revision, fields: Object.keys(fields), ignored });
+    return { resource: get(resourceId), ignored };
+  }
+
+  // Export (resource card): the Client's config file as it last reported it
+  // (secrets excluded), with what's saved for it but not applied yet — so
+  // exporting right after an edit or import gives what the Client will run.
+  // A Client too old to report its file gets what the Coordinator knows.
+  function exportClientConfig(resourceId){
+    const r = get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    const base = r.client_config_file || { name: r.reported_name || r.name, type: r.type, labels: r.labels },
+      section = r.config_desired || r.client_config;
+    return { ...base, ...(pendingImport(r) || {}), type: r.type, ...(section ? { [r.type]: section } : {}) };
   }
 
   // Scheduled host reboot (resource card): a cron expression, validated
@@ -762,6 +818,8 @@ function createRegistryService(db, { bus, events }){
     pendingRebootSchedule,
     setClientConfig,
     pendingConfig,
+    importClientConfig,
+    exportClientConfig,
     rename,
     requestUsbScan,
     storeUsbScan,

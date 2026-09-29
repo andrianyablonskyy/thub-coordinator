@@ -689,6 +689,37 @@ test('capabilities from the dashboard: reported config stored, saved at a new re
   assert.match(registry.get(resourceId).config_error, /refused: bad/);
 });
 
+test('config export/import: exported from the reported file (+ what\'s pending); an import goes out with set-config until applied', () => {
+  const { registry } = buildTestServices(),
+    { resourceId } = registry.registerAuto({
+      clientId: 'c-io', name: 'dut1', type: 'sw', labels: [], capabilities: { sw: { image: 'emu' } },
+      config: { image: 'emu:1' },
+      configFile: { coordinatorUrl: 'https://c', name: 'dut1', joinKey: 'k', type: 'sw', labels: [], sw: { image: 'emu:1', registryAuth: { password: 'x' } },
+        artifactory: { token: 'secret', allowedArtifactPrefixes: [] } }
+    });
+  assert.deepEqual(registry.exportClientConfig(resourceId), {
+    coordinatorUrl: 'https://c', name: 'dut1', joinKey: 'k', type: 'sw', labels: [], sw: { image: 'emu:1' }, artifactory: { allowedArtifactPrefixes: [] }
+  });
+
+  const { resource, ignored } = registry.importClientConfig(resourceId, {
+    coordinatorUrl: 'https://evil', name: 'other', joinKey: 'x', type: 'sw', labels: ['board:b'], sources: { allowedPrefixes: ['*'] }, sw: { image: 'emu:2' }
+  }, { by: 'admin' });
+  assert.deepEqual(ignored, ['coordinatorUrl', 'name', 'joinKey']);
+  assert.equal(resource.config_revision, 1);
+  assert.deepEqual(registry.pendingConfig(resourceId),
+    { revision: 1, type: 'sw', config: { image: 'emu:2' }, file: { labels: ['board:b'], sources: { allowedPrefixes: ['*'] } } });
+  const exported = registry.exportClientConfig(resourceId);
+  assert.deepEqual([exported.coordinatorUrl, exported.name, exported.labels, exported.sw], ['https://c', 'dut1', ['board:b'], { image: 'emu:2' }]);
+
+  registry.setClientConfig(resourceId, { image: 'emu:3' }); // a Config tab Save meanwhile: the import still goes with it
+  assert.deepEqual(registry.pendingConfig(resourceId).file, { labels: ['board:b'], sources: { allowedPrefixes: ['*'] } });
+  registry.heartbeat(resourceId, { state: 'idle', configRevision: 2 });
+  assert.equal(registry.pendingConfig(resourceId), null);
+
+  assert.throws(() => registry.importClientConfig(resourceId, { type: 'hw' }), /HW Client config, but this is a SW Client/);
+  assert.throws(() => registry.importClientConfig(resourceId, { sw: { cpus: -1 } }), /sw\.cpus/);
+});
+
 test('rename from the dashboard: kept across re-registration, unique, and resettable to the Client\'s own name', () => {
   const { registry } = buildTestServices(),
     reg = (name) => registry.get(registry.registerAuto({ clientId: 'c-ren', name, type: 'sw', labels: [] }).resourceId),

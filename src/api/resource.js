@@ -51,7 +51,7 @@ function createResourceRouter({ services, config }){
   // the resource by name (see registry.registerAuto).
   router.post('/resources/register', requireJoinKey(config), (req, res, next) => {
     try {
-      const { clientId, name, type, labels, groups, hostInfo, capabilities, config: clientConfig } = req.body;
+      const { clientId, name, type, labels, groups, hostInfo, capabilities, config: clientConfig, configFile } = req.body;
       if (!clientId){
         return res.status(400).json({ error: 'clientId is required (persisted in the Client\'s .client-id file)' });
       }
@@ -67,6 +67,7 @@ function createResourceRouter({ services, config }){
         hostInfo,
         capabilities,
         config: clientConfig,
+        configFile,
         remoteAddr: req.ip,
         clientVersion: appVersion(req, 'client')
       });

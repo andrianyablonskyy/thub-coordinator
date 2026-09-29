@@ -493,6 +493,42 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, '/resources'));
   });
 
+  // Export (resource card, admins — the file holds the join key): the
+  // Client's config file as JSON, secrets excluded.
+  router.get('/resources/:id/config/export', requireAdminRole, (req, res) => {
+    try {
+      const r = services.registry.get(req.params.id),
+        file = services.registry.exportClientConfig(req.params.id);
+      res.attachment(`${r.name.replace(/[^A-Za-z0-9._-]+/g, '_')}.json`).type('application/json').send(JSON.stringify(file, null, 2) + '\n');
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+      res.redirect('/resources');
+    }
+  });
+
+  // Import (resource card, public/js/config-import.js): a config file, applied
+  // by the Client on its next heartbeat like a Config tab Save.
+  router.post('/resources/:id/config/import', requireAdminRole, (req, res) => {
+    try {
+      let file;
+      try {
+        file = JSON.parse(req.body.file || '');
+      }
+      catch (err){
+        throw Object.assign(new Error(`${req.body.fileName || 'The file'} isn't valid JSON: ${err.message}`), { status: 400 });
+      }
+      const { resource: r, ignored } = services.registry.importClientConfig(req.params.id, file, { by: req.session.user.username });
+      flash(req, 'success', `Config imported into ${r.name} (revision ${r.config_revision}).\n` +
+        'The Client applies it on its next heartbeat, then restarts once it has no job running.' +
+        (ignored.length ? `\nIgnored: ${ignored.join(', ')}.` : ''));
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/resources'));
+  });
+
   // Scheduled host reboot (resource card): save a cron expression, or clear
   // it; the Client applies it on its next heartbeat.
   router.post('/resources/:id/reboot-schedule', requireAdminRole, (req, res) => {
