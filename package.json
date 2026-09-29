@@ -1,7 +1,7 @@
 {
   "name": "@andrian.yablonskyy/thub-coordinator",
-  "version": "1.0.30",
-  "description": "TestHub Coordinator \u2014 job queue, resource registry, scheduler, heartbeat monitor, log/artifact store and web dashboard",
+  "version": "1.0.31",
+  "description": "TestHub Coordinator — job queue, resource registry, scheduler, heartbeat monitor, log/artifact store and web dashboard",
   "main": "src/server.js",
   "engines": {
     "node": ">=20"
