@@ -13,4 +13,6 @@ Wants=network-online.target
 Type=oneshot
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/bin/node /usr/lib/node_modules/@andrian.yablonskyy/thub-coordinator/scripts/self-update-helper.js /var/lib/thub/.thub/update-request.json thub
-TimeoutStartSec=15min
+# Room for npm's retries while a just-published version isn't downloadable
+# yet (thub-common npmInstallGlobal: up to ~7.5 min of waiting).
+TimeoutStartSec=30min
