@@ -14,7 +14,7 @@
 'use strict';
 
 const { v4: uuid } = require('uuid'),
-  { RESOURCE_STATES, BUSY_SOURCES, ACTIVE_JOB_STATES, compareVersions, parseCron } = require('@andrian.yablonskyy/thub-common'),
+  { RESOURCE_STATES, BUSY_SOURCES, ACTIVE_JOB_STATES, compareVersions, parseCron, validateClientConfig } = require('@andrian.yablonskyy/thub-common'),
   { generateToken, hashToken } = require('./tokens');
 
 function rowToResource(row){
@@ -27,6 +27,9 @@ function rowToResource(row){
     group_ids: JSON.parse(row.group_ids || '[]'),
     host_info: row.host_info ? JSON.parse(row.host_info) : null,
     capabilities: row.capabilities ? JSON.parse(row.capabilities) : null,
+    client_config: row.client_config ? JSON.parse(row.client_config) : null,
+    config_desired: row.config_desired ? JSON.parse(row.config_desired) : null,
+    usb_scan: row.usb_scan ? JSON.parse(row.usb_scan) : null,
     activity: row.activity ? JSON.parse(row.activity) : null
   };
 }
@@ -187,7 +190,25 @@ function createRegistryService(db, { bus, events }){
   // this registration is allowed to reclaim it. Anything else (IDLE, BUSY,
   // MAINTENANCE, REGISTERED-but-just-created) means a process might still
   // be actively using that identity, so it stays a hard conflict.
-  function registerAuto({ clientId, name, type, labels = [], groups = [], hostInfo, capabilities, remoteAddr, clientVersion = null }){
+  // Plus `config`: the editable part of the Client's config (its hw or sw
+  // section, secrets excluded) — the starting point for the resource card's
+  // Config tab. Stored as reported, if it's a plain object of sane size.
+  // A dashboard rename (name_override) wins over the name the Client
+  // presents; that one is kept as reported_name.
+  function registerAuto({ config, ...registration }){
+    const known = registration.clientId ? getByClientId(registration.clientId) : null,
+      result = registerAutoInner({ ...registration, name: known?.name_override || registration.name });
+    db.prepare('UPDATE resources SET reported_name = ? WHERE id = ?').run(registration.name, result.resourceId);
+    if (config && typeof config === 'object' && !Array.isArray(config)){
+      const json = JSON.stringify(config);
+      if (json.length <= 64 * 1024){
+        db.prepare('UPDATE resources SET client_config = ? WHERE id = ?').run(json, result.resourceId);
+      }
+    }
+    return result;
+  }
+
+  function registerAutoInner({ clientId, name, type, labels = [], groups = [], hostInfo, capabilities, remoteAddr, clientVersion = null }){
     const resourceToken = generateToken('res'),
       remote = normalizeRemoteAddr(remoteAddr);
     hostInfo = {
@@ -307,7 +328,10 @@ function createRegistryService(db, { bus, events }){
   // Reconcile status from a heartbeat's self-reported state (§5.1).
   function heartbeat(
     resourceId,
-    { state, activeJobId, localLock, metrics, addresses, remoteAddr, clientVersion = null, hostUptimeSec, activity, rebootSchedule } = {}
+    {
+      state, activeJobId, localLock, metrics, addresses, remoteAddr, clientVersion = null, hostUptimeSec, activity, rebootSchedule,
+      configRevision, configError
+    } = {}
   ){
     const resource = get(resourceId);
     if (!resource){
@@ -338,6 +362,16 @@ function createRegistryService(db, { bus, events }){
       nextStatus = RESOURCE_STATES.IDLE;
       busySource = null;
       busyReason = null;
+    }
+
+    // The dashboard config revision the Client has applied, and why it last
+    // refused one — older Clients report neither.
+    if (Number.isInteger(configRevision)){
+      db.prepare('UPDATE resources SET config_applied_revision = ?, config_error = ? WHERE id = ?').run(
+        configRevision,
+        typeof configError === 'string' && configError ? configError.slice(0, 1000) : null,
+        resourceId
+      );
     }
 
     // The reboot schedule the Client applies (null: none); older Clients
@@ -539,6 +573,95 @@ function createRegistryService(db, { bus, events }){
     return db.prepare('SELECT * FROM resources WHERE remove_requested_at IS NOT NULL').all().map(rowToResource);
   }
 
+  // "Connected USB devices" tab: Refresh asks the Client to run `lsusb` on
+  // its next heartbeat (a scan-usb command, delivered by the caller's bus
+  // via commands). Only while it's connected — it would otherwise run
+  // whenever it next reconnects.
+  function requestUsbScan(resourceId, { by } = {}){
+    const r = get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    if (r.status === RESOURCE_STATES.OUT_OF_SERVICE || !r.last_heartbeat_at){
+      throw Object.assign(new Error(`${r.name} is offline — it can only be scanned while it's connected`), { status: 409 });
+    }
+    const requestId = uuid(),
+      requestedAt = new Date().toISOString();
+    db.prepare('UPDATE resources SET usb_scan_requested_at = ?, usb_scan_request_id = ? WHERE id = ?').run(requestedAt, requestId, resourceId);
+    bus.emit('command', { resourceId, command: 'scan-usb', requestId });
+    events.record('resource', resourceId, 'resource.usb_scan_requested', { by });
+    return { requestId, requestedAt };
+  }
+
+  // The Client's answer (POST /resources/:id/usb-scan): kept only for the
+  // request still pending, capped in size.
+  function storeUsbScan(resourceId, { requestId, output, error }){
+    const r = get(resourceId);
+    if (!r || !requestId || requestId !== r.usb_scan_request_id){
+      return false;
+    }
+    const scan = {
+      output: typeof output === 'string' ? output.slice(0, 64 * 1024) : '',
+      error: typeof error === 'string' && error ? error.slice(0, 1000) : null,
+      at: new Date().toISOString()
+    };
+    db.prepare('UPDATE resources SET usb_scan = ?, usb_scan_request_id = NULL WHERE id = ?').run(JSON.stringify(scan), resourceId);
+    return true;
+  }
+
+  // Rename from the dashboard (resource card). The new name must be free;
+  // it's kept across the Client's re-registrations (name_override). An
+  // empty name — or the Client's own — goes back to the Client's own name.
+  // Jobs reference the resource id, so their history follows the rename.
+  function rename(resourceId, newName, { by } = {}){
+    const r = get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    const wanted = typeof newName === 'string' ? newName.trim() : '',
+      name = wanted || r.reported_name || r.name;
+    if (!/^[A-Za-z0-9._@+-]{1,64}$/.test(name)){
+      throw Object.assign(new Error('A Client name is 1-64 letters, digits or . _ @ + - (no spaces)'), { status: 400 });
+    }
+    const owner = getByName(name);
+    if (owner && owner.id !== resourceId){
+      throw Object.assign(new Error(`The name "${name}" is already used by another Client (${owner.status})`), { status: 409 });
+    }
+    const override = name === r.reported_name ? null : name;
+    db.prepare('UPDATE resources SET name = ?, name_override = ? WHERE id = ?').run(name, override, resourceId);
+    if (name !== r.name){
+      events.record('resource', resourceId, 'resource.renamed', { from: r.name, to: name, by });
+    }
+    return get(resourceId);
+  }
+
+  // Client capabilities edited on the resource card's Config tab: validated
+  // like the Client itself will, stored at the next revision, and delivered
+  // with its next heartbeat (pendingConfig).
+  function setClientConfig(resourceId, config, { by } = {}){
+    const r = get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    const { valid, errors } = validateClientConfig(r.type, config);
+    if (!valid){
+      throw Object.assign(new Error(`Invalid ${r.type.toUpperCase()} config: ${errors.join('; ')}`), { status: 400 });
+    }
+    db.prepare('UPDATE resources SET config_desired = ?, config_revision = config_revision + 1, config_error = NULL WHERE id = ?')
+      .run(JSON.stringify(config), resourceId);
+    events.record('resource', resourceId, 'resource.config_saved', { by, revision: get(resourceId).config_revision });
+    return get(resourceId);
+  }
+
+  // { revision, type, config } while the Client hasn't applied the saved one.
+  function pendingConfig(resourceId){
+    const r = get(resourceId);
+    if (!r || !r.config_desired || r.config_applied_revision >= r.config_revision){
+      return null;
+    }
+    return { revision: r.config_revision, type: r.type, config: r.config_desired };
+  }
+
   // Scheduled host reboot (resource card): a cron expression, validated
   // here; '' or null clears it. Delivered on the Client's next heartbeat.
   function setRebootSchedule(resourceId, cron, { by } = {}){
@@ -603,6 +726,11 @@ function createRegistryService(db, { bus, events }){
     remove,
     setRebootSchedule,
     pendingRebootSchedule,
+    setClientConfig,
+    pendingConfig,
+    rename,
+    requestUsbScan,
+    storeUsbScan,
     requestRemoval,
     pendingRemovals,
     findIdleCandidates,

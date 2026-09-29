@@ -425,6 +425,74 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, '/resources'));
   });
 
+  // "Connected USB devices" tab (public/js/usb-scan.js): Refresh queues a
+  // scan-usb for the Client's next heartbeat; the tab then polls the GET
+  // until the answer is in. JSON both ways — the modal stays open.
+  function usbScanView(req, r){
+    const tz = req.session.user.timezone || 'UTC',
+      scan = r.usb_scan;
+    return {
+      pending: Boolean(r.usb_scan_request_id),
+      requestedAt: r.usb_scan_requested_at,
+      scan: scan ? { ...scan, atText: formatDateTime(scan.at, { timeZone: tz }) } : null
+    };
+  }
+
+  router.post('/resources/:id/usb-scan', requireAdminRole, (req, res) => {
+    try {
+      services.registry.requestUsbScan(req.params.id, { by: req.session.user.username });
+      res.json(usbScanView(req, services.registry.get(req.params.id)));
+    }
+    catch (err){
+      res.status(err.status || 500).json({ error: err.message });
+    }
+  });
+
+  router.get('/resources/:id/usb-scan', (req, res) => {
+    const r = services.registry.get(req.params.id);
+    if (!r){
+      return res.status(404).json({ error: 'Unknown resource' });
+    }
+    res.set('Cache-Control', 'no-store').json(usbScanView(req, r));
+  });
+
+  // Rename (resource card, Name row); empty = back to the Client's own name.
+  router.post('/resources/:id/rename', requireAdminRole, (req, res) => {
+    try {
+      const before = services.registry.get(req.params.id)?.name,
+        r = services.registry.rename(req.params.id, req.body.name, { by: req.session.user.username });
+      if (r.name !== before){
+        flash(req, 'success', `Renamed "${before}" to "${r.name}".` + (r.name_override ? '' : '\nThat\'s the Client\'s own name again.'));
+      }
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/resources'));
+  });
+
+  // Capabilities (resource card, Config tab): public/js/client-config.js
+  // sends the edited hw/sw section as JSON in `config`. Applied by the Client
+  // on its next heartbeat, then it restarts once idle.
+  router.post('/resources/:id/config', requireAdminRole, (req, res) => {
+    try {
+      let config;
+      try {
+        config = JSON.parse(req.body.config || '');
+      }
+      catch {
+        throw Object.assign(new Error('The config form sent no valid JSON — reload the page and try again'), { status: 400 });
+      }
+      const r = services.registry.setClientConfig(req.params.id, config, { by: req.session.user.username });
+      flash(req, 'success', `Capabilities of ${r.name} saved (revision ${r.config_revision}).\n` +
+        'The Client applies them on its next heartbeat, then restarts once it has no job running.');
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/resources'));
+  });
+
   // Scheduled host reboot (resource card): save a cron expression, or clear
   // it; the Client applies it on its next heartbeat.
   router.post('/resources/:id/reboot-schedule', requireAdminRole, (req, res) => {

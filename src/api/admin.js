@@ -51,6 +51,28 @@ function createAdminRouter({ services }){
     res.status(204).end();
   });
 
+  // Rename a Client: { name } ("" = back to its own name).
+  router.post('/resources/:id/rename', (req, res, next) => {
+    try {
+      const r = services.registry.rename(req.params.id, req.body?.name);
+      res.json({ id: r.id, name: r.name, nameOverride: r.name_override, clientName: r.reported_name });
+    }
+    catch (err){
+      next(err);
+    }
+  });
+
+  // A Client's capabilities (its hw or sw config section): { config }.
+  router.post('/resources/:id/config', (req, res, next) => {
+    try {
+      const r = services.registry.setClientConfig(req.params.id, req.body?.config);
+      res.json({ id: r.id, revision: r.config_revision, applied: r.config_applied_revision });
+    }
+    catch (err){
+      next(err);
+    }
+  });
+
   // Reboot a Client's host now (its running job is canceled first).
   router.post('/resources/:id/reboot', (req, res, next) => {
     try {

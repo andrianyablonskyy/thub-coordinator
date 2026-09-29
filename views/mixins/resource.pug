@@ -1,3 +1,5 @@
+include client-config
+
 //- Resource actions and the resource info card (modal), shared by the
 //- Overview and Resources pages. `returnTo` is the page the action forms
 //- redirect back to.
@@ -323,6 +325,16 @@ mixin resourceCard(r, groupsById, returnTo)
               ) Details
             li.nav-item(role="presentation")
               button.nav-link(
+                id=`rc-${r.id}-usb-tab`
+                type="button"
+                role="tab"
+                data-bs-toggle="tab"
+                data-bs-target=`#rc-${r.id}-usb`
+                aria-controls=`rc-${r.id}-usb`
+                aria-selected="false"
+              ) Connected USB devices
+            li.nav-item(role="presentation")
+              button.nav-link(
                 id=`rc-${r.id}-config-tab`
                 type="button"
                 role="tab"
@@ -334,9 +346,37 @@ mixin resourceCard(r, groupsById, returnTo)
           .tab-content
             .tab-pane.fade.show.active(id=`rc-${r.id}-details` role="tabpanel" aria-labelledby=`rc-${r.id}-details-tab` tabindex="0")
               +resourceDetails(r, groupsById, returnTo, local, external)
+            .tab-pane.fade(id=`rc-${r.id}-usb` role="tabpanel" aria-labelledby=`rc-${r.id}-usb-tab` tabindex="0")
+              +usbScanPane(r)
             .tab-pane.fade(id=`rc-${r.id}-config` role="tabpanel" aria-labelledby=`rc-${r.id}-config-tab` tabindex="0")
               dl.row.mb-0
                 +rebootScheduleRow(r, returnTo)
+              +clientConfigForm(r, returnTo)
+
+//- "Connected USB devices" (resource card tab): the Client's `lsusb`, run
+//- only on Refresh (admins; public/js/usb-scan.js fetches and fills it in).
+mixin usbScanPane(r)
+  - const offline = r.status === 'OUT_OF_SERVICE' || !r.last_heartbeat_at
+  - const scan = r.usb_scan
+  div(data-usb-scan=`/resources/${r.id}/usb-scan` data-pending=r.usb_scan_request_id ? '1' : null data-requested-at=r.usb_scan_requested_at)
+    .d-flex.align-items-center.gap-2.mb-2
+      if user.role === 'admin'
+        if offline
+          span.d-inline-block(tabindex="0" data-bs-toggle="tooltip" data-bs-title="Offline — a Client can only be scanned while it's connected")
+            button.btn.btn-sm.btn-outline-primary(type="button" disabled style="pointer-events: none;")
+              i.bi.bi-arrow-clockwise.me-1
+              | Refresh
+        else
+          button.btn.btn-sm.btn-outline-primary(type="button" data-usb-refresh)
+            i.bi.bi-arrow-clockwise.me-1
+            | Refresh
+      span.small.text-body-secondary(data-usb-status)
+        if scan
+          = `lsusb at ${fmtDate(scan.at)}`
+        else
+          | Not scanned yet#{user.role === 'admin' ? ' — press Refresh to run lsusb on the Client' : ''}.
+    .alert.alert-danger.py-2.small(data-usb-error class=scan && scan.error ? null : 'd-none')= scan && scan.error || ''
+    pre.bg-body-tertiary.p-2.rounded.small.mb-0(data-usb-output style="max-height: 360px; overflow: auto;" class=scan && scan.output ? null : 'd-none')= scan && scan.output || ''
 
 //- Reboot the Client's host now (card's Actions row, icon only): confirmed first — naming the
 //- job that gets canceled, if one is running — then sent with the Client's
@@ -373,7 +413,36 @@ mixin rebootButton(r, returnTo)
 mixin resourceDetails(r, groupsById, returnTo, local, external)
   dl.row.mb-0
     dt.col-sm-4 Name
-    dd.col-sm-8= r.name
+    dd.col-sm-8
+      span= r.name
+      if r.name_override && r.reported_name
+        span.text-body-secondary.small.ms-2(
+          data-bs-toggle="tooltip"
+          data-bs-title="Renamed on the dashboard; this is the name the Client itself reports"
+        )= `(Client: ${r.reported_name})`
+      if user.role === 'admin'
+        button.btn.btn-sm.btn-link.p-0.ms-2.align-baseline(
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target=`#rename-${r.id}`
+          aria-expanded="false"
+          aria-controls=`rename-${r.id}`
+          aria-label=`Rename ${r.name}`
+        )
+          i.bi.bi-pencil(data-bs-toggle="tooltip" data-bs-title="Rename")
+        .collapse(id=`rename-${r.id}`)
+          form.d-flex.gap-1.mt-1(method="post" action=`/resources/${r.id}/rename`)
+            input(type="hidden" name="returnTo" value=returnTo)
+            input.form-control.form-control-sm(
+              name="name"
+              value=r.name
+              maxlength="64"
+              pattern="[A-Za-z0-9._@+\-]*"
+              placeholder=r.reported_name || ''
+              aria-label=`New name for ${r.name}`
+            )
+            button.btn.btn-sm.btn-primary(type="submit") Rename
+          .form-text Kept across the Client's restarts. Empty = back to the Client's own name#{r.reported_name ? ` (${r.reported_name})` : ''}.
     dt.col-sm-4 Type
     dd.col-sm-8.text-uppercase= r.type
     dt.col-sm-4 Status

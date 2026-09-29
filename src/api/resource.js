@@ -51,7 +51,7 @@ function createResourceRouter({ services, config }){
   // the resource by name (see registry.registerAuto).
   router.post('/resources/register', requireJoinKey(config), (req, res, next) => {
     try {
-      const { clientId, name, type, labels, groups, hostInfo, capabilities } = req.body;
+      const { clientId, name, type, labels, groups, hostInfo, capabilities, config: clientConfig } = req.body;
       if (!clientId){
         return res.status(400).json({ error: 'clientId is required (persisted in the Client\'s .client-id file)' });
       }
@@ -66,6 +66,7 @@ function createResourceRouter({ services, config }){
         groups: groups || [],
         hostInfo,
         capabilities,
+        config: clientConfig,
         remoteAddr: req.ip,
         clientVersion: appVersion(req, 'client')
       });
@@ -82,9 +83,15 @@ function createResourceRouter({ services, config }){
   // matching happens (see the same note in api/agent.js).
   const auth = requireRole('resource');
 
+  // The Client's `lsusb` output for a scan-usb command (README §10).
+  router.post('/resources/:id/usb-scan', auth, requireOwnResource, (req, res) => {
+    const stored = services.registry.storeUsbScan(req.params.id, req.body || {});
+    res.status(stored ? 204 : 409).end();
+  });
+
   router.post('/resources/:id/heartbeat', auth, requireOwnResource, (req, res, next) => {
     try {
-      const { state, activeJobId, localLock, metrics, addresses, hostUptimeSec, activity, rebootSchedule } = req.body;
+      const { state, activeJobId, localLock, metrics, addresses, hostUptimeSec, activity, rebootSchedule, configRevision, configError } = req.body;
       services.registry.heartbeat(req.params.id, {
         state,
         activeJobId,
@@ -95,7 +102,9 @@ function createResourceRouter({ services, config }){
         clientVersion: appVersion(req, 'client'),
         hostUptimeSec,
         activity,
-        rebootSchedule
+        rebootSchedule,
+        configRevision,
+        configError
       });
       const commands = services.commands.drain(req.params.id),
         // Repeated on every heartbeat until the Client reports the new
@@ -108,6 +117,11 @@ function createResourceRouter({ services, config }){
       const reboot = services.registry.pendingRebootSchedule(req.params.id);
       if (reboot){
         commands.push({ command: 'set-reboot-schedule', cron: reboot.cron });
+      }
+      // Capabilities saved on the Config tab — likewise until applied.
+      const pendingConfig = services.registry.pendingConfig(req.params.id);
+      if (pendingConfig){
+        commands.push({ command: 'set-config', ...pendingConfig });
       }
       // Removal pending (jobs.removeResource): once the Client reports its
       // job stopped, finish it. This response still goes out; the next

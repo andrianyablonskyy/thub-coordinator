@@ -618,6 +618,70 @@ test('reboot now: refused offline or without a helper; cancels a running job fir
   assert.equal(after.message, 'Canceled: user reboot request');
 });
 
+test('capabilities from the dashboard: reported config stored, saved at a new revision, resent until applied', () => {
+  const { registry } = buildTestServices(),
+    { resourceId } = registry.registerAuto({
+      clientId: 'c-cfg', name: 'lab-cfg', type: 'sw', labels: [], capabilities: { sw: { image: 'emu' } },
+      config: { image: 'emu:1', cpus: 2, memory: '2g' }
+    });
+  assert.deepEqual(registry.get(resourceId).client_config, { image: 'emu:1', cpus: 2, memory: '2g' });
+  assert.equal(registry.pendingConfig(resourceId), null);
+
+  assert.throws(() => registry.setClientConfig(resourceId, { memory: 'lots' }), /Invalid SW config: sw\.memory/);
+  const saved = registry.setClientConfig(resourceId, { image: 'emu:2', cpus: 1, memory: '1g', allowJobImages: true });
+  assert.equal(saved.config_revision, 1);
+  assert.deepEqual(registry.pendingConfig(resourceId), { revision: 1, type: 'sw', config: { image: 'emu:2', cpus: 1, memory: '1g', allowJobImages: true } });
+
+  registry.heartbeat(resourceId, { state: 'idle' }); // an older Client: reports nothing
+  assert.equal(registry.pendingConfig(resourceId).revision, 1);
+  registry.heartbeat(resourceId, { state: 'idle', configRevision: 1 });
+  assert.equal(registry.pendingConfig(resourceId), null);
+
+  registry.setClientConfig(resourceId, { image: 'emu:3' });
+  registry.heartbeat(resourceId, { state: 'idle', configRevision: 2, configError: 'Config revision 2 refused: bad' });
+  assert.equal(registry.pendingConfig(resourceId), null); // refused ones aren't resent
+  assert.match(registry.get(resourceId).config_error, /refused: bad/);
+});
+
+test('rename from the dashboard: kept across re-registration, unique, and resettable to the Client\'s own name', () => {
+  const { registry } = buildTestServices(),
+    reg = (name) => registry.get(registry.registerAuto({ clientId: 'c-ren', name, type: 'sw', labels: [] }).resourceId),
+    r = reg('dut1');
+  registerResource(registry, { name: 'taken', type: 'sw' });
+
+  assert.equal(registry.rename(r.id, ' bench-7 ').name, 'bench-7');
+  assert.equal(reg('dut1').name, 'bench-7'); // the Client restarts, still presenting "dut1"
+  assert.equal(registry.get(r.id).reported_name, 'dut1');
+
+  assert.throws(() => registry.rename(r.id, 'taken'), /already used by another Client/);
+  assert.throws(() => registry.rename(r.id, 'has space'), /1-64 letters/);
+
+  const reset = registry.rename(r.id, '');
+  assert.deepEqual([reset.name, reset.name_override], ['dut1', null]);
+  assert.equal(reg('dut2').name, 'dut2'); // no override: the Client's own name again
+});
+
+test('USB scan: only while connected; the answer is kept for the pending request only', () => {
+  const { bus, registry } = buildTestServices(),
+    commands = [],
+    offline = registerResource(registry, { name: 'usb-off', type: 'hw' }),
+    r = registerResource(registry, { name: 'usb-on', type: 'hw' });
+  registry.heartbeat(r.id, { state: 'idle' });
+  bus.on('command', (c) => commands.push(c));
+
+  assert.throws(() => registry.requestUsbScan(offline.id), /offline/);
+  const { requestId } = registry.requestUsbScan(r.id, { by: 'admin' });
+  assert.deepEqual(commands, [{ resourceId: r.id, command: 'scan-usb', requestId }]);
+
+  assert.equal(registry.storeUsbScan(r.id, { requestId: 'stale', output: 'x' }), false);
+  assert.equal(registry.get(r.id).usb_scan, null);
+  assert.equal(registry.storeUsbScan(r.id, { requestId, output: 'Bus 001 Device 004: ID 0483:3748 ST-LINK/V2', error: null }), true);
+  const stored = registry.get(r.id);
+  assert.match(stored.usb_scan.output, /ST-LINK/);
+  assert.equal(stored.usb_scan_request_id, null); // no longer pending
+  assert.equal(registry.storeUsbScan(r.id, { requestId, output: 'again' }), false); // answered once
+});
+
 test('a resource can belong to several groups at once', () => {
   const { registry, groups } = buildTestServices(),
     g1 = groups.create({ name: 'g1' }),

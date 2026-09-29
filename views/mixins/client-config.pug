@@ -1,0 +1,136 @@
+//- A Client's capabilities — the hw or sw section of its config — edited on
+//- the resource card's Config tab (README §10). public/js/client-config.js
+//- turns the form into JSON on Save; the Client applies it on its next
+//- heartbeat, then restarts once idle. Starts from what was last saved, else
+//- what the Client reported at registration.
+
+//- One device row: "Device" is a udev index (1-8) or a /dev path; fields the
+//- form doesn't show (vendorId/productId/subsystem) ride along in data-extra.
+mixin deviceRow(kind, d)
+  - const known = ['index', 'path', 'serial', 'baudRate', 'devpath']
+  - const extra = Object.fromEntries(Object.entries(d || {}).filter(([k]) => !known.includes(k)))
+  tr(data-row=kind data-extra=JSON.stringify(extra))
+    td: input.form-control.form-control-sm.font-monospace(data-f="device" value=d ? (d.path || d.index || '') : '' placeholder="1 or /dev/…" required)
+    if kind === 'stlinks'
+      td: input.form-control.form-control-sm.font-monospace(data-f="serial" value=d && d.serial || '' placeholder="(from udev)")
+    if kind === 'uarts'
+      td: input.form-control.form-control-sm(data-f="baudRate" type="number" min="50" value=d && d.baudRate || '' placeholder="115200")
+    td: input.form-control.form-control-sm.font-monospace(data-f="devpath" value=d && d.devpath || '' placeholder="3.3.4.1")
+    td.text-end
+      button.btn.btn-sm.btn-outline-secondary(type="button" data-remove-row aria-label="Remove row")
+        i.bi.bi-x-lg
+
+mixin relayRow(rl)
+  tr(data-row="relays")
+    td: input.form-control.form-control-sm(data-f="channel" type="number" min="0" max="7" value=rl ? rl.channel : '' required)
+    td: input.form-control.form-control-sm(data-f="baseUrl" type="url" value=rl && rl.baseUrl || '' placeholder="http://localhost:3000")
+    td.text-end
+      button.btn.btn-sm.btn-outline-secondary(type="button" data-remove-row aria-label="Remove row")
+        i.bi.bi-x-lg
+
+mixin deviceTable(kind, title, rows, columns)
+  .d-flex.justify-content-between.align-items-center.mt-3.mb-1
+    strong.small= title
+    button.btn.btn-sm.btn-outline-primary(type="button" data-add-row=kind)
+      i.bi.bi-plus-lg.me-1
+      | Add
+  table.table.table-sm.align-middle.mb-0(data-table=kind)
+    thead
+      tr
+        each c in columns
+          th.small.text-body-secondary.fw-normal= c
+        th
+    tbody
+      each d in rows
+        if kind === 'relays'
+          +relayRow(d)
+        else
+          +deviceRow(kind, d)
+  template(data-template=kind)
+    if kind === 'relays'
+      +relayRow(null)
+    else
+      +deviceRow(kind, null)
+
+mixin clientConfigForm(r, returnTo)
+  - const current = r.config_desired || r.client_config
+  - const pending = r.config_desired && r.config_applied_revision < r.config_revision
+  - const canEdit = user.role === 'admin'
+  .d-flex.align-items-center.gap-2.mt-4.mb-2
+    h6.mb-0 Capabilities
+    if pending
+      span.badge.text-bg-warning(
+        data-bs-toggle="tooltip"
+        data-bs-title=`Revision ${r.config_revision} is saved; the Client applies it on its next heartbeat, then restarts once idle`
+      ) not applied yet
+    else if r.config_revision && !r.config_error
+      span.badge.text-bg-success(data-bs-toggle="tooltip" data-bs-title=`The Client runs revision ${r.config_applied_revision}`) applied
+    if r.config_error
+      span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=r.config_error) refused by the Client
+  if !current
+    p.small.text-body-secondary.mb-0 This Client is too old to report its config — update it to edit its capabilities here.
+  else
+    form(
+      method="post"
+      action=`/resources/${r.id}/config`
+      data-client-config=r.type
+      data-confirm=`Apply these capabilities to ${r.name}? The Client writes them to its config file on its next heartbeat and restarts once it has no job running.`
+      data-confirm-title="Save Client capabilities?"
+      data-confirm-ok="Save"
+      data-confirm-tone="primary"
+    )
+      input(type="hidden" name="returnTo" value=returnTo)
+      input(type="hidden" name="config")
+      fieldset(disabled=!canEdit)
+        if r.type === 'sw'
+          .row.g-2
+            .col-sm-6
+              label.form-label.small.mb-0 Image
+              input.form-control.form-control-sm.font-monospace(data-f="image" value=current.image || '' placeholder="dut-emulator:2026.08")
+            .col-sm-6
+              label.form-label.small.mb-0 Registry
+              input.form-control.form-control-sm.font-monospace(data-f="registry" value=current.registry || '' placeholder="registry.lab:5000")
+            .col-sm-3
+              label.form-label.small.mb-0 CPUs
+              input.form-control.form-control-sm(data-f="cpus" type="number" step="0.1" min="0.1" value=current.cpus != null ? current.cpus : '' placeholder="2")
+            .col-sm-3
+              label.form-label.small.mb-0 Memory
+              input.form-control.form-control-sm(data-f="memory" value=current.memory || '' placeholder="2g")
+            .col-sm-6
+              label.form-label.small.mb-0 Container command
+              input.form-control.form-control-sm.font-monospace(
+                data-f="cmd"
+                value=(current.cmd || []).join(' ')
+                placeholder="--firmware /downloads/app.bin"
+                title="For the image above (not a job's own); space-separated"
+              )
+            .col-12.d-flex.gap-4.mt-2
+              .form-check
+                input.form-check-input(type="checkbox" data-f="allowDockerHub" id=`cc-${r.id}-hub` checked=current.allowDockerHub === true)
+                label.form-check-label.small(for=`cc-${r.id}-hub`) Pull from Docker Hub
+              .form-check
+                input.form-check-input(type="checkbox" data-f="allowJobImages" id=`cc-${r.id}-jobimg` checked=current.allowJobImages === true)
+                label.form-check-label.small(for=`cc-${r.id}-jobimg`) Run jobs' own images (--docker-image)
+        else
+          - const power = current.power || {}
+          +deviceTable('stlinks', 'ST-Link probes', current.stlinks || [], ['Device', 'Serial', 'udev devpath'])
+          +deviceTable('uarts', 'UARTs', current.uarts || [], ['Device', 'Baud rate', 'udev devpath'])
+          +deviceTable('usbs', 'DUT USB devices', current.usbs || [], ['Device', 'udev devpath'])
+          +deviceTable('relays', 'Relay channels', current.relays || [], ['Channel (0-7)', 'Board URL'])
+          strong.small.d-block.mt-3.mb-1 Power control
+          .row.g-2(data-power)
+            .col-sm-3
+              select.form-select.form-select-sm(data-f="method" aria-label="Power method")
+                option(value="" selected=!power.method) none
+                option(value="uhubctl" selected=power.method === 'uhubctl') uhubctl
+                option(value="relay" selected=power.method === 'relay') relay
+            .col-sm-3
+              input.form-control.form-control-sm(data-f="hub" value=power.hub || '' placeholder="hub (uhubctl)")
+            .col-sm-2
+              input.form-control.form-control-sm(data-f="port" type="number" min="1" value=power.port != null ? power.port : '' placeholder="port")
+            .col-sm-4
+              input.form-control.form-control-sm(data-f="baseUrl" type="url" value=power.baseUrl || '' placeholder="relay URL")
+          .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-…) or a /dev path. udev devpath: the USB port the device is plugged into, for its symlink.
+        if canEdit
+          .d-flex.justify-content-end.mt-3
+            button.btn.btn-sm.btn-primary(type="submit") Save capabilities

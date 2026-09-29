@@ -66,6 +66,13 @@ const DEV_AGENT_NAME = 'virtual-agent',
     [0.4, 'ci', 'sw', 'PASSED', 201, null],
     [0.1, 'cli', 'sw', 'PASSED', 73, 'alice']
   ],
+  VIRTUAL_LSUSB = [
+    'Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub',
+    'Bus 001 Device 004: ID 0483:3748 STMicroelectronics ST-LINK/V2',
+    'Bus 001 Device 005: ID 0403:6001 Future Technology Devices International, Ltd FT232 Serial (UART) IC',
+    'Bus 001 Device 006: ID 0483:5740 STMicroelectronics Virtual COM Port',
+    'Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub'
+  ].join('\n'),
   LOG_SCRIPT = [
     ['runner', 'downloading app.bin (virtual)'],
     ['runner', 'cloning yourorg/firmware-tests at main (virtual)'],
@@ -167,6 +174,22 @@ function startVirtualClients(services, config){
       labels: def.labels,
       hostInfo: { hostname: `${def.name}.virtual`, platform: 'linux', addresses: [{ iface: 'eth0', address: def.address, family: 'IPv4' }], timeZone: 'UTC' },
       capabilities: { ...def.capabilities, rebootSupported: false },
+      // Its "config file": the hw/sw section, as a real Client reports it.
+      config: def.type === 'sw'
+        ? {
+          image: def.capabilities.sw.image,
+          allowDockerHub: def.capabilities.sw.allowDockerHub,
+          allowJobImages: def.capabilities.sw.allowJobImages,
+          cpus: def.capabilities.sw.cpus,
+          memory: def.capabilities.sw.memory
+        }
+        : {
+          stlinks: [{ index: 1, serial: '066DFF485457725187092834', devpath: '3.3.4.3.1' }],
+          uarts: [{ index: 1, baudRate: 115200, devpath: '3.3.3.2' }],
+          usbs: [{ index: 1 }],
+          relays: [{ channel: 0, baseUrl: 'http://localhost:3000' }],
+          power: { method: 'relay' }
+        },
       remoteAddr: '127.0.0.1',
       clientVersion: version
     });
@@ -186,9 +209,14 @@ function startVirtualClients(services, config){
       clientVersion: version,
       hostUptimeSec: Math.round((Date.now() - bootedAt) / 1000),
       activity: { state: c.activity.state, jobId: c.activity.jobId, durationSec: Math.round((Date.now() - c.activity.since) / 1000) },
-      rebootSchedule: registry.get(resourceId)?.reboot_schedule || null // "applies" whatever is saved
+      rebootSchedule: registry.get(resourceId)?.reboot_schedule || null, // "applies" whatever is saved
+      configRevision: registry.get(resourceId)?.config_revision || 0 // ...and any saved config
     });
-    services.commands.drain(resourceId); // nothing real to act on
+    for (const command of services.commands.drain(resourceId)){
+      if (command.command === 'scan-usb'){ // a plausible lsusb for the dashboard
+        registry.storeUsbScan(resourceId, { requestId: command.requestId, output: VIRTUAL_LSUSB, error: null });
+      }
+    }
   }
 
   const beat = () => {
