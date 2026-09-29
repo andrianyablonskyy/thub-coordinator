@@ -51,6 +51,17 @@ function createAdminRouter({ services }){
     res.status(204).end();
   });
 
+  // Scheduled host reboot: { cron } (5-field, host local time; "" clears).
+  router.post('/resources/:id/reboot-schedule', (req, res, next) => {
+    try {
+      const r = services.registry.setRebootSchedule(req.params.id, req.body?.cron ?? '');
+      res.json({ id: r.id, rebootSchedule: r.reboot_schedule, applied: r.reboot_schedule_applied });
+    }
+    catch (err){
+      next(err);
+    }
+  });
+
   router.post('/resources/:id/maintenance', (req, res, next) => {
     try {
       const resource = services.registry.setMaintenance(req.params.id, !!req.body.enabled);

@@ -21,7 +21,8 @@ const fs = require('node:fs'),
   { requireAdminSession, requireAdminRole } = require('../auth'),
   { attachJobStream } = require('../api/sse'),
   {
-    RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, isNewer, compareVersions, formatDateTime, parseDateTime
+    RESOURCE_STATES, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, isNewer, compareVersions, formatDateTime, parseDateTime,
+    nextCronRun
   } = require('@andrian.yablonskyy/thub-common'),
   { retentionCutoff, JOB_RETENTION } = require('../services/cleanup'),
   listPrefs = require('../services/list-prefs');
@@ -152,6 +153,8 @@ function createWebRouter({ services, config }){
       ];
     }
     res.locals.isNewer = isNewer;
+    res.locals.nextCronRun = nextCronRun;
+    res.locals.formatDateTime = formatDateTime;
     res.locals.currentPath = req.originalUrl;
     if (req.session){
       req.session.flash = [];
@@ -365,6 +368,10 @@ function createWebRouter({ services, config }){
         services.commands.push(r.id, { command: 'unlock' });
         flash(req, 'warning', `Releasing the local lock on ${r.name} (on its next heartbeat).`);
       }
+      else if (activity === 'reboot-hold'){
+        services.commands.push(r.id, { command: 'cancel-reboot' });
+        flash(req, 'warning', `Canceling the scheduled reboot of ${r.name}'s host (on its next heartbeat).`);
+      }
       else if (activity === 'update-hold'){
         services.commands.push(r.id, { command: 'cancel-update' });
         if (r.update_to){
@@ -375,7 +382,7 @@ function createWebRouter({ services, config }){
       else {
         flash(req, 'info', `${r.name} isn't doing anything to cancel.`);
       }
-      if (!job && ['locked', 'update-hold'].includes(activity)){
+      if (!job && ['locked', 'update-hold', 'reboot-hold'].includes(activity)){
         services.events.record('resource', r.id, 'resource.activity_canceled', { activity, by: req.session.user.username });
       }
     }
@@ -398,6 +405,22 @@ function createWebRouter({ services, config }){
           ? `Stopped job ${stoppedJob} on ${r.name}; ${r.name} is removed as soon as its Client confirms the job ended.`
           : `Removed ${r.name}.` + (canceledJobs.length ? `\nCanceled job(s) queued for it: ${canceledJobs.join(', ')}.` : '')
       );
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/resources'));
+  });
+
+  // Scheduled host reboot (resource card): save a cron expression, or clear
+  // it; the Client applies it on its next heartbeat.
+  router.post('/resources/:id/reboot-schedule', requireAdminRole, (req, res) => {
+    try {
+      const cron = req.body.clear === '1' ? '' : req.body.cron,
+        r = services.registry.setRebootSchedule(req.params.id, cron, { by: req.session.user.username });
+      flash(req, 'success', r.reboot_schedule
+        ? `Reboot schedule for ${r.name} saved: ${r.reboot_schedule}.\nThe Client applies it on its next heartbeat.`
+        : `Scheduled reboot for ${r.name} cleared.\nThe Client applies it on its next heartbeat.`);
     }
     catch (err){
       flash(req, 'danger', err.message);

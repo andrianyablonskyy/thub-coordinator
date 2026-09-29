@@ -14,7 +14,7 @@
 'use strict';
 
 const { v4: uuid } = require('uuid'),
-  { RESOURCE_STATES, BUSY_SOURCES, ACTIVE_JOB_STATES, compareVersions } = require('@andrian.yablonskyy/thub-common'),
+  { RESOURCE_STATES, BUSY_SOURCES, ACTIVE_JOB_STATES, compareVersions, parseCron } = require('@andrian.yablonskyy/thub-common'),
   { generateToken, hashToken } = require('./tokens');
 
 function rowToResource(row){
@@ -73,7 +73,15 @@ function sanitizeCapabilities(caps){
     return null;
   }
   const typed = sanitizeTypedCapabilities(caps);
-  return typed ? { ...typed, allowJobCommands: caps.allowJobCommands === true } : null;
+  return typed
+    ? {
+      ...typed,
+      allowJobCommands: caps.allowJobCommands === true,
+      // Whether the host has the root reboot helper (thub-client-reboot.path)
+      // a scheduled reboot needs; unknown (null) for older Clients.
+      rebootSupported: typeof caps.rebootSupported === 'boolean' ? caps.rebootSupported : null
+    }
+    : null;
 }
 
 function sanitizeTypedCapabilities(caps){
@@ -109,7 +117,7 @@ function sanitizeTypedCapabilities(caps){
 // Heartbeat durations (README §10) arrive as seconds relative to "now" on
 // the Client and are anchored to the Coordinator's clock here. Anything
 // negative, non-numeric or over ~10 years is ignored.
-const ACTIVITY_STATES = new Set(['idle', 'job', 'locked', 'update-hold']),
+const ACTIVITY_STATES = new Set(['idle', 'job', 'locked', 'update-hold', 'reboot-hold']),
   MAX_DURATION_SEC = 10 * 365 * 86400;
 
 function secondsAgo(now, sec){
@@ -184,7 +192,12 @@ function createRegistryService(db, { bus, events }){
   function registerAuto({ clientId, name, type, labels = [], groups = [], hostInfo, capabilities, remoteAddr, clientVersion = null }){
     const resourceToken = generateToken('res'),
       remote = normalizeRemoteAddr(remoteAddr);
-    hostInfo = { ...(hostInfo || {}), addresses: sanitizeAddresses(hostInfo?.addresses) || [] };
+    hostInfo = {
+      ...(hostInfo || {}),
+      addresses: sanitizeAddresses(hostInfo?.addresses) || [],
+      // The host's own IANA zone — a scheduled reboot's cron runs in it.
+      timeZone: typeof hostInfo?.timeZone === 'string' && /^[A-Za-z0-9_+/-]{1,64}$/.test(hostInfo.timeZone) ? hostInfo.timeZone : null
+    };
     const caps = sanitizeCapabilities(capabilities),
       capsJson = caps ? JSON.stringify(caps) : null;
     let existing = getByClientId(clientId);
@@ -296,7 +309,7 @@ function createRegistryService(db, { bus, events }){
   // Reconcile status from a heartbeat's self-reported state (§5.1).
   function heartbeat(
     resourceId,
-    { state, activeJobId, localLock, metrics, addresses, remoteAddr, clientVersion = null, hostUptimeSec, activity } = {}
+    { state, activeJobId, localLock, metrics, addresses, remoteAddr, clientVersion = null, hostUptimeSec, activity, rebootSchedule } = {}
   ){
     const resource = get(resourceId);
     if (!resource){
@@ -327,6 +340,15 @@ function createRegistryService(db, { bus, events }){
       nextStatus = RESOURCE_STATES.IDLE;
       busySource = null;
       busyReason = null;
+    }
+
+    // The reboot schedule the Client applies (null: none); older Clients
+    // don't report one at all — then leave what's stored.
+    if (rebootSchedule !== undefined){
+      db.prepare('UPDATE resources SET reboot_schedule_applied = ? WHERE id = ?').run(
+        typeof rebootSchedule === 'string' && rebootSchedule ? rebootSchedule.slice(0, 200) : null,
+        resourceId
+      );
     }
 
     const now = Date.now(),
@@ -521,6 +543,37 @@ function createRegistryService(db, { bus, events }){
     return db.prepare('SELECT * FROM resources WHERE remove_requested_at IS NOT NULL').all().map(rowToResource);
   }
 
+  // Scheduled host reboot (resource card): a cron expression, validated
+  // here; '' or null clears it. Delivered on the Client's next heartbeat.
+  function setRebootSchedule(resourceId, cron, { by } = {}){
+    const r = get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    const text = typeof cron === 'string' ? cron.trim().replace(/\s+/g, ' ') : '';
+    if (text){
+      try {
+        parseCron(text);
+      }
+      catch (err){
+        throw Object.assign(new Error(`Invalid reboot schedule "${text}": ${err.message}`), { status: 400 });
+      }
+    }
+    db.prepare('UPDATE resources SET reboot_schedule = ? WHERE id = ?').run(text || null, resourceId);
+    events.record('resource', resourceId, 'resource.reboot_schedule', { cron: text || null, by });
+    return get(resourceId);
+  }
+
+  // What a heartbeat reply must tell the Client, if its applied schedule
+  // isn't the saved one: { cron } (null = clear). Repeated until it reports it.
+  function pendingRebootSchedule(resourceId){
+    const r = get(resourceId);
+    if (!r || (r.reboot_schedule || null) === (r.reboot_schedule_applied || null)){
+      return null;
+    }
+    return { cron: r.reboot_schedule || null };
+  }
+
   function findIdleCandidates(type, labels, groupId, resourceId, needs){
     const rows = db
       .prepare('SELECT * FROM resources WHERE status = ? AND type = ? AND remove_requested_at IS NULL')
@@ -552,6 +605,8 @@ function createRegistryService(db, { bus, events }){
     pendingUpdate,
     assignToJob,
     remove,
+    setRebootSchedule,
+    pendingRebootSchedule,
     requestRemoval,
     pendingRemovals,
     findIdleCandidates,

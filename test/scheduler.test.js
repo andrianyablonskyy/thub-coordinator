@@ -565,6 +565,26 @@ test('a job-supplied command only goes to Clients with allowJobCommands; otherwi
   assert.equal(jobs.get(job.id).resource_id, resourceId);
 });
 
+test('reboot schedule: validated, then resent on heartbeats until the Client reports applying it', () => {
+  const { registry } = buildTestServices(),
+    r = registerResource(registry, { name: 'lab-reboot', type: 'sw' });
+
+  assert.throws(() => registry.setRebootSchedule(r.id, '61 3 * * *'), /Invalid reboot schedule.*minute: 61/);
+  assert.equal(registry.pendingRebootSchedule(r.id), null); // nothing set, nothing applied
+
+  registry.setRebootSchedule(r.id, '  30   3 * * sun ');
+  assert.deepEqual(registry.pendingRebootSchedule(r.id), { cron: '30 3 * * sun' });
+  registry.heartbeat(r.id, { state: 'idle' }); // an older Client: reports nothing
+  assert.deepEqual(registry.pendingRebootSchedule(r.id), { cron: '30 3 * * sun' });
+  registry.heartbeat(r.id, { state: 'idle', rebootSchedule: '30 3 * * sun' });
+  assert.equal(registry.pendingRebootSchedule(r.id), null);
+
+  registry.setRebootSchedule(r.id, '');
+  assert.deepEqual(registry.pendingRebootSchedule(r.id), { cron: null }); // tell it to clear
+  registry.heartbeat(r.id, { state: 'idle', rebootSchedule: null });
+  assert.equal(registry.pendingRebootSchedule(r.id), null);
+});
+
 test('a resource can belong to several groups at once', () => {
   const { registry, groups } = buildTestServices(),
     g1 = groups.create({ name: 'g1' }),

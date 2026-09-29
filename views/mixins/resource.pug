@@ -180,7 +180,7 @@ mixin capabilitiesList(caps)
 mixin uptimeRows(r, returnTo)
   - const stale = r.status === 'OUT_OF_SERVICE' && r.last_heartbeat_at
   - const ref = stale ? new Date(r.last_heartbeat_at).getTime() : Date.now()
-  - const activityLabel = { idle: 'Idle', job: 'Running job', locked: 'Locked locally', 'update-hold': 'Holding for self-update' }
+  - const activityLabel = { idle: 'Idle', job: 'Running job', locked: 'Locked locally', 'update-hold': 'Holding for self-update', 'reboot-hold': 'Holding for scheduled reboot' }
   dt.col-sm-4 Host uptime
   dd.col-sm-8
     if r.host_booted_at
@@ -205,12 +205,80 @@ mixin uptimeRows(r, returnTo)
     if user.role === 'admin'
       +cancelActivityButton(r, returnTo)
 
+//- Scheduled host reboot (cron, in the Client host's local time): what's
+//- saved, when it next fires, whether the Client has applied it, and — for
+//- admins — an editor. Saved here, applied on the Client's next heartbeat.
+mixin rebootScheduleRow(r, returnTo)
+  - const tz = r.host_info && r.host_info.timeZone
+  - const caps = r.capabilities || {}
+  - const pending = (r.reboot_schedule || null) !== (r.reboot_schedule_applied || null)
+  - let next = null
+  - try { next = r.reboot_schedule && tz ? nextCronRun(r.reboot_schedule, new Date(), { timeZone: tz }) : null } catch (e) { next = null }
+  dt.col-sm-4 Scheduled reboot
+  dd.col-sm-8
+    if r.reboot_schedule
+      code= r.reboot_schedule
+      if next
+        span.text-body-secondary.small.ms-2(
+          data-bs-toggle="tooltip"
+          data-bs-title=`${formatDateTime(next, { timeZone: tz })} host time (${tz}); shown here in your time zone`
+        )= `next ${fmtDate(next)}`
+      else if !tz
+        span.text-body-secondary.small.ms-2(
+          data-bs-toggle="tooltip"
+          data-bs-title="The Client runs it in its host's local time; this Client is too old to report its time zone"
+        ) host local time
+    else
+      span.text-body-secondary none
+    if pending
+      span.badge.text-bg-warning.ms-2(
+        data-bs-toggle="tooltip"
+        data-bs-title="Saved — the Client applies it on its next heartbeat"
+      ) not applied yet
+    if caps.rebootSupported === false
+      span.badge.text-bg-danger.ms-2(
+        data-bs-toggle="tooltip"
+        data-bs-title="This host has no reboot helper (thub-client-reboot.path), so the schedule can't reboot it — reinstall the Client as root: sudo npm i -g @andrian.yablonskyy/thub-client"
+      ) can't reboot
+    if user.role === 'admin'
+      form.d-flex.gap-1.mt-1(
+        method="post"
+        action=`/resources/${r.id}/reboot-schedule`
+        data-confirm=`Reboot the host of ${r.name} on this schedule? It reboots the whole host — every Client instance on it. Running jobs finish first: new ones wait, for up to 2 h, and otherwise that time is skipped.`
+        data-confirm-title="Schedule host reboots?"
+        data-confirm-ok="Save schedule"
+        data-confirm-tone="warning"
+      )
+        input(type="hidden" name="returnTo" value=returnTo)
+        input.form-control.form-control-sm.font-monospace(
+          type="text"
+          name="cron"
+          value=r.reboot_schedule || ''
+          placeholder="30 3 * * sun"
+          aria-label=`Reboot schedule for ${r.name} (cron)`
+          required
+        )
+        button.btn.btn-sm.btn-outline-primary(type="submit") Save
+      if r.reboot_schedule
+        form.d-inline(method="post" action=`/resources/${r.id}/reboot-schedule`)
+          input(type="hidden" name="returnTo" value=returnTo)
+          input(type="hidden" name="clear" value="1")
+          button.btn.btn-sm.btn-link.p-0.small(type="submit") Clear schedule
+      .form-text
+        | cron: minute hour day month weekday, in the host's local time#{tz ? ` (${tz})` : ''} — e.g.
+        |
+        code 30 3 * * sun
+        |  (Sundays 03:30) or
+        |
+        code 0 4 * * *
+        | . Reboots the whole host.
+
 //- Cancel the Client's current job or local lock — icon only, on the card's
 //- Task / status line, and only while there's one. A self-update hold is
 //- canceled from the version line instead (+versionWithUpdate).
 mixin cancelActivityButton(r, returnTo)
   - const state = r.activity && r.activity.state
-  - const what = r.activeJob ? `job ${r.activeJob.id}` : state === 'locked' ? 'the local lock' : null
+  - const what = r.activeJob ? `job ${r.activeJob.id}` : state === 'locked' ? 'the local lock' : state === 'reboot-hold' ? 'the scheduled reboot' : null
   if what
     form.d-inline.ms-2(
       method="post"
@@ -248,6 +316,7 @@ mixin resourceCard(r, groupsById, returnTo)
             dt.col-sm-4 Status
             dd.col-sm-8: +resourceBadge(r.status, r.remove_requested_at)
             +uptimeRows(r, returnTo)
+            +rebootScheduleRow(r, returnTo)
             dt.col-sm-4 Client version
             dd.col-sm-8: +versionWithUpdate(r.client_version, updates.latest.client, r.update_to, `/resources/${r.id}/update`, returnTo, true, r.activity && r.activity.state === 'update-hold')
             dt.col-sm-4 IP addresses

@@ -84,7 +84,7 @@ function createResourceRouter({ services, config }){
 
   router.post('/resources/:id/heartbeat', auth, requireOwnResource, (req, res, next) => {
     try {
-      const { state, activeJobId, localLock, metrics, addresses, hostUptimeSec, activity } = req.body;
+      const { state, activeJobId, localLock, metrics, addresses, hostUptimeSec, activity, rebootSchedule } = req.body;
       services.registry.heartbeat(req.params.id, {
         state,
         activeJobId,
@@ -94,7 +94,8 @@ function createResourceRouter({ services, config }){
         remoteAddr: req.ip,
         clientVersion: appVersion(req, 'client'),
         hostUptimeSec,
-        activity
+        activity,
+        rebootSchedule
       });
       const commands = services.commands.drain(req.params.id),
         // Repeated on every heartbeat until the Client reports the new
@@ -102,6 +103,11 @@ function createResourceRouter({ services, config }){
         updateTo = services.registry.pendingUpdate(req.params.id);
       if (updateTo){
         commands.push({ command: 'self-update', version: updateTo });
+      }
+      // Also repeated until the Client reports applying it (README §10).
+      const reboot = services.registry.pendingRebootSchedule(req.params.id);
+      if (reboot){
+        commands.push({ command: 'set-reboot-schedule', cron: reboot.cron });
       }
       // Removal pending (jobs.removeResource): once the Client reports its
       // job stopped, finish it. This response still goes out; the next
