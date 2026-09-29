@@ -309,9 +309,11 @@ mixin resourceCard(r, groupsById, returnTo)
         .modal-header
           h5.modal-title(id=`resource-card-${r.id}-title`)= r.name
           button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
-        .modal-body.pt-2
-          //- Details: what the Client is and reports. Config: settings sent
-          //- to it (today the scheduled reboot); read-only for viewers.
+        //- data-config-root: where public/js/client-config.js tracks unsaved
+        //- changes (⚠ on the config tabs).
+        .modal-body.pt-2(data-config-root)
+          //- Details: what the Client is and reports. Then its config tabs
+          //- (client-config.pug; read-only for viewers), then its USB devices.
           ul.nav.nav-tabs.mb-3(role="tablist")
             li.nav-item(role="presentation")
               button.nav-link.active(
@@ -323,6 +325,7 @@ mixin resourceCard(r, groupsById, returnTo)
                 aria-controls=`rc-${r.id}-details`
                 aria-selected="true"
               ) Details
+            +configTabItems(r)
             li.nav-item(role="presentation")
               button.nav-link(
                 id=`rc-${r.id}-usb-tab`
@@ -333,31 +336,22 @@ mixin resourceCard(r, groupsById, returnTo)
                 aria-controls=`rc-${r.id}-usb`
                 aria-selected="false"
               ) Connected USB devices
-            li.nav-item(role="presentation")
-              button.nav-link(
-                id=`rc-${r.id}-config-tab`
-                type="button"
-                role="tab"
-                data-bs-toggle="tab"
-                data-bs-target=`#rc-${r.id}-config`
-                aria-controls=`rc-${r.id}-config`
-                aria-selected="false"
-              ) Config
+            
           .tab-content
             .tab-pane.fade.show.active(id=`rc-${r.id}-details` role="tabpanel" aria-labelledby=`rc-${r.id}-details-tab` tabindex="0")
               +resourceDetails(r, groupsById, returnTo, local, external)
+            +configPanes(r, returnTo)
             .tab-pane.fade(id=`rc-${r.id}-usb` role="tabpanel" aria-labelledby=`rc-${r.id}-usb-tab` tabindex="0")
               +usbScanPane(r)
-            .tab-pane.fade(id=`rc-${r.id}-config` role="tabpanel" aria-labelledby=`rc-${r.id}-config-tab` tabindex="0")
-              dl.row.mb-0
-                +rebootScheduleRow(r, returnTo)
-              +clientConfigForm(r, returnTo)
 
 //- "Connected USB devices" (resource card tab): the Client's `lsusb`, run
 //- only on Refresh (admins; public/js/usb-scan.js fetches and fills it in).
 mixin usbScanPane(r)
   - const offline = r.status === 'OUT_OF_SERVICE' || !r.last_heartbeat_at
   - const scan = r.usb_scan
+  //- Import to config (public/js/usb-import.js): HW Clients that report
+  //- their config only; enabled once there's a scan to import from.
+  - const importWhy = r.type !== 'hw' ? 'Only HW Clients have USB device lists to import into' : !(r.config_desired || r.client_config) ? 'This Client is too old to report its config — update it first' : null
   div(data-usb-scan=`/resources/${r.id}/usb-scan` data-pending=r.usb_scan_request_id ? '1' : null data-requested-at=r.usb_scan_requested_at)
     .d-flex.align-items-center.gap-2.mb-2
       if user.role === 'admin'
@@ -370,11 +364,25 @@ mixin usbScanPane(r)
           button.btn.btn-sm.btn-outline-primary(type="button" data-usb-refresh)
             i.bi.bi-arrow-clockwise.me-1
             | Refresh
+        if importWhy
+          span.d-inline-block(tabindex="0" data-bs-toggle="tooltip" data-bs-title=importWhy)
+            button.btn.btn-sm.btn-outline-secondary(type="button" disabled style="pointer-events: none;")
+              i.bi.bi-box-arrow-in-down.me-1
+              | Import to config
+        else
+          button.btn.btn-sm.btn-outline-secondary(
+            type="button"
+            data-usb-import
+            disabled=!(scan && scan.output)
+            title="Fill the ST-Link, UART and DUT USB tabs from this scan, for you to review and save"
+          )
+            i.bi.bi-box-arrow-in-down.me-1
+            | Import to config
       span.small.text-body-secondary(data-usb-status)
         if scan
-          = `lsusb at ${fmtDate(scan.at)}`
+          = `lsusb -tvv at ${fmtDate(scan.at)}`
         else
-          | Not scanned yet#{user.role === 'admin' ? ' — press Refresh to run lsusb on the Client' : ''}.
+          | Not scanned yet#{user.role === 'admin' ? ' — press Refresh to run lsusb -tvv on the Client' : ''}.
     .alert.alert-danger.py-2.small(data-usb-error class=scan && scan.error ? null : 'd-none')= scan && scan.error || ''
     pre.bg-body-tertiary.p-2.rounded.small.mb-0(data-usb-output style="max-height: 360px; overflow: auto;" class=scan && scan.output ? null : 'd-none')= scan && scan.output || ''
 

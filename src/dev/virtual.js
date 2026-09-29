@@ -66,12 +66,26 @@ const DEV_AGENT_NAME = 'virtual-agent',
     [0.4, 'ci', 'sw', 'PASSED', 201, null],
     [0.1, 'cli', 'sw', 'PASSED', 73, 'alice']
   ],
+  // What `lsusb -tvv` prints on a lab host with a DUT slot plugged in.
   VIRTUAL_LSUSB = [
-    'Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub',
-    'Bus 001 Device 004: ID 0483:3748 STMicroelectronics ST-LINK/V2',
-    'Bus 001 Device 005: ID 0403:6001 Future Technology Devices International, Ltd FT232 Serial (UART) IC',
-    'Bus 001 Device 006: ID 0483:5740 STMicroelectronics Virtual COM Port',
-    'Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub'
+    '/:  Bus 001.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/12p, 480M',
+    '    ID 1d6b:0002 Linux Foundation 2.0 root hub',
+    '    /sys/bus/usb/devices/usb1  /dev/bus/usb/001/001',
+    '    |__ Port 003: Dev 002, If 0, Class=Hub, Driver=hub/4p, 480M',
+    '        ID 05e3:0610 Genesys Logic, Inc. Hub',
+    '        /sys/bus/usb/devices/1-3  /dev/bus/usb/001/002',
+    '        |__ Port 001: Dev 004, If 0, Class=Vendor Specific Class, Driver=, 12M',
+    '            ID 0483:3748 STMicroelectronics ST-LINK/V2',
+    '            /sys/bus/usb/devices/1-3.1  /dev/bus/usb/001/004',
+    '        |__ Port 002: Dev 005, If 0, Class=Vendor Specific Class, Driver=ftdi_sio, 12M',
+    '            ID 0403:6001 Future Technology Devices International, Ltd FT232 Serial (UART) IC',
+    '            /sys/bus/usb/devices/1-3.2  /dev/bus/usb/001/005',
+    '        |__ Port 003: Dev 006, If 0, Class=Communications, Driver=cdc_acm, 12M',
+    '            ID 0483:5740 STMicroelectronics Virtual COM Port',
+    '            /sys/bus/usb/devices/1-3.3  /dev/bus/usb/001/006',
+    '/:  Bus 002.Port 001: Dev 001, Class=root_hub, Driver=xhci_hcd/4p, 5000M',
+    '    ID 1d6b:0003 Linux Foundation 3.0 root hub',
+    '    /sys/bus/usb/devices/usb2  /dev/bus/usb/002/001'
   ].join('\n'),
   LOG_SCRIPT = [
     ['runner', 'downloading app.bin (virtual)'],

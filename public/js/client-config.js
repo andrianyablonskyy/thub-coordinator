@@ -67,6 +67,29 @@
     };
   }
 
+  // ⚠ on each config tab whose fields differ from what was loaded. A pane's
+  // state: its field values (rows included) plus the hidden per-row extras.
+  function paneState(pane){
+    const fields = [...pane.querySelectorAll('input, select, textarea')].filter((i) => i.type !== 'hidden')
+        .map((i) => (i.type === 'checkbox' ? i.checked : i.value)),
+      extras = [...pane.querySelectorAll('tr[data-row]')].map((tr) => tr.dataset.extra || '');
+    return JSON.stringify([fields, extras]);
+  }
+
+  document.querySelectorAll('[data-config-root]').forEach((root) => {
+    const panes = [...root.querySelectorAll('[data-config-pane]')],
+      loaded = new Map(panes.map((pane) => [pane, paneState(pane)]));
+    function update(){
+      for (const pane of panes){
+        root.querySelector(`[data-config-tab="${pane.dataset.configPane}"] [data-dirty-icon]`)
+          ?.classList.toggle('d-none', paneState(pane) === loaded.get(pane));
+      }
+    }
+    for (const type of ['input', 'change', 'thub:changed']){
+      root.addEventListener(type, update);
+    }
+  });
+
   document.querySelectorAll('form[data-client-config]').forEach((form) => {
     form.addEventListener('click', (e) => {
       const add = e.target.closest('[data-add-row]'),
@@ -78,9 +101,11 @@
           return; // the Client takes at most 8 of each
         }
         tbody.appendChild(form.querySelector(`template[data-template="${kind}"]`).content.cloneNode(true));
+        form.dispatchEvent(new Event('thub:changed', { bubbles: true }));
       }
       else if (remove){
         remove.closest('tr').remove();
+        form.dispatchEvent(new Event('thub:changed', { bubbles: true }));
       }
     });
     // Before confirm.js (capture phase), so the JSON is in place whatever

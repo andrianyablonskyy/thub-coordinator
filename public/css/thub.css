@@ -58,3 +58,43 @@
 .resource-capabilities {
   font-size: 0.75rem;
 }
+
+/* An overlay inside a modal (e.g. "Import to config"'s review note on the
+   resource card, public/js/usb-import.js) — Bootstrap doesn't stack modals. */
+.thub-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: inherit;
+}
+
+.thub-overlay > .card {
+  max-width: 34rem;
+  max-height: 100%;
+  overflow: auto;
+}
+
+/* The client details modal has up to 7 tabs (Details, the config tabs,
+   Connected USB devices) — tighter padding keeps them on one row, ⚠ icons
+   included, at the modal-lg width. */
+.thub-resource-card .nav-tabs .nav-link {
+  padding: 0.45rem 0.65rem;
+}
+
+/* Bootstrap hides inactive tab panes only as direct children of
+   .tab-content (`.tab-content > .tab-pane`). The client details modal's
+   capability tabs sit inside their shared <form>/<fieldset> (one Save for
+   all of them), so without this the inactive ones merely fade out and still
+   take up space, pushing the active tab's fields down. */
+.tab-content .tab-pane[data-config-pane] {
+  display: none;
+}
+
+.tab-content .tab-pane[data-config-pane].active {
+  display: block;
+}

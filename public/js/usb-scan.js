@@ -30,11 +30,15 @@
 
     function show(view){
       if (view.scan){
-        status.textContent = `lsusb at ${view.scan.atText}`;
+        status.textContent = `lsusb -tvv at ${view.scan.atText}`;
         errorBox.textContent = view.scan.error || '';
         errorBox.classList.toggle('d-none', !view.scan.error);
         output.textContent = view.scan.output || '';
         output.classList.toggle('d-none', !view.scan.output);
+        const importButton = pane.querySelector('[data-usb-import]');
+        if (importButton){
+          importButton.disabled = !view.scan.output;
+        }
       }
     }
 
@@ -44,7 +48,7 @@
         button.querySelector('i').className = on ? 'spinner-border spinner-border-sm me-1' : 'bi bi-arrow-clockwise me-1';
       }
       if (on){
-        status.textContent = 'Waiting for the Client to run lsusb (its next heartbeat)…';
+        status.textContent = 'Waiting for the Client to run lsusb -tvv (its next heartbeat)…';
       }
     }
 

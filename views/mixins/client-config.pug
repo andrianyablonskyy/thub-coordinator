@@ -29,7 +29,7 @@ mixin relayRow(rl)
         i.bi.bi-x-lg
 
 mixin deviceTable(kind, title, rows, columns)
-  .d-flex.justify-content-between.align-items-center.mt-3.mb-1
+  .d-flex.justify-content-between.align-items-center.mb-1
     strong.small= title
     button.btn.btn-sm.btn-outline-primary(type="button" data-add-row=kind)
       i.bi.bi-plus-lg.me-1
@@ -52,23 +52,75 @@ mixin deviceTable(kind, title, rows, columns)
     else
       +deviceRow(kind, null)
 
-mixin clientConfigForm(r, returnTo)
-  - const current = r.config_desired || r.client_config
+//- The ⚠ shown on a config (sub-)tab while its data differs from what was
+//- loaded — public/js/client-config.js toggles it.
+mixin dirtyIcon()
+  i.bi.bi-exclamation-triangle-fill.text-warning.ms-1.d-none(
+    data-dirty-icon
+    role="img"
+    aria-label="changed, not saved"
+    title="Changed — not saved yet"
+  )
+
+mixin configTab(p, key, label)
+  li.nav-item(role="presentation")
+    button.nav-link(
+      id=`${p}-${key}-tab`
+      type="button"
+      role="tab"
+      data-bs-toggle="tab"
+      data-bs-target=`#${p}-${key}`
+      aria-controls=`${p}-${key}`
+      aria-selected="false"
+      data-config-tab=key
+    )
+      = label
+      +dirtyIcon()
+
+mixin configPane(p, key)
+  .tab-pane.fade(id=`${p}-${key}` role="tabpanel" aria-labelledby=`${p}-${key}-tab` tabindex="0" data-config-pane=key)
+    block
+
+mixin saveCapabilities(canEdit)
+  if canEdit
+    .d-flex.justify-content-end.mt-3
+      button.btn.btn-sm.btn-primary(type="submit") Save capabilities
+
+//- Where the saved capabilities stand, at the top of each capability tab.
+mixin capabilitiesStatus(r)
   - const pending = r.config_desired && r.config_applied_revision < r.config_revision
+  if pending || (r.config_revision && !r.config_error) || r.config_error
+    .d-flex.justify-content-end.gap-1.mb-2
+      if pending
+        span.badge.text-bg-warning(
+          data-bs-toggle="tooltip"
+          data-bs-title=`Capabilities revision ${r.config_revision} is saved; the Client applies it on its next heartbeat, then restarts once idle`
+        ) not applied yet
+      else if r.config_revision && !r.config_error
+        span.badge.text-bg-success(data-bs-toggle="tooltip" data-bs-title=`The Client runs capabilities revision ${r.config_applied_revision}`) applied
+      if r.config_error
+        span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=r.config_error) refused by the Client
+
+//- The Client's config, as tabs of the resource card next to Details:
+//- HW — ST-Link, UART, DUT USB, Power (relays + power control); SW —
+//- Emulator; both — Reboot (the schedule, its own Save). The capability tabs
+//- share one form and one "Save capabilities"; a tab with unsaved changes
+//- shows ⚠ (public/js/client-config.js).
+mixin configTabItems(r)
+  - const p = `cfg-${r.id}`
+  - const tabs = r.type === 'hw' ? [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB'], ['power', 'Power']] : [['emulator', 'Emulator']]
+  each t in tabs
+    +configTab(p, t[0], t[1])
+  +configTab(p, 'reboot', 'Reboot')
+
+mixin configPanes(r, returnTo)
+  - const p = `cfg-${r.id}`
+  - const current = r.config_desired || r.client_config
   - const canEdit = user.role === 'admin'
-  .d-flex.align-items-center.gap-2.mt-4.mb-2
-    h6.mb-0 Capabilities
-    if pending
-      span.badge.text-bg-warning(
-        data-bs-toggle="tooltip"
-        data-bs-title=`Revision ${r.config_revision} is saved; the Client applies it on its next heartbeat, then restarts once idle`
-      ) not applied yet
-    else if r.config_revision && !r.config_error
-      span.badge.text-bg-success(data-bs-toggle="tooltip" data-bs-title=`The Client runs revision ${r.config_applied_revision}`) applied
-    if r.config_error
-      span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=r.config_error) refused by the Client
   if !current
-    p.small.text-body-secondary.mb-0 This Client is too old to report its config — update it to edit its capabilities here.
+    each t in (r.type === 'hw' ? [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB'], ['power', 'Power']] : [['emulator', 'Emulator']])
+      +configPane(p, t[0])
+        p.small.text-body-secondary.mb-0 This Client is too old to report its config — update it to edit its capabilities here.
   else
     form(
       method="post"
@@ -83,54 +135,71 @@ mixin clientConfigForm(r, returnTo)
       input(type="hidden" name="config")
       fieldset(disabled=!canEdit)
         if r.type === 'sw'
-          .row.g-2
-            .col-sm-6
-              label.form-label.small.mb-0 Image
-              input.form-control.form-control-sm.font-monospace(data-f="image" value=current.image || '' placeholder="dut-emulator:2026.08")
-            .col-sm-6
-              label.form-label.small.mb-0 Registry
-              input.form-control.form-control-sm.font-monospace(data-f="registry" value=current.registry || '' placeholder="registry.lab:5000")
-            .col-sm-3
-              label.form-label.small.mb-0 CPUs
-              input.form-control.form-control-sm(data-f="cpus" type="number" step="0.1" min="0.1" value=current.cpus != null ? current.cpus : '' placeholder="2")
-            .col-sm-3
-              label.form-label.small.mb-0 Memory
-              input.form-control.form-control-sm(data-f="memory" value=current.memory || '' placeholder="2g")
-            .col-sm-6
-              label.form-label.small.mb-0 Container command
-              input.form-control.form-control-sm.font-monospace(
-                data-f="cmd"
-                value=(current.cmd || []).join(' ')
-                placeholder="--firmware /downloads/app.bin"
-                title="For the image above (not a job's own); space-separated"
-              )
-            .col-12.d-flex.gap-4.mt-2
-              .form-check
-                input.form-check-input(type="checkbox" data-f="allowDockerHub" id=`cc-${r.id}-hub` checked=current.allowDockerHub === true)
-                label.form-check-label.small(for=`cc-${r.id}-hub`) Pull from Docker Hub
-              .form-check
-                input.form-check-input(type="checkbox" data-f="allowJobImages" id=`cc-${r.id}-jobimg` checked=current.allowJobImages === true)
-                label.form-check-label.small(for=`cc-${r.id}-jobimg`) Run jobs' own images (--docker-image)
+          +configPane(p, 'emulator')
+            +capabilitiesStatus(r)
+            .row.g-2
+              .col-sm-6
+                label.form-label.small.mb-0 Image
+                input.form-control.form-control-sm.font-monospace(data-f="image" value=current.image || '' placeholder="dut-emulator:2026.08")
+              .col-sm-6
+                label.form-label.small.mb-0 Registry
+                input.form-control.form-control-sm.font-monospace(data-f="registry" value=current.registry || '' placeholder="registry.lab:5000")
+              .col-sm-3
+                label.form-label.small.mb-0 CPUs
+                input.form-control.form-control-sm(data-f="cpus" type="number" step="0.1" min="0.1" value=current.cpus != null ? current.cpus : '' placeholder="2")
+              .col-sm-3
+                label.form-label.small.mb-0 Memory
+                input.form-control.form-control-sm(data-f="memory" value=current.memory || '' placeholder="2g")
+              .col-sm-6
+                label.form-label.small.mb-0 Container command
+                input.form-control.form-control-sm.font-monospace(
+                  data-f="cmd"
+                  value=(current.cmd || []).join(' ')
+                  placeholder="--firmware /downloads/app.bin"
+                  title="For the image above (not a job's own); space-separated"
+                )
+              .col-12.d-flex.gap-4.mt-2
+                .form-check
+                  input.form-check-input(type="checkbox" data-f="allowDockerHub" id=`cc-${r.id}-hub` checked=current.allowDockerHub === true)
+                  label.form-check-label.small(for=`cc-${r.id}-hub`) Pull from Docker Hub
+                .form-check
+                  input.form-check-input(type="checkbox" data-f="allowJobImages" id=`cc-${r.id}-jobimg` checked=current.allowJobImages === true)
+                  label.form-check-label.small(for=`cc-${r.id}-jobimg`) Run jobs' own images (--docker-image)
+            +saveCapabilities(canEdit)
         else
           - const power = current.power || {}
-          +deviceTable('stlinks', 'ST-Link probes', current.stlinks || [], ['Device', 'Serial', 'udev devpath'])
-          +deviceTable('uarts', 'UARTs', current.uarts || [], ['Device', 'Baud rate', 'udev devpath'])
-          +deviceTable('usbs', 'DUT USB devices', current.usbs || [], ['Device', 'udev devpath'])
-          +deviceTable('relays', 'Relay channels', current.relays || [], ['Channel (0-7)', 'Board URL'])
-          strong.small.d-block.mt-3.mb-1 Power control
-          .row.g-2(data-power)
-            .col-sm-3
-              select.form-select.form-select-sm(data-f="method" aria-label="Power method")
-                option(value="" selected=!power.method) none
-                option(value="uhubctl" selected=power.method === 'uhubctl') uhubctl
-                option(value="relay" selected=power.method === 'relay') relay
-            .col-sm-3
-              input.form-control.form-control-sm(data-f="hub" value=power.hub || '' placeholder="hub (uhubctl)")
-            .col-sm-2
-              input.form-control.form-control-sm(data-f="port" type="number" min="1" value=power.port != null ? power.port : '' placeholder="port")
-            .col-sm-4
-              input.form-control.form-control-sm(data-f="baseUrl" type="url" value=power.baseUrl || '' placeholder="relay URL")
-          .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-…) or a /dev path. udev devpath: the USB port the device is plugged into, for its symlink.
-        if canEdit
-          .d-flex.justify-content-end.mt-3
-            button.btn.btn-sm.btn-primary(type="submit") Save capabilities
+          +configPane(p, 'stlinks')
+            +capabilitiesStatus(r)
+            +deviceTable('stlinks', 'ST-Link probes', current.stlinks || [], ['Device', 'Serial', 'udev devpath'])
+            .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-stlink) or a /dev path. The serial is looked up from the udev symlink when empty.
+            +saveCapabilities(canEdit)
+          +configPane(p, 'uarts')
+            +capabilitiesStatus(r)
+            +deviceTable('uarts', 'UARTs', current.uarts || [], ['Device', 'Baud rate', 'udev devpath'])
+            .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-uart) or a /dev path. Baud rate: 115200 when empty.
+            +saveCapabilities(canEdit)
+          +configPane(p, 'usbs')
+            +capabilitiesStatus(r)
+            +deviceTable('usbs', 'DUT USB devices', current.usbs || [], ['Device', 'udev devpath'])
+            .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-usb) or a /dev path. udev devpath: the USB port it's plugged into.
+            +saveCapabilities(canEdit)
+          +configPane(p, 'power')
+            +capabilitiesStatus(r)
+            +deviceTable('relays', 'Relay channels', current.relays || [], ['Channel (0-7)', 'Board URL'])
+            strong.small.d-block.mt-3.mb-1 Power control
+            .row.g-2(data-power)
+              .col-sm-3
+                select.form-select.form-select-sm(data-f="method" aria-label="Power method")
+                  option(value="" selected=!power.method) none
+                  option(value="uhubctl" selected=power.method === 'uhubctl') uhubctl
+                  option(value="relay" selected=power.method === 'relay') relay
+              .col-sm-3
+                input.form-control.form-control-sm(data-f="hub" value=power.hub || '' placeholder="hub (uhubctl)")
+              .col-sm-2
+                input.form-control.form-control-sm(data-f="port" type="number" min="1" value=power.port != null ? power.port : '' placeholder="port")
+              .col-sm-4
+                input.form-control.form-control-sm(data-f="baseUrl" type="url" value=power.baseUrl || '' placeholder="relay URL")
+            +saveCapabilities(canEdit)
+  +configPane(p, 'reboot')
+    dl.row.mb-0
+      +rebootScheduleRow(r, returnTo)
