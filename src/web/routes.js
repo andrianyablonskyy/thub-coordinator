@@ -412,6 +412,19 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, '/resources'));
   });
 
+  // Reboot now (resource card footer): cancels a running job, then the
+  // Client reboots its host on its next heartbeat (jobs.requestReboot).
+  router.post('/resources/:id/reboot', requireAdminRole, (req, res) => {
+    try {
+      const { resource: r, canceledJob } = services.jobs.requestReboot(req.params.id, { by: req.session.user.username });
+      flash(req, 'warning', `Rebooting ${r.name}'s host on its next heartbeat.` + (canceledJob ? `\nCanceled its running job ${canceledJob}.` : ''));
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/resources'));
+  });
+
   // Scheduled host reboot (resource card): save a cron expression, or clear
   // it; the Client applies it on its next heartbeat.
   router.post('/resources/:id/reboot-schedule', requireAdminRole, (req, res) => {

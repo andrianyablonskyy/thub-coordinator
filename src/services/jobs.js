@@ -13,7 +13,7 @@
 
 'use strict';
 
-const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES } = require('@andrian.yablonskyy/thub-common'),
+const { validateJobSpec, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/thub-common'),
   { paginate } = require('./list-prefs');
 
 function rowToJob(row){
@@ -256,7 +256,8 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
   }
 
   // Agent: POST /jobs/:id/cancel
-  function cancel(id, { agentId, isAdmin }){
+  // `reason`: shown as the job's message (e.g. "Canceled: user reboot request").
+  function cancel(id, { agentId, isAdmin, reason }){
     const job = get(id);
     if (!job){
       throw Object.assign(new Error('Unknown job'), { status: 404 });
@@ -271,7 +272,35 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     if (job.resource_id){
       bus.emit('command', { resourceId: job.resource_id, command: 'cancel-job', jobId: id });
     }
-    return setState(id, JOB_STATES.CANCELED);
+    return setState(id, JOB_STATES.CANCELED, reason ? { message: reason } : {});
+  }
+
+  // Admin "Reboot" on a Client (resource card): its running job is canceled
+  // first (the host is going down anyway), then a `reboot` command goes out
+  // with its next heartbeat — the Client reboots the host through its root
+  // reboot helper once nothing on it is busy. Refused for a Client that's
+  // offline (it would reboot whenever it next reconnects) or can't reboot.
+  function requestReboot(resourceId, { by } = {}){
+    const r = registry.get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    if (r.status === RESOURCE_STATES.OUT_OF_SERVICE || !r.last_heartbeat_at){
+      throw Object.assign(new Error(`${r.name} is offline — it can only be rebooted while it's connected`), { status: 409 });
+    }
+    if (r.capabilities?.rebootSupported === false){
+      throw Object.assign(
+        new Error(`${r.name}'s host has no reboot helper — reinstall the Client as root (sudo npm i -g @andrian.yablonskyy/thub-client)`),
+        { status: 409 }
+      );
+    }
+    const job = activeForResource(resourceId);
+    if (job){
+      cancel(job.id, { isAdmin: true, reason: 'Canceled: user reboot request' });
+    }
+    bus.emit('command', { resourceId, command: 'reboot', reason: `user reboot request${by ? ` by ${by}` : ''}` });
+    events.record('resource', resourceId, 'resource.reboot_requested', { by, canceledJob: job?.id || null });
+    return { resource: r, canceledJob: job?.id || null };
   }
 
   // Queued jobs pinned to a resource (`target.client`) can never run once it's
@@ -486,6 +515,7 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
     setState,
     cancel,
     cancelPinnedTo,
+    requestReboot,
     removeResource,
     completeRemoval,
     activeForResource,

@@ -47,7 +47,16 @@
     field('ok').className = `btn btn-${tone}`;
     field('ok').textContent = form.dataset.confirmOk || 'Confirm';
     field('dismiss').textContent = form.dataset.confirmDismiss || 'Cancel';
-    modal.show();
+    // Asked from inside another modal (e.g. the resource card): close that
+    // one first — Bootstrap doesn't stack modals.
+    const host = form.closest('.modal.show');
+    if (host && host !== modalEl){
+      host.addEventListener('hidden.bs.modal', () => modal.show(), { once: true });
+      bootstrap.Modal.getInstance(host)?.hide();
+    }
+    else {
+      modal.show();
+    }
   });
 
   field('ok').addEventListener('click', () => {

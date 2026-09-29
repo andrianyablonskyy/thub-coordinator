@@ -337,6 +337,37 @@ mixin resourceCard(r, groupsById, returnTo)
             .tab-pane.fade(id=`rc-${r.id}-config` role="tabpanel" aria-labelledby=`rc-${r.id}-config-tab` tabindex="0")
               dl.row.mb-0
                 +rebootScheduleRow(r, returnTo)
+        if user.role === 'admin'
+          .modal-footer
+            +rebootButton(r, returnTo)
+
+//- Reboot the Client's host now (card footer): confirmed first — naming the
+//- job that gets canceled, if one is running — then sent with the Client's
+//- next heartbeat. Disabled while it's offline or has no reboot helper.
+mixin rebootButton(r, returnTo)
+  - const offline = r.status === 'OUT_OF_SERVICE' || !r.last_heartbeat_at
+  - const unsupported = r.capabilities && r.capabilities.rebootSupported === false
+  - const why = offline ? 'Offline — a Client can only be rebooted while connected' : unsupported ? "This host has no reboot helper — reinstall the Client as root" : null
+  if why
+    span.d-inline-block(tabindex="0" data-bs-toggle="tooltip" data-bs-title=why)
+      button.btn.btn-outline-danger(type="button" disabled style="pointer-events: none;")
+        i.bi.bi-bootstrap-reboot.me-1
+        | Reboot
+  else
+    form(
+      method="post"
+      action=`/resources/${r.id}/reboot`
+      data-confirm=r.activeJob
+        ? `${r.name} is running job ${r.activeJob.id}. Rebooting cancels that job (reason: user reboot request), then reboots the host on the Client's next heartbeat. Every Client instance on that host goes down with it.`
+        : `Reboot the host of ${r.name}? It reboots on the Client's next heartbeat, once nothing on the host is busy. Every Client instance on that host goes down with it.`
+      data-confirm-title=r.activeJob ? `Cancel job ${r.activeJob.id} and reboot?` : `Reboot ${r.name}?`
+      data-confirm-ok=r.activeJob ? 'Cancel job and reboot' : 'Reboot'
+      data-confirm-dismiss="Don't reboot"
+    )
+      input(type="hidden" name="returnTo" value=returnTo)
+      button.btn.btn-outline-danger(type="submit")
+        i.bi.bi-bootstrap-reboot.me-1
+        | Reboot
 
 //- The resource card's Details tab.
 mixin resourceDetails(r, groupsById, returnTo, local, external)

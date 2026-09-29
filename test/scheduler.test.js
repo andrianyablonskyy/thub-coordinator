@@ -57,7 +57,7 @@ function buildTestServices(overrides = {}){
     jobs = createJobsService(db, { bus, events, registry, artifacts, config }),
     scheduler = createScheduler(db, { bus, events, registry, config }),
     heartbeatMonitor = createHeartbeatMonitor(db, { bus, events, registry, jobs, config });
-  return { db, registry, agents, groups, artifacts, jobs, scheduler, heartbeatMonitor, artifactsDir };
+  return { db, bus, registry, agents, groups, artifacts, jobs, scheduler, heartbeatMonitor, artifactsDir };
 }
 
 function registerResource(registry, { name, type, labels = [], groups = [], clientId } = {}){
@@ -582,6 +582,40 @@ test('reboot schedule: validated, then resent on heartbeats until the Client rep
   assert.deepEqual(registry.pendingRebootSchedule(r.id), { cron: null }); // tell it to clear
   registry.heartbeat(r.id, { state: 'idle', rebootSchedule: null });
   assert.equal(registry.pendingRebootSchedule(r.id), null);
+});
+
+test('reboot now: refused offline or without a helper; cancels a running job first, then sends reboot', () => {
+  const { bus, registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'dev', kind: 'cli' }),
+    reg = (name, rebootSupported) => registry.get(registry.registerAuto({
+      clientId: `c-${name}`, name, type: 'sw', labels: [], capabilities: { sw: { image: 'emu' }, rebootSupported }
+    }).resourceId),
+    offline = reg('rb-offline', true),
+    noHelper = reg('rb-nohelper', false),
+    idle = reg('rb-idle', true),
+    busy = reg('rb-busy', true),
+    commands = [];
+  for (const r of [noHelper, idle, busy]){
+    registry.heartbeat(r.id, { state: 'idle' });
+  }
+  bus.on('command', (c) => commands.push(c));
+
+  assert.throws(() => jobs.requestReboot(offline.id), /offline/);
+  assert.throws(() => jobs.requestReboot(noHelper.id), /no reboot helper/);
+
+  assert.equal(jobs.requestReboot(idle.id).canceledJob, null);
+  assert.deepEqual(commands.map((c) => [c.resourceId, c.command]), [[idle.id, 'reboot']]);
+  commands.length = 0;
+
+  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', client: busy.id } }) });
+  scheduler.runPass();
+  jobs.setState(job.id, JOB_STATES.RUNNING);
+  assert.equal(jobs.requestReboot(busy.id, { by: 'admin' }).canceledJob, job.id);
+  assert.deepEqual(commands.map((c) => c.command), ['cancel-job', 'reboot']); // same heartbeat reply, in order
+  assert.equal(commands[1].reason, 'user reboot request by admin');
+  const after = jobs.get(job.id);
+  assert.equal(after.state, JOB_STATES.CANCELED);
+  assert.equal(after.message, 'Canceled: user reboot request');
 });
 
 test('a resource can belong to several groups at once', () => {

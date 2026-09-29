@@ -51,6 +51,17 @@ function createAdminRouter({ services }){
     res.status(204).end();
   });
 
+  // Reboot a Client's host now (its running job is canceled first).
+  router.post('/resources/:id/reboot', (req, res, next) => {
+    try {
+      const { resource, canceledJob } = services.jobs.requestReboot(req.params.id);
+      res.json({ id: resource.id, rebooting: true, canceledJob });
+    }
+    catch (err){
+      next(err);
+    }
+  });
+
   // Scheduled host reboot: { cron } (5-field, host local time; "" clears).
   router.post('/resources/:id/reboot-schedule', (req, res, next) => {
     try {
