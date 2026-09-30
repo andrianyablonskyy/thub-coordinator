@@ -170,7 +170,7 @@ function seedHistory(services, agentId, resourceIds){
 // stay IDLE instead of going OUT_OF_SERVICE) and play out any job the
 // scheduler assigns them — accept, PREPARING, RUNNING with streamed log
 // lines, then a PASSED (mostly) or FAILED result — through the same
-// services the Client API uses, so SSE, durations and artifacts all work.
+// services the Client API uses, so SSE and durations all work.
 function startVirtualClients(services, config){
   const { registry, jobs, logs, bus } = services,
     intervalMs = config.heartbeat.intervalSec * 1000,

@@ -812,7 +812,7 @@ function createWebRouter({ services, config }){
   });
 
   // "Clean up database" (§9): everything before the given time — finished
-  // jobs with their logs/artifacts, and older history — then VACUUM. The
+  // jobs with their logs, and older history — then VACUUM. The
   // time is dd/mm/yyyy HH:MM:SS in the user's own time zone.
   router.post('/jobs/clean-history', requireAdminRole, (req, res) => {
     const tz = req.session.user.timezone || 'UTC',
@@ -844,8 +844,7 @@ function createWebRouter({ services, config }){
       return res.status(404).send('Not found');
     }
     job.resource = job.resource_id ? services.registry.get(job.resource_id) : null;
-    const artifacts = services.artifacts.listForJob(job.id).map((a) => ({ ...a, url: services.artifacts.signedUrl(a) })),
-      jobActive = ACTIVE_JOB_STATES.has(job.state);
+    const jobActive = ACTIVE_JOB_STATES.has(job.state);
     res.render('jobs/show', {
       title: job.id,
       active: 'jobs',
@@ -855,7 +854,6 @@ function createWebRouter({ services, config }){
         ? services.registry.waitingReason(job.spec.target.type, job.spec.target.labels || [], job.spec.target.group,
           job.spec.target.client)
         : null,
-      artifacts,
       jobActive,
       canCancel: req.session.user.role === 'admin' && jobActive
     });
@@ -885,8 +883,8 @@ function createWebRouter({ services, config }){
 
   // RAW (log viewer): the whole log as plain text, for a new tab, a
   // download or grep. Streamed in pages, waiting for the socket to drain,
-  // so a huge log never sits in memory. Once the lines are purged
-  // (retention.logRetentionDays, §9) it serves the console.log artifact.
+  // so a huge log never sits in memory. Log lines live as long as their job
+  // (§9), so this is always the complete log.
   router.get('/jobs/:id/log.txt', async (req, res, next) => {
     try {
       const job = services.jobs.get(req.params.id);
@@ -901,10 +899,6 @@ function createWebRouter({ services, config }){
         'Content-Disposition': `inline; filename="${job.id}.log"`,
         'Cache-Control': 'no-store'
       });
-      if (!services.logs.count(job.id)){
-        const artifact = services.artifacts.listForJob(job.id).find((a) => a.name === 'console.log');
-        return artifact && fs.existsSync(artifact.path) ? res.sendFile(path.resolve(artifact.path)) : res.send('');
-      }
       for (let seq = 0, page; (page = services.logs.listSince(job.id, seq, LOG_PAGE_MAX)).length;){
         const chunk = page.map((l) => `[${l.ts}] [${l.stream}] ${l.line}\n`).join('');
         seq = page.at(-1).seq;
@@ -923,7 +917,7 @@ function createWebRouter({ services, config }){
   });
 
   router.get('/jobs/:id/stream', (req, res) => {
-    attachJobStream(req, res, { jobId: req.params.id, services, config });
+    attachJobStream(req, res, { jobId: req.params.id, services });
   });
 
   // Resource groups (§13.1) — their own page since they're a distinct

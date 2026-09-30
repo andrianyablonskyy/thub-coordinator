@@ -52,18 +52,15 @@ const DEFAULTS = {
     defaultTimeoutSec: 1800,
     maxTimeoutSec: 14400
   },
+  // logRetentionDays, artifactRetentionDays and the `artifacts` section of
+  // older configs are no longer read: a job's log lines live as long as the
+  // job, and the Coordinator stores no artifacts (README §9).
   retention: {
-    logRetentionDays: 14,
-    artifactRetentionDays: 30,
-    // How long a finished job (with its logs, artifacts and events) is kept
+    // How long a finished job (with its logs and events) is kept
     // before the hourly retention task wipes it (services/cleanup.js):
     // 1w | 2w | 1m | 3m | 6m | forever. `forever` keeps everything until a
     // manual cleanup (dashboard Clean up database / thub-admin jobs clean).
     jobRetention: 'forever'
-  },
-  artifacts: {
-    maxUploadMb: 512,
-    linkTtlHours: 168
   },
   // New-version check of the Coordinator/Agent/Client packages (README
   // §10.2), every 15 minutes so a new Coordinator's "Update app" button
@@ -148,12 +145,10 @@ function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
   config.host = host;
   config.port = Number(port);
   config.dbPath = path.join(config.dataDir, 'thub.db');
-  config.artifactsDir = path.join(config.dataDir, 'artifacts');
   config.workDir = path.join(config.dataDir, 'work');
   config.avatarsDir = path.join(config.dataDir, 'avatars');
 
   ensureWritableDir(config.dataDir, config.configPath);
-  ensureWritableDir(config.artifactsDir, config.configPath);
   ensureWritableDir(config.avatarsDir, config.configPath);
 
   return config;

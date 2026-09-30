@@ -56,7 +56,7 @@ function nextJobId(db, source){
   return `${prefix}-${String(n).padStart(5, '0')}`;
 }
 
-function createJobsService(db, { bus, events, registry, artifacts, config }){
+function createJobsService(db, { bus, events, registry, config }){
   function get(id){
     return rowToJob(db.prepare('SELECT * FROM jobs WHERE id = ?').get(id));
   }
@@ -483,7 +483,7 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
   }
 
   // Admin: "clean the queue" — permanently delete finished jobs (and their
-  // logs/artifacts, on disk and in the DB), for when the history itself,
+  // logs, in the DB), for when the history itself,
   // not just active work, needs clearing out. Unlike the nightly retention
   // sweep (§9), this runs on demand and isn't limited to old jobs.
   function cleanHistory(){
@@ -491,7 +491,7 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
   }
 
   // Finished jobs that ended before `beforeIso` (null: all of them), with
-  // their logs, artifacts (files too) and events — manual cleanup and the
+  // their logs and events — manual cleanup and the
   // job retention task (services/cleanup.js). Active jobs are never touched.
   function purgeFinishedBefore(beforeIso){
     const placeholders = [...TERMINAL_JOB_STATES].map(() => '?').join(','),
@@ -504,14 +504,11 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
       return 0;
     }
 
-    const deleteArtifacts = db.prepare('DELETE FROM artifacts WHERE job_id = ?'),
-      deleteLogs = db.prepare('DELETE FROM job_logs WHERE job_id = ?'),
+    const deleteLogs = db.prepare('DELETE FROM job_logs WHERE job_id = ?'),
       deleteEvents = db.prepare('DELETE FROM events WHERE entity = \'job\' AND entity_id = ?'),
       deleteJob = db.prepare('DELETE FROM jobs WHERE id = ?'),
       tx = db.transaction(() => {
         for (const id of ids){
-          artifacts.deleteJobArtifacts(id);
-          deleteArtifacts.run(id);
           deleteLogs.run(id);
           deleteEvents.run(id);
           deleteJob.run(id);

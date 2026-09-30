@@ -87,7 +87,7 @@ block content
           |
           code CANCELED
           | .
-        p.small.text-body-secondary.mb-0 Finished jobs, logs and artifacts are not touched.
+        p.small.text-body-secondary.mb-0 Finished jobs and their logs are not touched.
       else
         p.mb-0 There are no active jobs — nothing to cancel.
 
@@ -132,7 +132,7 @@ block content
             onclick="document.getElementById('cleanup-before').value = this.dataset.value"
           )= preset.label
       p
-        | Deletes finished jobs that ended before then, with their logs and artifacts (files too), and the resource, agent and group history logged before then — then compacts the database file.
+        | Deletes finished jobs that ended before then, with their logs, and the resource, agent and group history logged before then — then compacts the database file.
         |
         strong This cannot be undone.
         |  Active jobs are never touched.

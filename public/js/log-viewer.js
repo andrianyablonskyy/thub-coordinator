@@ -66,7 +66,7 @@
       info.textContent = 'Loading earlier lines…';
     }
     else if (!total){
-      info.textContent = jobActive ? 'No output yet.' : 'No log lines stored — Raw opens the console.log artifact, if there is one.';
+      info.textContent = jobActive ? 'No output yet.' : 'This job produced no output.';
     }
     else if (hasMore){
       info.textContent = `Showing the last ${number(logLines)} of ${number(total)} lines — scroll up for earlier ones.`;
@@ -331,7 +331,7 @@
       renderLive();
       source.close();
       // The job was active when we opened this page and just finished —
-      // reload once to pick up the now-final badge/artifacts list.
+      // reload once to pick up the now-final badge and details.
       setTimeout(() => window.location.reload(), 1500);
     });
     source.onerror = () => {

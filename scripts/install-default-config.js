@@ -1,7 +1,7 @@
 /**
  * @file        scripts/install-default-config.js
  * @description npm postinstall: on a real global install, creates the Coordinator's directory layout
- *              (~/.config/thub, ~/.thub and its artifacts/avatars/work subdirs) and, if it
+ *              (~/.config/thub, ~/.thub and its avatars/work subdirs) and, if it
  *              doesn't already exist, ~/.config/thub/coordinator.json with every default option and
  *              a freshly generated sessionSecret (README §12, §13)
  *

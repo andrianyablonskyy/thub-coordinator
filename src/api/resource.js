@@ -14,11 +14,8 @@
 'use strict';
 
 const express = require('express'),
-  multer = require('multer'),
   { requireRole, requireJoinKey, appVersion } = require('../auth'),
   { JOB_STATES } = require('@andrian.yablonskyy/thub-common');
-
-const upload = multer({ dest: require('node:os').tmpdir() });
 
 function requireOwnResource(req, res, next){
   if (req.resource.id !== req.params.id){
@@ -211,14 +208,12 @@ function createResourceRouter({ services, config }){
     }
   });
 
-  router.post('/jobs/:id/artifacts', auth, requireOwnJob(services), upload.any(), (req, res, next) => {
-    try {
-      const stored = services.artifacts.storeUploaded(req.params.id, req.files || []);
-      res.status(201).json({ artifacts: stored.map((a) => ({ id: a.id, name: a.name, size: a.size })) });
-    }
-    catch (err){
-      next(err);
-    }
+  // Artifacts are no longer stored on the Coordinator (README §9). A Client
+  // older than that still uploads its results after each job and would end
+  // the job as ERROR on a 404, so accept the upload and discard it unread.
+  router.post('/jobs/:id/artifacts', auth, requireOwnJob(services), (req, res) => {
+    req.resume();
+    req.on('end', () => res.status(201).json({ artifacts: [] }));
   });
 
   router.post('/jobs/:id/result', auth, requireOwnJob(services), (req, res, next) => {

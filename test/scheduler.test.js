@@ -25,8 +25,8 @@ const test = require('node:test'),
   { createRegistryService } = require('../src/services/registry'),
   { createAgentsService } = require('../src/services/agents'),
   { createGroupsService } = require('../src/services/groups'),
-  { createArtifactsService } = require('../src/services/artifacts'),
   { createJobsService } = require('../src/services/jobs'),
+  { createLogsService } = require('../src/services/logs'),
   { createScheduler } = require('../src/services/scheduler'),
   { createHeartbeatMonitor } = require('../src/services/heartbeat'),
   { JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/thub-common');
@@ -42,22 +42,19 @@ function buildTestServices(overrides = {}){
     registry = createRegistryService(db, { bus, events }),
     agents = createAgentsService(db, { events }),
     groups = createGroupsService(db, { events, registry }),
-    artifactsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'thub-test-artifacts-')),
     config = {
       scheduler: { assignAckTimeoutSec: 15, requeueOnLost: true, maxQueuedPerAgent: 20, tickIntervalSec: 3600 },
       jobs: { defaultTimeoutSec: 1800, maxTimeoutSec: 14400 },
       heartbeat: { intervalSec: 10, missedLimit: 3, sweepIntervalSec: 3600 },
-      artifactsDir,
       sessionSecret: 'test-secret',
       publicUrl: 'http://localhost:8080',
-      artifacts: { linkTtlHours: 1 },
       ...overrides
     },
-    artifacts = createArtifactsService(db, { config }),
-    jobs = createJobsService(db, { bus, events, registry, artifacts, config }),
+    logs = createLogsService(db, { bus }),
+    jobs = createJobsService(db, { bus, events, registry, config }),
     scheduler = createScheduler(db, { bus, events, registry, config }),
     heartbeatMonitor = createHeartbeatMonitor(db, { bus, events, registry, jobs, config });
-  return { db, bus, registry, agents, groups, artifacts, jobs, scheduler, heartbeatMonitor, artifactsDir };
+  return { db, bus, registry, agents, groups, logs, jobs, scheduler, heartbeatMonitor };
 }
 
 function registerResource(registry, { name, type, labels = [], groups = [], clientId } = {}){
@@ -206,15 +203,16 @@ test('admin resetQueue cancels every active job and leaves finished ones alone',
   assert.equal(jobs.get(finished.id).state, JOB_STATES.PASSED); // untouched
 });
 
-test('admin cleanHistory deletes finished jobs, their artifacts on disk, and leaves active jobs alone', () => {
-  const { registry, agents, artifacts, jobs, artifactsDir } = buildTestServices(),
+test('admin cleanHistory deletes finished jobs with their log lines, and leaves active jobs alone', () => {
+  const { db, registry, agents, logs, jobs } = buildTestServices(),
     { agent } = agents.create({ name: 'ci', kind: 'ci' });
   registerResource(registry, { name: 'lab-sw-01', type: 'sw', labels: [] });
 
   const finished = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() });
   jobs.setState(finished.id, JOB_STATES.PASSED);
-  artifacts.storeGenerated(finished.id, 'console.log', Buffer.from('hello'), 'text/plain');
-  assert.ok(fs.existsSync(path.join(artifactsDir, finished.id)));
+  logs.appendBatch(finished.id, [{ stream: 'runner', line: 'hello' }]);
+  const logLines = (id) => db.prepare('SELECT COUNT(*) AS n FROM job_logs WHERE job_id = ?').get(id).n;
+  assert.equal(logLines(finished.id), 1);
 
   const active = jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec() }),
 
@@ -222,7 +220,7 @@ test('admin cleanHistory deletes finished jobs, their artifacts on disk, and lea
 
   assert.equal(deleted, 1);
   assert.equal(jobs.get(finished.id), undefined);
-  assert.equal(fs.existsSync(path.join(artifactsDir, finished.id)), false);
+  assert.equal(logLines(finished.id), 0);
   assert.ok(jobs.get(active.id)); // active job untouched
 });
 

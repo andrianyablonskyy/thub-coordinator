@@ -11,7 +11,7 @@
   p.small.
     #[code sudo npm i -g] does the whole setup for the user who ran #[code sudo]. It creates
     #[code ~/.config/thub/coordinator.json] (with a random #[code sessionSecret]) and
-    #[code ~/var/lib/thub] (database, artifacts, avatars). It installs, enables and starts
+    #[code ~/var/lib/thub] (database, avatars). It installs, enables and starts
     #[code thub-coordinator.service], plus the root helper behind the navbar's #[strong Update app] button.
 
   h3.h6 2. Configure
@@ -30,8 +30,7 @@
       "heartbeat": { "intervalSec": 10, "missedLimit": 3, "sweepIntervalSec": 5 },
       "scheduler": { "assignAckTimeoutSec": 15, "requeueOnLost": true, "maxQueuedPerAgent": 20, "tickIntervalSec": 10 },
       "jobs": { "defaultTimeoutSec": 1800, "maxTimeoutSec": 14400 },
-      "retention": { "logRetentionDays": 14, "artifactRetentionDays": 30, "jobRetention": "forever" },
-      "artifacts": { "maxUploadMb": 512, "linkTtlHours": 168 },
+      "retention": { "jobRetention": "forever" },
       "updates": { "checkIntervalMin": 15, "registry": null }
     }
   .table-responsive
@@ -52,7 +51,7 @@
           td Which proxies' #[code X-Forwarded-For] to trust for a Client's external address: #[code loopback] (default), a CIDR such as #[code "10.0.0.0/8"], a hop count, or #[code false].
         tr
           td: code sessionSecret
-          td Signs dashboard sessions and artifact download links. Keep it secret and never use the #[code change-me-…] placeholder.
+          td Signs dashboard session cookies. Keep it secret and never use the #[code change-me-…] placeholder.
         tr
           td: code session.secureCookie
           td #[code "auto"] (default): the session cookie is Secure (HTTPS-only) whenever #[code publicUrl] is https://. #[code true]/#[code false] force it. Sessions are stored in the database and survive restarts.
@@ -70,7 +69,7 @@
           td Default and maximum job timeout, in seconds.
         tr
           td: code retention.*
-          td #[code jobRetention]: #[code 1w], #[code 2w], #[code 1m], #[code 3m], #[code 6m] or #[code forever]. Older finished jobs, their logs and artifacts are deleted hourly.
+          td #[code jobRetention]: #[code 1w], #[code 2w], #[code 1m], #[code 3m], #[code 6m] or #[code forever]. Older finished jobs and their logs are deleted hourly.
         tr
           td: code updates.*
           td How often to check npm for new versions (#[code 0] turns the periodic check off), and an optional private registry.
@@ -100,7 +99,7 @@
           proxy_http_version 1.1;
           proxy_buffering off;          # SSE log streams
           proxy_read_timeout 1h;
-          client_max_body_size 512m;    # artifacts.maxUploadMb
+          client_max_body_size 10m;     # log batches, avatars
         }
 
   h3.h6 4. Users, agents and the join key

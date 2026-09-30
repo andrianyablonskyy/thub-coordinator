@@ -20,8 +20,9 @@
     git remote add origin git@github.com:yourorg/firmware-tests.git
     git push -u origin main
   p.small.
-    The exit code of #[code --command] is the verdict. JUnit files under #[code results/] or #[code artifacts/] are uploaded
-    as artifacts and summed into the job's test counts. Any other file there is uploaded too.
+    The exit code of #[code --command] is the verdict. JUnit files under #[code results/] or #[code artifacts/] are summed into
+    the job's test counts. Nothing is uploaded: the workspace is deleted when the job ends, so publish anything you need to keep
+    from the command itself (e.g. #[code curl -T report.html "$ARTIFACTORY/…"] with a token passed as #[code --env]).
 
   h3.h6 2. Give Clients read access: SSH deploy key (recommended)
   p.small.

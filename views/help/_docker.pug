@@ -106,7 +106,7 @@
         td Removes the container when the tests end.
       tr
         td: code -v "$THUB_WORK_DIR:/work" -w /work
-        td The checkout and downloads, and the #[code results/] and #[code artifacts/] folders, which the Client uploads.
+        td The checkout and downloads, and the #[code results/] and #[code artifacts/] folders, where the Client reads JUnit XML for the test counts.
       tr
         td: code -e NAME
         td Passes a job variable (#[code --env], #[code THUB_*], #[code JOB_*]) into the container.

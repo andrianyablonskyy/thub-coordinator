@@ -23,7 +23,6 @@ const test = require('node:test'),
   { createEventsService } = require('../src/services/events'),
   { createRegistryService } = require('../src/services/registry'),
   { createAgentsService } = require('../src/services/agents'),
-  { createArtifactsService } = require('../src/services/artifacts'),
   { createJobsService } = require('../src/services/jobs'),
   { createCleanupService, retentionCutoff } = require('../src/services/cleanup'),
   { JOB_STATES } = require('@andrian.yablonskyy/thub-common');
@@ -35,8 +34,6 @@ function setup(jobRetention = 'forever'){
     config = {
       dataDir,
       dbPath: path.join(dataDir, 'thub.db'),
-      artifactsDir: path.join(dataDir, 'artifacts'),
-      artifacts: { linkTtlHours: 1 },
       sessionSecret: 's',
       publicUrl: 'http://x',
       scheduler: { maxQueuedPerAgent: 1000 },
@@ -48,8 +45,7 @@ function setup(jobRetention = 'forever'){
     events = createEventsService(db),
     registry = createRegistryService(db, { bus, events }),
     { agent } = createAgentsService(db, { events }).create({ name: 'ci', kind: 'ci' }),
-    artifacts = createArtifactsService(db, { config }),
-    jobs = createJobsService(db, { bus, events, registry, artifacts, config }),
+    jobs = createJobsService(db, { bus, events, registry, config }),
     cleanup = createCleanupService(db, { jobs, config, now: () => NOW });
   registry.registerAuto({ clientId: 'c', name: 'lab', type: 'sw', labels: [] });
 

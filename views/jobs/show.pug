@@ -49,15 +49,5 @@ block content
       dt.col-sm-2 Message
       dd.col-sm-10= job.message
 
-  h2.h6.mt-4#artifacts Artifacts
-  if artifacts.length
-    ul.list-group
-      each a in artifacts
-        li.list-group-item.d-flex.justify-content-between
-          span= a.name
-          a(href=a.url) download
-  else
-    p.text-body-secondary No artifacts yet.
-
   h2.h6.mt-4 Log
   +logViewer(job.id, jobActive)

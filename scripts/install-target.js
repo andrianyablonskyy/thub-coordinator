@@ -52,7 +52,7 @@ function resolveTargetUser(){
 }
 
 // Default layout (README §13): config under ~/.config/thub, runtime data
-// (SQLite DB, uploaded artifacts, avatars, work files) under ~/.thub.
+// (SQLite DB, avatars, work files) under ~/.thub.
 // An existing coordinator.json's own dataDir wins over the default, so a
 // re-install prepares (and the systemd unit allows writes to) the
 // directory the Coordinator will really use.
@@ -69,7 +69,7 @@ function targetPaths(user){
     // Written by the dashboard's "Update app" button, watched by
     // thub-coordinator-update.path (README §10.2).
     updateRequestFile: path.join(dataDir, 'update-request.json'),
-    dataSubdirs: ['artifacts', 'avatars', 'work'].map((d) => path.join(dataDir, d))
+    dataSubdirs: ['avatars', 'work'].map((d) => path.join(dataDir, d))
   };
 }
 

@@ -87,7 +87,7 @@ test('log stream replays every line, not just the first 500', async (t) => {
   assert.equal([...resumed.matchAll(/^event: log$/gm)].length, 34);
 });
 
-test('RAW: the whole log as plain text; the console.log artifact once lines are purged', async (t) => {
+test('RAW: the whole log as plain text, for as long as the job exists', async (t) => {
   const { get, job, finish, services } = await setup(t, 6001),
     res = await get(`/jobs/${job.id}/log.txt`),
     text = await res.text();
@@ -100,11 +100,51 @@ test('RAW: the whole log as plain text; the console.log artifact once lines are 
   assert.match(rows[0], /^\[\d{4}-\d\d-\d\dT[^\]]+\] \[runner\] line 1$/);
   assert.match(rows.at(-1), /\] \[runner\] line 6001$/);
 
-  // Purged lines (retention): the console.log artifact instead.
+  // Still complete once the job has finished — no retention of its own
+  // (log lines go with the job), and no artifact to fall back to.
   finish();
-  services.artifacts.storeGenerated(job.id, 'console.log', Buffer.from('[t] [runner] from artifact\n'), 'text/plain');
+  assert.equal((await (await get(`/jobs/${job.id}/log.txt`)).text()).trimEnd().split('\n').length, 6001);
   services.db.prepare('DELETE FROM job_logs WHERE job_id = ?').run(job.id);
-  assert.equal(await (await get(`/jobs/${job.id}/log.txt`)).text(), '[t] [runner] from artifact\n');
+  assert.equal(await (await get(`/jobs/${job.id}/log.txt`)).text(), '');
 
   assert.equal((await get('/jobs/M-99999/log.txt')).status, 404);
+});
+
+test('artifacts are gone: old Clients\' uploads are discarded, old Agents get none, the store is removed', async (t) => {
+  const { base, services, job } = await setup(t, 3),
+    { resourceId, resourceToken } = services.registry.registerAuto({ clientId: 'c9', name: 'lab-hw-09', type: 'hw', labels: [] }),
+    { token: agentToken } = services.agents.create({ name: 'old-agent', kind: 'cli' });
+  services.db.prepare('UPDATE jobs SET resource_id = ? WHERE id = ?').run(resourceId, job.id);
+
+  // An old Client still uploads its results after the job: accepted (so the
+  // job doesn't end in ERROR), stored nowhere.
+  const form = new FormData();
+  form.append('files', new Blob(['<testsuite tests="1"/>']), 'results.xml');
+  const upload = await fetch(`${base}/api/v1/jobs/${job.id}/artifacts`, {
+    method: 'POST', headers: { authorization: `Bearer ${resourceToken}` }, body: form
+  });
+  assert.equal(upload.status, 201);
+  assert.deepEqual(await upload.json(), { artifacts: [] });
+  assert.equal(fs.existsSync(path.join(path.dirname(services.db.name), 'artifacts')), false);
+
+  // An old Agent's `thub status` still asks: none.
+  const listed = await fetch(`${base}/api/v1/jobs/${job.id}/artifacts`, { headers: { authorization: `Bearer ${agentToken}` } });
+  assert.deepEqual(await listed.json(), { artifacts: [] });
+
+  // No table, no download route.
+  assert.equal(services.db.prepare('SELECT COUNT(*) AS n FROM sqlite_master WHERE name = ?').get('artifacts').n, 0);
+  assert.equal((await fetch(`${base}/artifacts/download/x.y.z`, { redirect: 'manual' })).status, 302); // just the login redirect
+});
+
+test('upgrade: a leftover <dataDir>/artifacts is deleted on startup', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'thub-legacy-')),
+    file = path.join(dir, 'coordinator.json'),
+    legacy = path.join(dir, 'data', 'artifacts', 'M-00001');
+  fs.mkdirSync(legacy, { recursive: true });
+  fs.writeFileSync(path.join(legacy, 'console.log'), 'old');
+  fs.writeFileSync(file, JSON.stringify({ dataDir: path.join(dir, 'data'), updates: { checkIntervalMin: 0 } }));
+  const log = t.mock.method(console, 'log', () => {});
+  buildServices(loadConfig(file));
+  assert.equal(fs.existsSync(path.join(dir, 'data', 'artifacts')), false);
+  assert.match(log.mock.calls[0].arguments[0], /no longer stores job artifacts/);
 });

@@ -1,6 +1,6 @@
 /**
  * @file        packages/coordinator/src/services/retention.js
- * @description Deletes finished jobs' logs/artifacts past their retention window (README §9)
+ * @description Nightly consistent database backup (VACUUM INTO, README §9)
  *
  * @author      Andrian Yablonskyy
  * @copyright   Copyright (c) 2026 Andrian Yablonskyy. All rights reserved.
@@ -17,20 +17,11 @@ const path = require('node:path');
 
 const DAY_MS = 86400 * 1000;
 
-// §9: fold job_logs into a console.log artifact when a job finishes, purge
-// old logs/artifacts on the configured retention windows, and take a nightly
-// consistent backup via VACUUM INTO.
-function createRetentionService(db, { bus, logs, artifacts, config }){
-  bus.on('job.finished', ({ jobId }) => {
-    const text = logs.renderConsoleLog(jobId);
-    if (text){
-      artifacts.storeGenerated(jobId, 'console.log', Buffer.from(text, 'utf8'), 'text/plain');
-    }
-  });
-
+// §9: a nightly consistent backup via VACUUM INTO. (A job's log lines live
+// as long as the job itself — retention.jobRetention / Clean up database,
+// services/cleanup.js — and there are no artifacts to purge any more.)
+function createRetentionService(db, { config }){
   function runDaily(){
-    logs.purgeOlderThan(config.retention.logRetentionDays);
-    artifacts.purgeOlderThan(config.retention.artifactRetentionDays);
     const backupPath = path.join(config.dataDir, `backup-${new Date().toISOString().slice(0, 10)}.db`);
     db.exec(`VACUUM INTO '${backupPath.replace(/'/g, '\'\'')}'`);
   }

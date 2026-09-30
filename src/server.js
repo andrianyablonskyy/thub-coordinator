@@ -15,7 +15,8 @@
 
 'use strict';
 
-const path = require('node:path'),
+const fs = require('node:fs'),
+  path = require('node:path'),
   express = require('express'),
   session = require('express-session'),
 
@@ -31,7 +32,6 @@ const path = require('node:path'),
   { createScheduler } = require('./services/scheduler'),
   { createHeartbeatMonitor } = require('./services/heartbeat'),
   { createLogsService } = require('./services/logs'),
-  { createArtifactsService } = require('./services/artifacts'),
   { createCommandsService } = require('./services/commands'),
   { createRetentionService } = require('./services/retention'),
   { createCleanupService } = require('./services/cleanup'),
@@ -45,7 +45,18 @@ const path = require('node:path'),
   { createAdminRouter } = require('./api/admin'),
   { createWebRouter } = require('./web/routes');
 
+// Artifacts are no longer stored on the Coordinator (README §9): an
+// upgraded one frees the space the old <dataDir>/artifacts took, once.
+function removeLegacyArtifacts(config){
+  const dir = path.join(config.dataDir, 'artifacts');
+  if (fs.existsSync(dir)){
+    fs.rmSync(dir, { recursive: true, force: true });
+    console.log(`Removed ${dir}: the Coordinator no longer stores job artifacts`);
+  }
+}
+
 function buildServices(config){
+  removeLegacyArtifacts(config);
   const db = openDb(config.dbPath),
     events = createEventsService(db),
     registry = createRegistryService(db, { bus, events }),
@@ -54,11 +65,10 @@ function buildServices(config){
     adminUsers = createAdminUsersService(db),
     commands = createCommandsService({ bus }),
     logs = createLogsService(db, { bus }),
-    artifacts = createArtifactsService(db, { config }),
-    jobs = createJobsService(db, { bus, events, registry, artifacts, config }),
+    jobs = createJobsService(db, { bus, events, registry, config }),
     scheduler = createScheduler(db, { bus, events, registry, config }),
     heartbeatMonitor = createHeartbeatMonitor(db, { bus, events, registry, jobs, config }),
-    retention = createRetentionService(db, { bus, logs, artifacts, config }),
+    retention = createRetentionService(db, { config }),
     cleanup = createCleanupService(db, { jobs, config }),
     updates = createUpdatesService({ config }),
     live = createLiveService(db, { bus, updates }),
@@ -85,7 +95,6 @@ function buildServices(config){
     commands,
     jobs,
     logs,
-    artifacts,
     scheduler,
     heartbeatMonitor,
     retention,
@@ -169,17 +178,6 @@ function createApp(config, services){
   app.use('/api/v1', createAgentRouter({ services, config }));
   app.use('/api/v1', createResourceRouter({ services, config }));
   app.use('/api/v1/admin', createAdminRouter({ services }));
-
-  // HMAC-signed artifact downloads (§3.1, §12) — no session or bearer token.
-  app.get('/artifacts/download/:token', (req, res, next) => {
-    try {
-      const artifact = services.artifacts.verify(req.params.token);
-      res.download(artifact.path, artifact.name);
-    }
-    catch (err){
-      next(err);
-    }
-  });
 
   app.use('/', createWebRouter({ services, config }));
 

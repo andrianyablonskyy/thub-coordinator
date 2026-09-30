@@ -80,19 +80,13 @@ function createAgentRouter({ services, config }){
   });
 
   router.get('/jobs/:id/logs/stream', auth, (req, res) => {
-    attachJobStream(req, res, { jobId: req.params.id, services, config });
+    attachJobStream(req, res, { jobId: req.params.id, services });
   });
 
+  // No artifacts are stored any more (README §9); an Agent older than that
+  // still asks after a finished job's `thub status`, so answer "none".
   router.get('/jobs/:id/artifacts', auth, (req, res) => {
-    const artifacts = services.artifacts.listForJob(req.params.id).map((a) => ({
-      id: a.id,
-      name: a.name,
-      size: a.size,
-      sha256: a.sha256,
-      contentType: a.content_type,
-      url: services.artifacts.signedUrl(a)
-    }));
-    res.json({ artifacts });
+    res.json({ artifacts: [] });
   });
 
   router.get('/resources', auth, (req, res) => {

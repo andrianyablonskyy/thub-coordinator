@@ -13,7 +13,7 @@
             | Coordinator
           p.card-text.small.mb-0.
             This service. It holds the job queue and the resource registry, and runs the scheduler and
-            the heartbeat monitor. It stores logs and artifacts in SQLite plus a local directory,
+            the heartbeat monitor. It stores job state and logs in SQLite,
             and serves this dashboard. It's the only thing that needs a public HTTPS port.
     .col-md-4
       .card.h-100
@@ -41,7 +41,7 @@
     li The Coordinator queues it (#[code QUEUED]) and the scheduler assigns it to an idle Client whose type, labels and group match.
     li The Client accepts it, clones #[code --git-repo], downloads #[code --download-file] files and prepares the DUT (#[code PREPARING]).
     li It runs #[code --command] with #[code sh -c], and output streams live to the Agent and the dashboard (#[code RUNNING]).
-    li The exit code is the verdict: #[code 0] = #[code PASSED], anything else = #[code FAILED]. JUnit files and artifacts are uploaded.
+    li The exit code is the verdict: #[code 0] = #[code PASSED], anything else = #[code FAILED]. The Client reports the JUnit test counts; the job's files stay on the Client and are deleted with its workspace.
     li The Agent exits with the verdict code, so a CI step passes or fails with it.
 
   h3.h6 Key design rules

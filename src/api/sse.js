@@ -20,7 +20,7 @@ const WAITING_CHECK_MS = 15_000,
 
 // §6.4: log / state / end events, resumable via Last-Event-ID (§7: "the
 // Agent reconnects with exponential backoff and resumes from the last seq").
-function attachJobStream(req, res, { jobId, services, config }){
+function attachJobStream(req, res, { jobId, services }){
   const { jobs, logs, registry, bus } = services,
 
     job = jobs.get(jobId);
@@ -58,13 +58,9 @@ function attachJobStream(req, res, { jobId, services, config }){
     seq = page.at(-1).seq;
   }
 
-  function artifactsUrl(){
-    return `${config.publicUrl}/jobs/${jobId}#artifacts`;
-  }
-
   const current = jobs.get(jobId);
   if (TERMINAL_JOB_STATES.has(current.state)){
-    writeEvent('end', { state: current.state, artifactsUrl: artifactsUrl() });
+    writeEvent('end', { state: current.state });
     return res.end();
   }
 
@@ -104,7 +100,7 @@ function attachJobStream(req, res, { jobId, services, config }){
       if (evt.jobId !== jobId){
         return;
       }
-      writeEvent('end', { state: evt.state, artifactsUrl: artifactsUrl() });
+      writeEvent('end', { state: evt.state });
       cleanup();
       res.end();
     };

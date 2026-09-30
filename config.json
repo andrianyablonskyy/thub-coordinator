@@ -20,11 +20,6 @@
     "maxTimeoutSec": 14400
   },
   "retention": {
-    "logRetentionDays": 14,
-    "artifactRetentionDays": 30
-  },
-  "artifacts": {
-    "maxUploadMb": 512,
-    "linkTtlHours": 168
+    "jobRetention": "forever"
   }
 }

@@ -134,7 +134,7 @@ function createAdminRouter({ services }){
     res.json({ canceled });
   });
 
-  // Permanently deletes finished jobs and their logs/artifacts (§13.1).
+  // Permanently deletes finished jobs and their logs (§13.1).
   // Database cleanup (§9): optional `before` (ISO 8601; default now) —
   // finished jobs that ended before it, older history, then VACUUM.
   router.post('/jobs/clean-history', (req, res) => {

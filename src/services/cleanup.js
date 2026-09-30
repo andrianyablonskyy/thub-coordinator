@@ -1,6 +1,6 @@
 /**
  * @file        packages/coordinator/src/services/cleanup.js
- * @description Database cleanup: wipe finished jobs (logs, artifacts, events) and old events before a cutoff, then
+ * @description Database cleanup: wipe finished jobs (logs, events) and old events before a cutoff, then
  *              VACUUM to shrink the file — on demand from the dashboard, and hourly per retention.jobRetention (README §9)
  *
  * @author      Andrian Yablonskyy
@@ -81,7 +81,7 @@ function createCleanupService(db, { jobs, config, now = () => new Date() }){
   }
 
   // Wipe everything older than `before` (a Date; default now): finished
-  // jobs that ended before it, with their logs, artifacts and events, and
+  // jobs that ended before it, with their logs and events, and
   // the other audit events (resource/agent/group) logged before it. Events
   // of jobs that stay (still active, or newer) are kept. `vacuum`: true,
   // false, or 'auto' (only if something was deleted and the last VACUUM is

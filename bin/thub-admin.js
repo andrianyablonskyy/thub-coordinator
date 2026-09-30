@@ -30,7 +30,6 @@ const { loadConfig } = require('../src/config'),
   { createAgentsService } = require('../src/services/agents'),
   { createGroupsService } = require('../src/services/groups'),
   { createAdminUsersService } = require('../src/services/admin-users'),
-  { createArtifactsService } = require('../src/services/artifacts'),
   { createJobsService } = require('../src/services/jobs'),
   { createCleanupService } = require('../src/services/cleanup'),
   { generateToken } = require('../src/services/tokens'),
@@ -46,7 +45,7 @@ function usage(){
   thub-admin resource maintenance <resourceId> --on|--off
   thub-admin jobs reset --yes     Cancel every queued/assigned/preparing/running job
   thub-admin jobs clean --yes [--before "dd/mm/yyyy HH:MM:SS"]
-                                  Permanently delete finished jobs (with logs and artifacts) and
+                                  Permanently delete finished jobs (with their logs) and
                                   history from before then (local time; default: now), then
                                   compact the database file
   thub-admin group add <name> [--comment <text>]
@@ -134,8 +133,7 @@ function main(){
     registry = createRegistryService(db, { bus, events }),
     agents = createAgentsService(db, { events }),
     adminUsers = createAdminUsersService(db),
-    artifacts = createArtifactsService(db, { config }),
-    jobs = createJobsService(db, { bus, events, registry, artifacts, config }),
+    jobs = createJobsService(db, { bus, events, registry, config }),
     groups = createGroupsService(db, { events, registry });
 
   if (cmd === 'create-admin'){
@@ -193,7 +191,7 @@ function main(){
   if (cmd === 'jobs' && sub === 'clean'){
     const { flags } = parseFlags(rest);
     if (!flags.yes){
-      console.error('This permanently deletes finished jobs and their logs/artifacts. Re-run with --yes to confirm.');
+      console.error('This permanently deletes finished jobs and their logs. Re-run with --yes to confirm.');
       process.exit(4);
     }
     const before = flags.before ? parseDateTime(flags.before) : new Date();
