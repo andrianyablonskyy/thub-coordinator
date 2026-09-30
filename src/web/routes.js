@@ -16,6 +16,7 @@
 const fs = require('node:fs'),
   os = require('node:os'),
   path = require('node:path'),
+  { once } = require('node:events'),
   express = require('express'),
   multer = require('multer'),
   { requireAdminSession, requireAdminRole } = require('../auth'),
@@ -28,9 +29,13 @@ const fs = require('node:fs'),
   listPrefs = require('../services/list-prefs'),
   search = require('../services/search');
 
-// Resources page sort keys (list-prefs.js) -> comparators. Empty values
-// (never heartbeated, no version reported) sort last in both directions.
-const RESOURCE_SORT_VALUE = {
+// Job log viewer: lines per page it loads (and the most one request may ask for).
+const LOG_PAGE = 1000,
+  LOG_PAGE_MAX = 5000,
+
+  // Resources page sort keys (list-prefs.js) -> comparators. Empty values
+  // (never heartbeated, no version reported) sort last in both directions.
+  RESOURCE_SORT_VALUE = {
     name: (r) => r.name,
     type: (r) => r.type,
     version: (r) => r.client_version,
@@ -847,11 +852,53 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, `/jobs/${req.params.id}`));
   });
 
-  // Plain, one-shot fetch — used by the log viewer for a job that's
-  // already finished, so it doesn't open a live connection (§SSE) for
-  // output that will never change again.
+  // The log viewer's pages (public/js/log-viewer.js): the last `limit`
+  // lines first, then earlier ones (`before` = the oldest seq it has) as the
+  // reader scrolls up. `total` is how many lines the job has in all.
   router.get('/jobs/:id/logs', (req, res) => {
-    res.json({ lines: services.logs.listSince(req.params.id, 0) });
+    const before = Number.parseInt(req.query.before, 10),
+      limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || LOG_PAGE, 1), LOG_PAGE_MAX),
+      page = services.logs.pageBefore(req.params.id, before > 0 ? before : undefined, limit);
+    res.json({ ...page, total: services.logs.count(req.params.id) });
+  });
+
+  // RAW (log viewer): the whole log as plain text, for a new tab, a
+  // download or grep. Streamed in pages, waiting for the socket to drain,
+  // so a huge log never sits in memory. Once the lines are purged
+  // (retention.logRetentionDays, §9) it serves the console.log artifact.
+  router.get('/jobs/:id/log.txt', async (req, res, next) => {
+    try {
+      const job = services.jobs.get(req.params.id);
+      if (!job){
+        return res.status(404).type('text/plain').send('Unknown job');
+      }
+      res.set({
+        'Content-Type': 'text/plain; charset=utf-8',
+        // The log is whatever the job printed: never let a browser sniff it
+        // into HTML.
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Disposition': `inline; filename="${job.id}.log"`,
+        'Cache-Control': 'no-store'
+      });
+      if (!services.logs.count(job.id)){
+        const artifact = services.artifacts.listForJob(job.id).find((a) => a.name === 'console.log');
+        return artifact && fs.existsSync(artifact.path) ? res.sendFile(path.resolve(artifact.path)) : res.send('');
+      }
+      for (let seq = 0, page; (page = services.logs.listSince(job.id, seq, LOG_PAGE_MAX)).length;){
+        const chunk = page.map((l) => `[${l.ts}] [${l.stream}] ${l.line}\n`).join('');
+        seq = page.at(-1).seq;
+        if (!res.write(chunk)){
+          await once(res, 'drain');
+        }
+        if (res.destroyed){
+          return;
+        }
+      }
+      res.end();
+    }
+    catch (err){
+      next(err);
+    }
   });
 
   router.get('/jobs/:id/stream', (req, res) => {

@@ -1,6 +1,7 @@
 mixin logViewer(jobId, jobActive)
   //- Stream filter + search (public/js/log-viewer.js): matches are
   //- highlighted; Enter / Shift+Enter or the arrows step through them.
+  //- The log loads from its end; earlier lines load as you scroll up.
   .d-flex.flex-wrap.align-items-center.gap-2.mb-2
     select#stream-filter.form-select.form-select-sm.w-auto(aria-label="Log stream")
       option(value="") all streams
@@ -28,6 +29,19 @@ mixin logViewer(jobId, jobActive)
     .form-check.form-check-inline.small.mb-0
       input#log-search-only.form-check-input(type="checkbox")
       label.form-check-label(for="log-search-only") Display only matching lines
+    a.btn.btn-sm.btn-outline-secondary.ms-auto(
+      href=`/jobs/${jobId}/log.txt`
+      target="_blank"
+      rel="noopener"
+      data-bs-toggle="tooltip"
+      data-bs-title="Open the full log as plain text in a new tab"
+    )
+      i.bi.bi-file-earmark-text.me-1
+      | Raw
+  //- "Showing the last 1,000 of 5,321 lines · Load all" (log-viewer.js).
+  .d-flex.flex-wrap.align-items-center.gap-2.small.text-body-secondary.mb-1(aria-live="polite")
+    span#log-info Loading log…
+    button#log-load-all.btn.btn-link.btn-sm.p-0.align-baseline(type="button" hidden) Load all
   pre#log-viewer.bg-body-tertiary.p-3.rounded.position-relative(
     style="height: 420px; overflow-y: auto;"
     data-job-id=jobId

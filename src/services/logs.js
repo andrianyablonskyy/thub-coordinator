@@ -47,6 +47,21 @@ function createLogsService(db, { bus }){
       .all(jobId, afterSeq, limit);
   }
 
+  // The dashboard log viewer's pages (views/mixins/log-viewer.pug): the
+  // `limit` lines just before `beforeSeq` (the end of the log when omitted),
+  // oldest first, and whether there are earlier ones to scroll up to.
+  function pageBefore(jobId, beforeSeq, limit){
+    const rows = db
+        .prepare('SELECT seq, ts, stream, line FROM job_logs WHERE job_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?')
+        .all(jobId, beforeSeq ?? Number.MAX_SAFE_INTEGER, limit + 1),
+      hasMore = rows.length > limit;
+    return { lines: rows.slice(0, limit).reverse(), hasMore };
+  }
+
+  function count(jobId){
+    return db.prepare('SELECT COUNT(*) AS n FROM job_logs WHERE job_id = ?').get(jobId).n;
+  }
+
   // Used when a job finishes: fold job_logs into a flat console.log artifact.
   function renderConsoleLog(jobId){
     const rows = db
@@ -64,7 +79,7 @@ function createLogsService(db, { bus }){
     ).run(cutoff);
   }
 
-  return { appendBatch, listSince, renderConsoleLog, purgeOlderThan };
+  return { appendBatch, listSince, pageBefore, count, renderConsoleLog, purgeOlderThan };
 }
 
 module.exports = { createLogsService };

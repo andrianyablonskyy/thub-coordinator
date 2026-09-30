@@ -15,7 +15,8 @@
 
 const { TERMINAL_JOB_STATES, JOB_STATES } = require('@andrian.yablonskyy/thub-common');
 
-const WAITING_CHECK_MS = 15_000;
+const WAITING_CHECK_MS = 15_000,
+  REPLAY_PAGE = 2000;
 
 // §6.4: log / state / end events, resumable via Last-Event-ID (§7: "the
 // Agent reconnects with exponential backoff and resumes from the last seq").
@@ -47,8 +48,14 @@ function attachJobStream(req, res, { jobId, services, config }){
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
 
-  for (const line of logs.listSince(jobId, afterSeq)){
-    writeEvent('log', { ts: line.ts, stream: line.stream, line: line.line }, line.seq);
+  // Replay everything after `afterSeq`, in pages (listSince stops at 500 a
+  // call — replaying one page used to skip lines 501.. of a longer log). All
+  // synchronous, so no live line can slip in between replay and subscribing.
+  for (let seq = afterSeq, page; (page = logs.listSince(jobId, seq, REPLAY_PAGE)).length;){
+    for (const line of page){
+      writeEvent('log', { ts: line.ts, stream: line.stream, line: line.line }, line.seq);
+    }
+    seq = page.at(-1).seq;
   }
 
   function artifactsUrl(){
