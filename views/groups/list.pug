@@ -1,4 +1,5 @@
 extends ../layout
+include ../mixins/list-controls
 
 block content
   .d-flex.justify-content-between.align-items-center.mb-3
@@ -6,9 +7,17 @@ block content
     if canManage
       button.btn.btn-primary.btn-sm(type="button" data-bs-toggle="modal" data-bs-target="#addGroupModal") Add group
 
-  p.text-body-secondary.small.
+  p.text-body-secondary.small: i.
     A job can be constrained to run only on resources in a group with `thub run --group &lt;id&gt;` (§13.1).
     A resource joins a group by listing its id under `groups` in the Client's own config — membership isn't set here.
+
+  if totalCount
+    .d-flex.flex-wrap.align-items-center.gap-2.mb-2
+      +searchForm(q, 'Search groups: name, id, comment', '/groups')
+      if q
+        span.small.text-body-secondary
+          | #{groups.length} of #{totalCount} groups
+          +searchNote(q)
 
   if groups.length
     table.table.table-hover.align-middle
@@ -77,6 +86,10 @@ block content
                             i.bi.bi-clipboard
                       .modal-footer
                         button.btn.btn-primary(type="submit") Save
+  else if q
+    p.text-body-secondary
+      | No group matches “#{q}”. 
+      a(href="/groups") Show all groups
   else
     p.text-body-secondary No groups yet.
 

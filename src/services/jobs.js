@@ -15,6 +15,7 @@
 
 const { validateJobSpec, maskEnv, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/thub-common'),
   { paginate } = require('./list-prefs'),
+  { parseTerms, likeClause } = require('./search'),
   // Named in spec errors: a field the Agent sends but this thub-common
   // doesn't know means the Coordinator needs an update.
   VERSIONS = `Coordinator v${require('../../package.json').version}, ` +
@@ -87,16 +88,26 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
   // Dashboard /jobs (§10): one sorted page plus the total, both in SQL so a
   // long history never has to be loaded whole. `sort` is a list-prefs key.
   const PAGE_SORT_SQL = {
-    id: 'jobs.id',
-    source: 'jobs.source',
-    user: 'json_extract(jobs.spec, \'$.user\')',
-    state: 'jobs.state',
-    resource: 'COALESCE(r.name, jobs.resource_name)',
-    created: 'jobs.created_at',
-    duration: 'jobs.duration_sec'
-  };
+      id: 'jobs.id',
+      source: 'jobs.source',
+      user: 'json_extract(jobs.spec, \'$.user\')',
+      state: 'jobs.state',
+      resource: 'COALESCE(r.name, jobs.resource_name)',
+      created: 'jobs.created_at',
+      duration: 'jobs.duration_sec'
+    },
 
-  function page({ state, source, sort = 'created', dir = 'desc', size = 25, page: pageNo = 1 } = {}){
+    // What the Jobs page's search box (?q=) looks in. Named spec fields
+    // only — never the whole spec: while a job is active its `env` still
+    // holds the real --env values (§7.2), and a LIKE over them would let
+    // anyone who can see the list guess a secret one character at a time.
+    SEARCH_SQL = [
+      'jobs.id', 'jobs.state', 'jobs.source', 'jobs.message', 'r.name', 'jobs.resource_name', 'a.name',
+      ...['user', 'command', 'suite', 'image', 'git.url', 'git.ref', 'target.group', 'target.labels', 'downloads', 'args', 'meta']
+        .map((path) => `json_extract(jobs.spec, '$.${path}')`)
+    ];
+
+  function page({ state, source, q, sort = 'created', dir = 'desc', size = 25, page: pageNo = 1 } = {}){
     const where = [],
       params = [];
     if (state){
@@ -107,15 +118,21 @@ function createJobsService(db, { bus, events, registry, artifacts, config }){
       where.push('jobs.source = ?');
       params.push(source);
     }
+    const search = likeClause(SEARCH_SQL, parseTerms(q));
+    if (search.sql){
+      where.push(search.sql);
+      params.push(...search.params);
+    }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '',
+      fromSql = 'FROM jobs LEFT JOIN resources r ON r.id = jobs.resource_id LEFT JOIN agents a ON a.id = jobs.agent_id',
       column = PAGE_SORT_SQL[sort] || PAGE_SORT_SQL.created,
       order = dir === 'asc' ? 'ASC' : 'DESC',
-      total = db.prepare(`SELECT COUNT(*) AS n FROM jobs ${whereSql}`).get(...params).n,
+      total = db.prepare(`SELECT COUNT(*) AS n ${fromSql} ${whereSql}`).get(...params).n,
       pagination = paginate(total, size, pageNo),
       // Empty values (no user, never ran, …) last either way; created_at
       // breaks ties so paging is stable.
       rows = db.prepare(
-        `SELECT jobs.* FROM jobs LEFT JOIN resources r ON r.id = jobs.resource_id ${whereSql}
+        `SELECT jobs.* ${fromSql} ${whereSql}
          ORDER BY ${column} IS NULL, ${column} ${order}, jobs.created_at DESC
          LIMIT ? OFFSET ?`
       ).all(...params, pagination.limit, pagination.offset);

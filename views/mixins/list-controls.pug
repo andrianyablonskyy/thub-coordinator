@@ -16,6 +16,38 @@ mixin pageSizePicker(list)
       each s in list.pageSizes
         option(value=list.urlFor({ size: s }) selected=list.prefs.size === s)= s === 'all' ? 'All' : s
 
+//- Search box (?q=) for a list page: every word must match (routes.js,
+//- services/search.js). Goes inside a GET form — the Jobs filter form, or
+//- +searchForm on its own. `/` focuses it, Esc clears (public/js/list-search.js).
+mixin searchBox(q, placeholder, clearUrl)
+  .input-group.input-group-sm.thub-search
+    span.input-group-text
+      i.bi.bi-search
+    input.form-control(
+      type="search"
+      name="q"
+      value=q
+      placeholder=placeholder
+      aria-label=placeholder
+      maxlength="200"
+      autocomplete="off"
+      data-list-search
+      data-bs-toggle="tooltip"
+      data-bs-title="Press Enter to search · / to focus · Esc to clear"
+    )
+    if q
+      a.btn.btn-outline-secondary(href=clearUrl aria-label="Clear search" data-list-search-clear)
+        i.bi.bi-x-lg
+
+mixin searchForm(q, placeholder, clearUrl)
+  form.m-0(method="get" role="search")
+    +searchBox(q, placeholder, clearUrl)
+
+//- "matching “foo”" after a list's count, when a search is active.
+mixin searchNote(q)
+  if q
+    |  matching “#{q}”
+
 //- Shown above the table: "Showing 26–50 of 312 jobs" and the page links.
 mixin listToolbar(list, noun)
   - const p = list.pagination
@@ -25,6 +57,10 @@ mixin listToolbar(list, noun)
         | Showing #{p.from}–#{p.to} of #{p.total} #{noun}
       else
         | No #{noun}
+      +searchNote(list.q)
+      if list.q
+        |  · 
+        a(href=list.urlFor({ q: '' })) show all
     if p.pages > 1
       +pager(list)
 

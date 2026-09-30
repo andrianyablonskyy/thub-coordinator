@@ -25,7 +25,8 @@ const fs = require('node:fs'),
     nextCronRun
   } = require('@andrian.yablonskyy/thub-common'),
   { retentionCutoff, JOB_RETENTION } = require('../services/cleanup'),
-  listPrefs = require('../services/list-prefs');
+  listPrefs = require('../services/list-prefs'),
+  search = require('../services/search');
 
 // Resources page sort keys (list-prefs.js) -> comparators. Empty values
 // (never heartbeated, no version reported) sort last in both directions.
@@ -332,10 +333,16 @@ function createWebRouter({ services, config }){
 
   router.get('/resources', (req, res) => {
     const groupsById = Object.fromEntries(services.groups.list().map((g) => [g.id, g])),
-      view = listView(req, res, 'resources'),
+      q = search.normalizeQuery(req.query.q),
+      terms = search.parseTerms(q),
+      view = listView(req, res, 'resources', { q }),
       { sort, dir, size } = view.prefs,
       value = RESOURCE_SORT_VALUE[sort],
-      sorted = services.registry.list().sort((a, b) => {
+      sorted = services.registry.list().filter((r) => search.matches([
+        r.id, r.name, r.reported_name, r.type, r.status, r.busy_source, r.busy_reason, r.client_version, r.remote_addr,
+        r.labels, r.group_ids, r.group_ids.map((id) => groupsById[id]?.name),
+        r.host_info?.hostname, (r.host_info?.addresses || []).map((a) => a.address)
+      ], terms)).sort((a, b) => {
         const va = value(a),
           vb = value(b);
         if (va == null || vb == null){
@@ -350,7 +357,7 @@ function createWebRouter({ services, config }){
       active: 'resources',
       resources: withActiveJobs(sorted.slice(pagination.offset, pagination.offset + pagination.limit)),
       groupsById,
-      list: { ...view, pagination, pageUrl }
+      list: { ...view, pagination, pageUrl, q }
     });
   });
 
@@ -687,7 +694,11 @@ function createWebRouter({ services, config }){
   }));
 
   router.get('/jobs', (req, res) => {
-    const filters = { state: req.query.state || undefined, source: req.query.source || undefined },
+    const filters = {
+        state: req.query.state || undefined,
+        source: req.query.source || undefined,
+        q: search.normalizeQuery(req.query.q) || undefined
+      },
       view = listView(req, res, 'jobs', filters),
       { rows, pagination } = services.jobs.page({ ...filters, ...view.prefs, page: req.query.page }),
       jobs = rows.map((j) => ({
@@ -701,7 +712,7 @@ function createWebRouter({ services, config }){
       active: 'jobs',
       jobs,
       filters,
-      list: { ...view, pagination, pageUrl },
+      list: { ...view, pagination, pageUrl, q: filters.q },
       // A row's Cancel comes back to this exact view (filters, sort, page).
       returnTo: pageUrl(),
       canManage: req.session.user.role === 'admin',
@@ -798,14 +809,19 @@ function createWebRouter({ services, config }){
   // Client config) and Agents. Viewable by anyone logged in; only admins
   // can create/rename/delete.
   router.get('/groups', (req, res) => {
-    const groups = services.groups.list().map((g) => ({
-      ...g,
-      resourceCount: services.registry.list().filter((r) => r.group_ids.includes(g.id)).length
-    }));
+    const q = search.normalizeQuery(req.query.q),
+      terms = search.parseTerms(q),
+      resources = services.registry.list(),
+      all = services.groups.list(),
+      groups = all
+        .filter((g) => search.matches([g.id, g.name, g.comment], terms))
+        .map((g) => ({ ...g, resourceCount: resources.filter((r) => r.group_ids.includes(g.id)).length }));
     res.render('groups/list', {
       title: 'Groups',
       active: 'groups',
       groups,
+      q,
+      totalCount: all.length,
       canManage: req.session.user.role === 'admin'
     });
   });
@@ -827,7 +843,11 @@ function createWebRouter({ services, config }){
   });
 
   router.get('/admin/agents', requireAdminRole, (req, res) => {
-    res.render('admin/agents', { title: 'Agents', active: 'agents', agents: services.agents.list() });
+    const q = search.normalizeQuery(req.query.q),
+      terms = search.parseTerms(q),
+      all = services.agents.list(),
+      agents = all.filter((a) => search.matches([a.id, a.name, a.kind, a.version, a.revoked_at ? 'revoked' : 'active'], terms));
+    res.render('admin/agents', { title: 'Agents', active: 'agents', agents, q, totalCount: all.length });
   });
 
   router.post('/admin/agents', requireAdminRole, (req, res) => {

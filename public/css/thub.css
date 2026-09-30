@@ -156,3 +156,26 @@
 .thub-help-steps > li {
   margin-bottom: 1rem;
 }
+
+/* List search box (views/mixins/list-controls.pug +searchBox). */
+.thub-search {
+  width: 22rem;
+  max-width: 100%;
+}
+
+.col-12 > .thub-search {
+  width: 100%;
+}
+
+/* Job log search (public/js/log-viewer.js): every match, and the current one. */
+#log-viewer mark.thub-log-hit {
+  padding: 0;
+  background: rgba(255, 193, 7, 0.4);
+  color: inherit;
+}
+
+#log-viewer mark.thub-log-hit.current {
+  background: var(--bs-warning);
+  color: #000;
+  outline: 1px solid var(--bs-warning-border-subtle);
+}

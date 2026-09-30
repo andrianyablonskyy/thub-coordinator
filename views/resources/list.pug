@@ -6,11 +6,13 @@ include ../mixins/list-controls
 
 block content
   h1.h4.mb-3 Resources
-  p.text-body-secondary.small.
+  .d-flex.flex-wrap.align-items-center.gap-2.mb-3
+    +updatesToolbar('client', 'clients', '/resources')
+  p.text-body-secondary.small: i.
     Resources register themselves — start a Client with the shared join key and it appears here. Click a resource for its details, including IP addresses.
 
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
-    +updatesToolbar('client', 'clients', '/resources')
+    +searchForm(list.q, 'Search resources: name, label, group, status, IP…', list.urlFor({ q: '' }))
     .ms-auto
       +pageSizePicker(list)
 
