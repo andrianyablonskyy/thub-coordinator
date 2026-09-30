@@ -1,0 +1,87 @@
++section('client-machines', 'Client machines: HW and SW', 'pc')
+  p.
+    Which machine you need depends on what the jobs run against. Clients are supported on
+    #[strong Ubuntu 26.04]; other systemd-based Linux distributions work the same way in practice.
+    Every Client machine needs outbound HTTPS to the Coordinator (and to wherever jobs download from:
+    Artifactory, git servers, Docker registries). Nothing inbound.
+
+  .row.g-3.mb-3
+    .col-md-6
+      .card.h-100.border-primary-subtle
+        .card-header
+          i.bi.bi-cpu.me-1
+          strong HW Client: real machine with a physical DUT
+        .card-body.small
+          ul.mb-0
+            li A physical machine (a mini-PC, NUC or Raspberry-class ARM64 board) next to the bench.
+            li USB for the DUT's debugger (ST-Link), USB-serial adapters (UART) and DUT USB. A #[strong powered USB hub] is recommended.
+            li #[code stlink-tools] and/or #[code openocd], #[code usbutils] (for the dashboard's USB scan).
+            li Docker only if jobs run containers in their #[code --command].
+            li One Client instance per board. One machine can drive several boards (up to 8 ST-Links, UARTs and USB devices per instance).
+    .col-md-6
+      .card.h-100.border-success-subtle
+        .card-header
+          i.bi.bi-pc-display.me-1
+          strong SW Client: real or virtual machine, software-only jobs
+        .card-body.small
+          ul.mb-0
+            li Any Linux host: bare metal, a VM (Proxmox, VMware, Hyper-V, KVM) or a cloud instance.
+            li Docker Engine (#[code docker.io]), with the Client's service user in the #[code docker] group (the installer arranges this).
+            li Each job's DUT container is limited to 2 CPUs and 2 GB RAM. Size the VM for one job plus your test tools: 4 vCPU, 8 GB RAM and 40 GB+ disk for images and workspaces is a good start.
+            li For KVM-accelerated emulators (QEMU) inside a VM, turn on #[strong nested virtualization].
+            li No USB or udev setup.
+
+  h3.h6 Preparing an HW machine
+  ol.small
+    li Install the OS and the Client (#[a(href="#client-setup") Client setup]), then plug in the board's ST-Link, UART adapter and DUT USB.
+    li
+      | Find each device's USB #[strong port path] (#[code devpath]). It's stable across replugs as long as the device stays in the same port:
+      +code('HW machine').
+        lsusb -t                                      # USB tree
+        udevadm info -a -n /dev/ttyUSB0 | grep -m1 'ATTRS{devpath}'
+        st-info --probe                               # ST-Link serials
+      | Or open the resource card → #[strong Connected USB devices] → #[strong Refresh], then #[strong Import to config].
+    li
+      | Put the devpaths into #[code hw-devices] and restart. On every start the Client writes
+      | #[code /etc/udev/rules.d/99-thub-&lt;instance&gt;.rules], so the devices appear as #[code /dev/thub/dut&lt;N&gt;-stlink|uart|usb]:
+      +code('HW machine').
+        sudo systemctl restart thub-client@client
+        ls -l /dev/thub/
+    li Check the resource card's #[strong Capabilities]: each configured device must be present (a missing one is flagged).
+    li Your job's #[code --command] flashes the board. The Client never flashes by itself; it passes the ST-Link serials and the downloaded files in the environment (#[a(href="#env") Environment variables]).
+  +code('A typical HW job').
+    thub run --type hw --board nucleo-f401re \
+      --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
+      --git-repo https://github.com/yourorg/firmware-tests.git v1.4.0 \
+      --command 'st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh' \
+      --wait
+
+  +note('warning').
+    #[strong HW in a VM?] USB passthrough works, but the #[code devpath] then reflects the #[em virtual] USB topology and
+    can change when the hypervisor reassigns devices. Serial timing-sensitive tests may also suffer. Use a physical machine for HW Clients.
+
+  h3.h6 Preparing an SW machine (real or virtual)
+  +code('SW machine / VM').
+    sudo apt install -y nodejs npm docker.io
+    sudo npm i -g @andrian.yablonskyy/thub-client
+    nano ~/.config/thub/client.json        # "type": "sw", coordinatorUrl, joinKey
+    sudo systemctl enable --now thub-client@client
+    # a private registry for DUT images? log in once, as the Client's user:
+    docker login registry.lab.local:5000
+  p.small.
+    To scale out, clone the VM template. In the clone, #[strong before its first start], run
+    #[code rm -f ~/var/lib/thub/client/*/.client-id ~/var/lib/thub/client/*.token] and give it its own #[code name].
+    Otherwise both VMs register as the same resource.
+  +code('A typical SW job').
+    thub run --type sw \
+      --docker-image registry.lab.local:5000/dut-emulator:2026.08 \
+      --git-repo git@github.com:yourorg/firmware-tests.git main \
+      --command 'make test DUT="$THUB_DUT_HOST"' --wait
+
+  h3.h6 Checklist for any Client machine
+  ul.small.mb-0
+    li Correct time (NTP). Timestamps are anchored to the Coordinator's clock, but TLS needs a sane clock.
+    li Outbound HTTPS to the Coordinator; test it with #[code curl -sI #{coordinatorUrl}/login].
+    li The Client's service user has SSH keys and git credentials for private repos (#[a(href="#git") Git repositories]) and Docker logins for private registries (#[a(href="#docker") Docker registry]).
+    li Under systemd, the service can only write to its state directory. Jobs write to #[code $THUB_WORK_DIR], not to #[code ~].
+    li Optional: a nightly reboot from the resource card's #[strong Reboot] tab (cron, host-local time). It waits for running jobs.

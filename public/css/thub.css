@@ -98,3 +98,61 @@
 .tab-content .tab-pane[data-config-pane].active {
   display: block;
 }
+
+/* Help page (views/help/): sticky table of contents, code blocks with a
+   copy button (public/js/help.js). */
+.thub-help-toc {
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.thub-help-toc .nav-link {
+  font-size: 0.875rem;
+}
+
+.thub-help-section {
+  scroll-margin-top: 1rem;
+}
+
+.thub-code {
+  position: relative;
+}
+
+.thub-code-caption {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  margin-bottom: 0.25rem;
+}
+
+.thub-code pre {
+  margin: 0;
+  padding: 0.75rem 3rem 0.75rem 0.75rem;
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  font-size: 0.8125rem;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.thub-code pre code {
+  color: var(--bs-body-color);
+}
+
+.thub-code-copy {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  opacity: 0.7;
+}
+
+.thub-code-copy:hover,
+.thub-code-copy:focus {
+  opacity: 1;
+}
+
+.thub-help-steps > li {
+  margin-bottom: 1rem;
+}

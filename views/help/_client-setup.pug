@@ -1,0 +1,122 @@
++section('client-setup', 'Client setup', 'motherboard')
+  p.
+    A Client (#[code thub-client]) is a daemon on a lab machine. One #[strong instance] owns one DUT slot. A machine with
+    several boards runs several instances (#[code dut0], #[code dut1], …), each with its own config file.
+    Clients register themselves with the shared join key; there's no admin step.
+
+  h3.h6 1. Install
+  +code('Lab machine, as the user the Client should run as (via sudo)').
+    # Node.js and HW tools (stlink-tools/openocd only for HW Clients)
+    sudo apt install -y nodejs npm stlink-tools openocd usbutils
+    # Docker: needed on SW Clients, and on HW Clients whose jobs use docker.
+    # Install it BEFORE thub-client so the service gets the docker group.
+    sudo apt install -y docker.io
+    sudo npm i -g @andrian.yablonskyy/thub-client
+  p.small.
+    This creates #[code ~/.config/thub/client.json] and #[code ~/var/lib/thub/client] for the user who ran
+    #[code sudo], and installs the #[code thub-client@.service] systemd unit running as that user, with the
+    #[code dialout], #[code plugdev] and #[code docker] groups. It also installs the root helpers that
+    apply self-updates and scheduled reboots.
+
+  h3.h6 2. Configure and start
+  .row.g-3
+    .col-md-6
+      +code('SW Client — ~/.config/thub/client.json').
+        {
+          "coordinatorUrl": "#{coordinatorUrl}",
+          "name": "lab-sw-01",
+          "type": "sw",
+          "labels": [],
+          "groups": [],
+          "joinKey": "&lt;the Coordinator's clientJoinKey>",
+          "varDir": "/home/thub/var/lib/thub/client"
+        }
+    .col-md-6
+      +code('HW Client — ~/.config/thub/client.json').
+        {
+          "coordinatorUrl": "#{coordinatorUrl}",
+          "name": "lab-hw-01",
+          "type": "hw",
+          "labels": ["board:nucleo-f401re", "uart", "stlink"],
+          "groups": ["&lt;group id>"],
+          "joinKey": "&lt;the Coordinator's clientJoinKey>",
+          "varDir": "/home/thub/var/lib/thub/client",
+          "hw-devices": {
+            "stlinks": [{ "index": 1, "devpath": "3.3.4.3.1" }],
+            "uarts":   [{ "index": 1, "devpath": "3.3.3.2", "baudRate": 115200 }],
+            "usbs":    [{ "index": 1, "devpath": "3.2.4" }]
+          }
+        }
+  +code('Start it and follow the log').
+    sudo systemctl enable --now thub-client@client
+    journalctl -u thub-client@client -f
+
+  h3.h6 Config reference
+  .table-responsive
+    table.table.table-sm.small
+      thead
+        tr
+          th Field
+          th Required
+          th Meaning
+      tbody
+        tr
+          td: code coordinatorUrl
+          td Yes
+          td The Coordinator's #[code publicUrl].
+        tr
+          td: code type
+          td Yes
+          td #[code hw] (physical DUT) or #[code sw] (DUT image in Docker).
+        tr
+          td: code joinKey
+          td Yes
+          td Must equal the Coordinator's #[code clientJoinKey]. Or set #[code THUB_CLIENT_JOIN_KEY].
+        tr
+          td: code name
+          td No
+          td Resource name. Under systemd, the instance name (#[code thub-client@dut1] → #[code dut1]) is used unless an admin renames it on the dashboard.
+        tr
+          td: code labels
+          td No
+          td Matched against a job's #[code --board]/#[code --label]. Use #[code board:&lt;name>] for the board.
+        tr
+          td: code groups
+          td No
+          td Group ids (from #[a(href="/groups") Groups]) this Client belongs to, for #[code thub run --group].
+        tr
+          td: code varDir
+          td No
+          td State directory: tokens, the client id, job workspaces, sockets. Keep the installer's default under systemd.
+        tr
+          td: code hw-devices.stlinks / uarts / usbs
+          td HW
+          td Up to 8 of each. An entry is a udev index #[code N] (→ #[code /dev/thub/dut&lt;N>-stlink|uart|usb]), a path, or an object with #[code index]/#[code path], #[code devpath] (USB port), #[code serial] (ST-Link) and #[code baudRate] (UART, default 115200).
+        tr
+          td: code heartbeatIntervalSec / longPollWaitSec
+          td No
+          td 10 s / 30 s by default.
+        tr
+          td: code clientId
+          td No
+          td An explicit identity UUID (or #[code THUB_CLIENT_ID]). Normally generated once and kept in #[code .client-id].
+  p.small.
+    SW Clients have no settings of their own: they run whatever DUT image a job brings (#[code --docker-image]).
+    Admins can also edit an HW Client's devices from its resource card (#[strong ST-Link | UART | DUT USB]
+    tabs). #[strong Connected USB devices → Import to config] fills them from the host's #[code lsusb].
+
+  h3.h6 Several DUT slots on one machine
+  +code('One instance per slot').
+    thub-client register --name dut1 --type hw    # creates ~/.config/thub/dut1.json, starts thub-client@dut1
+    nano ~/.config/thub/dut1.json                 # set that slot's hw-devices
+    sudo systemctl restart thub-client@dut1
+    thub-client deregister --name dut1            # when the slot goes away
+
+  h3.h6 Controlling a Client
+  +code('As the Client\'s user (not with sudo)').
+    thub-client status
+    thub-client lock --reason "debugging I2C"     # BUSY (local): nothing gets scheduled here
+    thub-client unlock
+    thub-client restart
+    thub-client --config ~/.config/thub/dut1.json status    # a specific instance
+    thub-client udev --print                                # the udev rules this config generates

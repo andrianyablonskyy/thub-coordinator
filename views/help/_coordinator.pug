@@ -1,0 +1,134 @@
++section('coordinator', 'Coordinator setup', 'hdd-network')
+  p.
+    One Coordinator serves the whole network. It's a single Node.js process with SQLite, which is
+    enough for tens of Clients and hundreds of jobs a day. Run it on a small Linux VM (Ubuntu recommended)
+    with Node.js 20+ (24 LTS recommended), reachable over HTTPS by the Agents and Clients.
+
+  h3.h6 1. Install as a systemd service
+  +code('Coordinator host').
+    sudo apt install -y nodejs npm
+    sudo npm i -g @andrian.yablonskyy/thub-coordinator
+  p.small.
+    #[code sudo npm i -g] does the whole setup for the user who ran #[code sudo]. It creates
+    #[code ~/.config/thub/coordinator.json] (with a random #[code sessionSecret]) and
+    #[code ~/var/lib/thub] (database, artifacts, avatars). It installs, enables and starts
+    #[code thub-coordinator.service], plus the root helper behind the navbar's #[strong Update app] button.
+
+  h3.h6 2. Configure
+  p.small.
+    Edit #[code ~/.config/thub/coordinator.json], then #[code sudo systemctl restart thub-coordinator].
+    Logs: #[code journalctl -u thub-coordinator -f].
+  +code('~/.config/thub/coordinator.json').
+    {
+      "listen": "127.0.0.1:8080",
+      "publicUrl": "#{coordinatorUrl}",
+      "trustProxy": "loopback",
+      "dataDir": "/home/thub/var/lib/thub",
+      "sessionSecret": "&lt;long random string>",
+      "clientJoinKey": "&lt;output of: thub-admin join-key generate>",
+      "heartbeat": { "intervalSec": 10, "missedLimit": 3, "sweepIntervalSec": 5 },
+      "scheduler": { "assignAckTimeoutSec": 15, "requeueOnLost": true, "maxQueuedPerAgent": 20, "tickIntervalSec": 10 },
+      "jobs": { "defaultTimeoutSec": 1800, "maxTimeoutSec": 14400 },
+      "retention": { "logRetentionDays": 14, "artifactRetentionDays": 30, "jobRetention": "forever" },
+      "artifacts": { "maxUploadMb": 512, "linkTtlHours": 168 },
+      "updates": { "checkIntervalMin": 15, "registry": null }
+    }
+  .table-responsive
+    table.table.table-sm.small
+      thead
+        tr
+          th Field
+          th Meaning
+      tbody
+        tr
+          td: code listen
+          td Address the Node.js process binds to. Keep it on #[code 127.0.0.1] behind a reverse proxy.
+        tr
+          td: code publicUrl
+          td The URL Agents, Clients and job links use, e.g. #[code https://thub.example.com].
+        tr
+          td: code trustProxy
+          td Which proxies' #[code X-Forwarded-For] to trust for a Client's external address: #[code loopback] (default), a CIDR such as #[code "10.0.0.0/8"], a hop count, or #[code false].
+        tr
+          td: code sessionSecret
+          td Signs dashboard sessions and artifact download links. Keep it secret and never use the #[code change-me-…] placeholder.
+        tr
+          td: code clientJoinKey
+          td The shared secret Clients self-register with. Unset or #[code null] turns registration off (#[code 503]).
+        tr
+          td: code heartbeat.*
+          td Clients heartbeat every #[code intervalSec]. After #[code missedLimit] misses a resource goes #[code OUT_OF_SERVICE] and its job becomes #[code LOST].
+        tr
+          td: code scheduler.*
+          td #[code assignAckTimeoutSec]: how long an assignment waits for the Client to accept. #[code requeueOnLost]: retry a #[code LOST] job once. #[code maxQueuedPerAgent]: queue limit per agent.
+        tr
+          td: code jobs.*
+          td Default and maximum job timeout, in seconds.
+        tr
+          td: code retention.*
+          td #[code jobRetention]: #[code 1w], #[code 2w], #[code 1m], #[code 3m], #[code 6m] or #[code forever]. Older finished jobs, their logs and artifacts are deleted hourly.
+        tr
+          td: code updates.*
+          td How often to check npm for new versions (#[code 0] turns the periodic check off), and an optional private registry.
+  p.small.
+    Resolution order: #[code THUB_COORDINATOR_CONFIG] (a path) → #[code ~/.config/thub/coordinator.json] → the bundled
+    default. These environment variables override the file: #[code THUB_LISTEN], #[code THUB_PUBLIC_URL],
+    #[code THUB_DATA_DIR], #[code THUB_SESSION_SECRET] and #[code THUB_CLIENT_JOIN_KEY].
+
+  h3.h6 3. HTTPS reverse proxy
+  p.small.
+    Expose only port 443. Log streams use Server-Sent Events, so the proxy must not buffer responses.
+  .row.g-3
+    .col-md-6
+      +code('Caddyfile').
+        thub.example.com {
+          reverse_proxy 127.0.0.1:8080 {
+            flush_interval -1
+          }
+        }
+    .col-md-6
+      +code('nginx').
+        location / {
+          proxy_pass http://127.0.0.1:8080;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_http_version 1.1;
+          proxy_buffering off;          # SSE log streams
+          proxy_read_timeout 1h;
+          client_max_body_size 512m;    # artifacts.maxUploadMb
+        }
+
+  h3.h6 4. Users, agents and the join key
+  p.small.
+    #[code thub-admin] works directly on the database. Run it on the Coordinator host as the service user.
+  +code('Coordinator host').
+    thub-admin create-admin alice 's3cret' --role admin     # or --role viewer (read-only dashboard)
+    thub-admin join-key generate                            # → clientJoinKey here, joinKey on every Client
+    thub-admin agent add ci-firmware --kind ci              # CI token: job ids A-00001…
+    thub-admin agent add alice-laptop --kind cli            # developer token: job ids M-00001…
+    thub-admin group add ci-nightly --comment "nightly pool" # → a group id for thub run --group
+    thub-admin resource maintenance &lt;resourceId> --on
+    thub-admin jobs reset --yes                             # cancel every active job
+    thub-admin jobs clean --yes --before "01/09/2026 00:00:00"
+  +note('warning').
+    Forgot the admin password? Start the Coordinator once with #[code THUB_BOOTSTRAP_ADMIN_PASSWORD=…]
+    (and optionally #[code THUB_BOOTSTRAP_ADMIN_USER], default #[code admin]). The password is reset on
+    #[em every] start while the variable is set, so unset it once you're signed in again.
+
+  h3.h6 Running from a checkout / DEV mode
+  +code('Repository checkout').
+    git clone --recurse-submodules git@github.com:andrianyablonskyy/thub.git && cd thub && npm install
+    THUB_BOOTSTRAP_ADMIN_PASSWORD=admin ./bin/coordinator
+    # Dashboard without hardware: virtual agent, two virtual Clients and demo jobs
+    DEV_MODE=1 THUB_BOOTSTRAP_ADMIN_PASSWORD=admin npm run coordinator
+  p.small.text-body-secondary.
+    In DEV mode the agent token is #[code agt_dev-virtual-agent-token], which is public. Never set
+    #[code DEV_MODE] on a real Coordinator.
+
+  h3.h6 Updates
+  p.small.mb-0.
+    The Coordinator checks npm for new Coordinator, Agent and Client versions. Admins update the Coordinator
+    with #[strong Update app] in the navbar, and Agents and Clients from the #[a(href="/admin/agents") Agents]
+    and #[a(href="/resources") Resources] pages. Clients install an update only between jobs.
+    Manual alternatives: #[code thub-admin self-update], #[code thub self-update] and #[code thub-client self-update].

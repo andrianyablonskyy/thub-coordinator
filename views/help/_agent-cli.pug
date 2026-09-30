@@ -1,0 +1,103 @@
++section('agent-cli', 'Agent CLI reference', 'code-square')
+  h3.h6 Commands
+  +code('thub --help').
+    thub run      [options]                 Submit a job and follow its log
+    thub status   &lt;jobId> [--json]          Status; follow the log if running, artifact links if done
+    thub cancel   &lt;jobId>                   Cancel a job
+    thub resources [--json]                 Clients and their status
+    thub jobs     [--mine] [--state &lt;s>] [--json]   Recent jobs
+    thub config   set &lt;url|token|group|user> &lt;value>
+    thub check-update                       Compare with the latest published Agent
+    thub self-update [--to &lt;x.y.z>]         Update with npm i -g
+    thub --version
+    Global: --url &lt;url>  --token &lt;token>   (override THUB_URL / THUB_TOKEN / config file)
+
+  h3.h6 #[code thub run] options
+  -
+    const groups = [
+      { title: 'Where to run', rows: [
+        ['--type hw|sw', 'Required. Resource type.', '--type hw'],
+        ['--board <name>', 'Shorthand for --label board:<name>.', '--board nucleo-f401re'],
+        ['--label <l>', 'Required label (repeatable). The Client must have all of them.', '--label uart --label stlink'],
+        ['--group <id>', 'Only Clients in this group. Default: THUB_GROUP / config.', '--group 548ae4ae-…'],
+        ['--client <name|id>', 'Only this Client; waits for it even if others are idle.', '--client lab-hw-01']
+      ] },
+      { title: 'What to run', rows: [
+        ['--command <string>', 'Required. Run with sh -c in the work directory. Exit code 0 = PASSED.', "--command './ci/test.sh'"],
+        ['--arg <value>', 'Argument for the command, as "$@" (repeatable).', '--arg --junit --arg -v'],
+        ['--suite <name>', 'Passed as THUB_SUITE (default: default).', '--suite smoke'],
+        ['--download-file <url>', 'File downloaded before the command (repeatable, http(s), no credentials). THUB_DOWNLOAD_1…', '--download-file https://…/app.bin'],
+        ['--git-repo <url> [ref]', 'Repository cloned first; the command runs in it.', '--git-repo git@github.com:org/tests.git v1.4.0'],
+        ['--depth <n>', 'Commits to fetch with --git-repo (default 1, 0 = full).', '--depth 0'],
+        ['--git-options <string>', 'Extra git options between git and its subcommand. Stored with the job.', '--git-options \'-c core.sshCommand="ssh -i ~/.ssh/k"\''],
+        ['--docker-image <ref>', 'SW only: DUT container image, pulled with the Client host’s Docker login.', '--docker-image registry.lab:5000/emu:1'],
+        ['--env <vars>', 'NAME=value[,NAME=value] for git and the command (repeatable). --env NAME takes the value from your shell. Masked, dropped at job end.', '--env TARGET=staging --env API_TOKEN']
+      ] },
+      { title: 'Job settings', rows: [
+        ['--timeout <dur>', 'e.g. 30m, 1h (default 30m, capped by the Coordinator).', '--timeout 1h'],
+        ['--priority <n>', '0–100. Defaults: ci 50, cli 60.', '--priority 80'],
+        ['--user <name>', 'Free-text owner label. Default: THUB_USER / config.', '--user alice'],
+        ['--meta <key=value>', 'Metadata stored on the job (repeatable). The command sees THUB_META_<KEY>.', '--meta ciJobId=$GITHUB_RUN_ID'],
+        ['--dry-run', 'Schedule for real, but only log what the Client would run.', '--dry-run']
+      ] },
+      { title: 'Agent behavior', rows: [
+        ['--wait', 'Follow to the end and exit with the verdict code (CI). Ctrl-C/SIGINT cancels the job.', '--wait'],
+        ['--detach', 'Print the job id and exit.', '--detach --json'],
+        ['--json', 'Machine-readable output.', '--json']
+      ] }
+    ]
+  each g in groups
+    h4.h6.text-body-secondary.mt-3= g.title
+    .table-responsive
+      table.table.table-sm.small.align-middle
+        thead
+          tr
+            th(style="width: 22%") Option
+            th Description
+            th(style="width: 32%") Example
+        tbody
+          each r in g.rows
+            tr
+              td: code.text-nowrap= r[0]
+              td= r[1]
+              td: code= r[2]
+
+  h3.h6 Exit codes
+  table.table.table-sm.small.w-auto
+    tbody
+      each e in [['0', 'PASSED'], ['1', 'FAILED'], ['2', 'ERROR, TIMEOUT or LOST'], ['3', 'CANCELED'], ['4', 'Usage, auth or connection error'], ['5', 'thub status --json: still queued or running'], ['130', 'Detached with Ctrl-C (job keeps running)']]
+        tr
+          td: code= e[0]
+          td= e[1]
+
+  h3.h6 Examples
+  +code('Flash and test a board, fail CI on failure').
+    thub run --type hw --board nucleo-f401re \
+      --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
+      --git-repo https://github.com/yourorg/firmware-tests.git v1.4.0 \
+      --command 'st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh "$@"' \
+      --arg --junit --timeout 45m --wait
+  +code('Reproduce a failure on the exact bench, labeled with your name').
+    thub run --type hw --board nucleo-f401re --client lab-hw-01 --user "$USER" \
+      --download-file "$IMAGE_URL" --git-repo "$TESTS_REPO" --command ./ci/test.sh
+    # Ctrl-C detaches; the job keeps running. Re-attach:
+    thub status M-00126
+  +code('Verify a download before using it').
+    thub run --type hw --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
+      --command 'echo "8f15bf27…  $THUB_DOWNLOAD_1" | sha256sum -c && ./flash.sh "$THUB_DOWNLOAD_1"' --wait
+  +code('Secrets and parameters').
+    export API_TOKEN=…
+    thub run --type sw --git-repo "$TESTS_REPO" \
+      --env TARGET=staging,LOG_LEVEL=debug --env API_TOKEN \
+      --command './run-tests.sh --target "$TARGET"' --suite regression --wait
+  +code('Preview exactly what would run (nothing is executed)').
+    thub run --type sw --docker-image alpine --git-repo https://example.invalid/tests.git main \
+      --command ./ci/test.sh --dry-run --wait
+  +code('Scripting: submit, poll, read the result').
+    JOB=$(thub run --type sw --git-repo "$TESTS_REPO" --command ./ci/test.sh --detach --json | jq -r .jobId)
+    while thub status "$JOB" --json > job.json; [ $? -eq 5 ]; do sleep 10; done
+    jq -r '"\(.state) exit=\(.exit_code) tests=\(.summary.total // 0) failed=\(.summary.failed // 0)"' job.json
+  +code('Lists').
+    thub resources
+    thub jobs --mine --state FAILED
+    thub cancel M-00126

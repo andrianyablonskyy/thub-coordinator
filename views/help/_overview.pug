@@ -1,0 +1,118 @@
++section('overview', 'Product overview', 'info-circle')
+  p.
+    #[strong TestHub] is a small, self-hosted job network. It lets CI/CD pipelines and individual
+    developers run firmware and software tests on #[strong real hardware] or #[strong emulators]
+    that sit in a private lab behind a firewall. Nothing in the lab has to be reachable from outside.
+
+  .row.g-3.mb-3
+    .col-md-4
+      .card.h-100
+        .card-body
+          h3.h6.card-title
+            i.bi.bi-hdd-network.me-1
+            | Coordinator
+          p.card-text.small.mb-0.
+            This service. It holds the job queue and the resource registry, and runs the scheduler and
+            the heartbeat monitor. It stores logs and artifacts in SQLite plus a local directory,
+            and serves this dashboard. It's the only thing that needs a public HTTPS port.
+    .col-md-4
+      .card.h-100
+        .card-body
+          h3.h6.card-title
+            i.bi.bi-terminal.me-1
+            | Agent (#[code thub])
+          p.card-text.small.mb-0.
+            A CLI, and the only way to create jobs. The same #[code thub run] command works in a
+            GitHub Actions step and on a developer's laptop, so a CI failure can be reproduced exactly.
+    .col-md-4
+      .card.h-100
+        .card-body
+          h3.h6.card-title
+            i.bi.bi-motherboard.me-1
+            | Client (#[code thub-client])
+          p.card-text.small.mb-0.
+            A daemon (a systemd service) on a lab machine. Each instance owns one DUT slot. It connects
+            #[em outbound] to the Coordinator, picks up jobs, runs them and streams logs back.
+            Type #[strong HW] drives a physical board; type #[strong SW] runs a DUT emulator in Docker.
+
+  h3.h6 How a job flows
+  ol.small
+    li #[code thub run …] submits a job spec (type, labels, command, inputs) with an agent token.
+    li The Coordinator queues it (#[code QUEUED]) and the scheduler assigns it to an idle Client whose type, labels and group match.
+    li The Client accepts it, clones #[code --git-repo], downloads #[code --download-file] files and prepares the DUT (#[code PREPARING]).
+    li It runs #[code --command] with #[code sh -c], and output streams live to the Agent and the dashboard (#[code RUNNING]).
+    li The exit code is the verdict: #[code 0] = #[code PASSED], anything else = #[code FAILED]. JUnit files and artifacts are uploaded.
+    li The Agent exits with the verdict code, so a CI step passes or fails with it.
+
+  h3.h6 Key design rules
+  ul.small
+    li #[strong Clients only connect outbound] over HTTPS: registration, heartbeat, long-poll, logs, results. The lab firewall allows no inbound traffic.
+    li #[strong The Agent is the only way to create jobs.] CI and manual runs are identical.
+    li #[strong The Coordinator is the single source of truth.] It assigns a job inside a single SQLite transaction, so a job can never be assigned twice.
+    li #[strong A job is a command, not a script upload.] The Client runs your #[code --command] as its service user, never as root. Issue agent tokens only to trusted pipelines and people.
+
+  h3.h6 Resource and job states
+  .row.g-3.small
+    .col-md-6
+      table.table.table-sm.mb-0
+        thead
+          tr
+            th Resource
+            th Meaning
+        tbody
+          tr
+            td: code REGISTERED
+            td Just registered, no heartbeat yet
+          tr
+            td: code IDLE
+            td Online and free: schedulable
+          tr
+            td: code BUSY
+            td Running a job (#[code ci] / #[code cli]) or locked by hand (#[code local])
+          tr
+            td: code OUT_OF_SERVICE
+            td 3 heartbeats missed
+          tr
+            td: code MAINTENANCE
+            td Disabled by an admin
+    .col-md-6
+      table.table.table-sm.mb-0
+        thead
+          tr
+            th Job
+            th Meaning
+        tbody
+          tr
+            td: code QUEUED → ASSIGNED
+            td Waiting for, then bound to, a Client
+          tr
+            td: code PREPARING → RUNNING
+            td Inputs and DUT being prepared, then the command runs
+          tr
+            td: code PASSED / FAILED
+            td The command's exit code: 0, or non-zero
+          tr
+            td: code ERROR / TIMEOUT
+            td Infrastructure problem, or #[code --timeout] exceeded
+          tr
+            td: code CANCELED / LOST
+            td Canceled, or the Client went offline mid-job
+
++section('use-cases', 'Use cases', 'lightbulb')
+  -
+    const useCases = [
+      { icon: 'cpu', title: 'Hardware-in-the-loop CI', text: 'Every push builds firmware in the cloud, then a GitHub Actions test job runs `thub run --type hw --wait`: a lab Client flashes a real board through ST-Link, captures its UART, runs the tests and fails the pipeline on a non-zero exit.' },
+      { icon: 'pc-display', title: 'Emulator (SW) test farms', text: 'SW Clients on real or virtual Linux machines run each job’s DUT image (QEMU, Renode, a simulator) in a sandboxed Docker container. The tests talk to it at $THUB_DUT_HOST. Scale out by adding VMs.' },
+      { icon: 'person-workspace', title: 'Remote access for developers', text: 'Developers reproduce a CI failure on the exact bench it happened on (`--client lab-hw-01`) from home, with the same command CI ran, and stream the board’s console live.' },
+      { icon: 'lock', title: 'Shared benches without collisions', text: 'The scheduler hands out one job per bench. An engineer who needs a board by hand runs `thub-client lock` so nothing is scheduled there until `unlock`.' },
+      { icon: 'collection', title: 'Dedicated pools', text: 'Groups and labels (`board:nucleo-f401re`, `uart`) route jobs to the right hardware, e.g. a nightly pool separate from the PR pool.' },
+      { icon: 'box-seam', title: 'Any command-line test suite', text: 'Anything that runs from a shell and reports through its exit code: pytest, ctest, Robot Framework, a Dockerized test runner, a flashing and smoke-test script.' }
+    ]
+  .row.g-3
+    each uc in useCases
+      .col-md-6
+        .d-flex.gap-3
+          i.bi.fs-4.text-primary(class=`bi-${uc.icon}`)
+          div
+            h3.h6.mb-1= uc.title
+            p.small.text-body-secondary.mb-0!= uc.text.replace(/`([^`]+)`/g, '<code>$1</code>')

@@ -1,0 +1,72 @@
++section('agent-setup', 'Agent setup', 'terminal')
+  p.
+    The Agent (#[code thub]) is a stateless Node.js CLI. Install it wherever jobs are submitted from:
+    a developer machine (macOS, Linux or Windows with Node.js 20+) or a CI runner.
+
+  h3.h6 Install
+  +code('Developer machine').
+    npm i -g @andrian.yablonskyy/thub-agent
+    thub --version
+  p.small.
+    In CI you don't need a global install: #[code npx -y @andrian.yablonskyy/thub-agent run …].
+
+  h3.h6 Get a token
+  p.small.
+    An admin registers an agent on #[a(href="/admin/agents") Agents] (or with #[code thub-admin agent add]) and passes you
+    its token, which is shown only once. The agent's #[strong kind] decides the job id prefix and the default priority:
+  table.table.table-sm.small.w-auto
+    thead
+      tr
+        th Kind
+        th For
+        th Job ids
+        th Default priority
+    tbody
+      tr
+        td: code ci
+        td Pipelines
+        td: code A-00001…
+        td 50
+      tr
+        td: code cli
+        td Developers
+        td: code M-00001…
+        td 60 (so a busy pipeline doesn't starve them)
+
+  h3.h6 Configure
+  +code('Save the settings once').
+    thub config set url   #{coordinatorUrl}
+    thub config set token agt_…
+    thub config set user  "Your Name"      # optional: job owner label
+    thub config set group &lt;groupId>       # optional: default --group
+  p.small.
+    These are saved in #[code ~/.config/thub/agent.json]. Order of precedence: flags (#[code --url], #[code --token]) →
+    environment → config file.
+  table.table.table-sm.small
+    thead
+      tr
+        th Variable
+        th Meaning
+    tbody
+      tr
+        td: code THUB_URL
+        td Coordinator URL, e.g. #[code #{coordinatorUrl}]
+      tr
+        td: code THUB_TOKEN
+        td Agent token. Keep it in your CI's secret store.
+      tr
+        td: code THUB_GROUP
+        td Default #[code --group]
+      tr
+        td: code THUB_USER
+        td Default #[code --user]
+      tr
+        td: code THUB_NO_SELF_UPDATE=1
+        td Don't install admin-requested Agent updates on this machine
+  +code('Check the connection').
+    thub resources          # lists the Clients and their status
+    thub jobs --mine        # your recent jobs
+  p.small.mb-0.
+    When an admin requests an Agent update, the next #[code thub] command installs it and then runs on
+    the new version. If it can't install (e.g. no permission in CI), it prints the manual command and
+    carries on with the current version.

@@ -1,0 +1,67 @@
+extends ../layout
+include _mixins
+
+block content
+  -
+    const toc = [
+      { id: 'overview', label: 'Product overview' },
+      { id: 'use-cases', label: 'Use cases' },
+      { id: 'quick-start', label: 'Quick start' },
+      { id: 'coordinator', label: 'Coordinator setup' },
+      { id: 'agent-setup', label: 'Agent setup' },
+      { id: 'client-setup', label: 'Client setup' },
+      { id: 'client-machines', label: 'Client machines (HW / SW)' },
+      { id: 'docker', label: 'Docker registry' },
+      { id: 'git', label: 'Git repositories' },
+      { id: 'agent-cli', label: 'Agent CLI reference' },
+      { id: 'env', label: 'Environment variables' },
+      { id: 'ci', label: 'CI/CD (GitHub Actions)' },
+      { id: 'troubleshooting', label: 'Troubleshooting' }
+    ]
+
+  .row.g-4
+    .col-lg-3.d-none.d-lg-block
+      .thub-help-toc.sticky-top
+        input.form-control.form-control-sm.mb-3#help-filter(
+          type="search"
+          placeholder="Filter help…"
+          aria-label="Filter help sections"
+        )
+        nav.nav.nav-pills.flex-column#help-toc
+          each item in toc
+            a.nav-link.py-1(href=`#${item.id}` data-help-toc=item.id)= item.label
+        p.small.text-body-secondary.mt-3.mb-0
+          | Coordinator v#{coordinatorVersion} · examples use
+          br
+          code.small= coordinatorUrl
+
+    .col-lg-9
+      .d-flex.flex-wrap.align-items-center.justify-content-between.gap-2.mb-3
+        h1.h3.mb-0 TestHub help
+        //- Small screens have no sidebar: jump menu + filter instead.
+        .d-lg-none.d-flex.gap-2.w-100
+          select.form-select.form-select-sm#help-jump(aria-label="Jump to section")
+            each item in toc
+              option(value=item.id)= item.label
+          input.form-control.form-control-sm#help-filter-sm(type="search" placeholder="Filter…" aria-label="Filter help sections")
+      p.lead.
+        Everything needed to run TestHub: what it is, how to install and configure the
+        Coordinator, Agent and Client, how to prepare lab machines, and how jobs use Docker,
+        git and environment variables.
+      p.text-body-secondary.small#help-no-match(hidden) No section matches the filter.
+
+      include _overview
+      include _quick-start
+      include _coordinator
+      include _agent-setup
+      include _client-setup
+      include _client-machines
+      include _docker
+      include _git
+      include _agent-cli
+      include _env
+      include _ci
+      include _troubleshooting
+
+block scripts
+  script(src="/js/help.js")

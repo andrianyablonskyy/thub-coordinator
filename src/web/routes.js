@@ -308,6 +308,16 @@ function createWebRouter({ services, config }){
     res.redirect('/profile');
   });
 
+  // Help (views/help/): product guide and setup reference for every
+  // signed-in user. Examples use this Coordinator's URL — the configured
+  // publicUrl, unless that's still the localhost default and the page was
+  // opened from elsewhere.
+  router.get('/help', (req, res) => {
+    const origin = `${req.protocol}://${req.get('host')}`,
+      coordinatorUrl = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/.test(config.publicUrl || '') ? origin : config.publicUrl;
+    res.render('help/index', { title: 'Help', active: 'help', coordinatorUrl: String(coordinatorUrl).replace(/\/+$/, '') });
+  });
+
   router.get('/', (req, res) => {
     const resources = withActiveJobs(services.registry.list()),
       queueLength = services.jobs.list({ state: JOB_STATES.QUEUED, limit: 1000 }).length,

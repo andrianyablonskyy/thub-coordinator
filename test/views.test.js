@@ -33,3 +33,33 @@ test('every view compiles', () => {
     assert.doesNotThrow(() => pug.compileFile(file), `${path.relative(VIEWS, file)}`);
   }
 });
+
+// The help page is mostly static text split over partials sharing mixins
+// (views/help/_mixins.pug): compiling each file alone doesn't catch a missing
+// mixin or a broken include, so render the whole page.
+test('help page renders every section with this Coordinator\'s URL', () => {
+  const html = pug.renderFile(path.join(VIEWS, 'help', 'index.pug'), {
+    user: { username: 'viewer', role: 'viewer', theme: 'auto' },
+    updates: {},
+    messages: [],
+    currentPath: '/help',
+    active: 'help',
+    title: 'Help',
+    coordinatorVersion: '1.2.3',
+    commonVersion: '1.0.0',
+    fmtDate: () => '',
+    coordinatorUrl: 'https://thub.example.test'
+  });
+  for (const id of ['overview', 'use-cases', 'quick-start', 'coordinator', 'agent-setup', 'client-setup',
+    'client-machines', 'docker', 'git', 'agent-cli', 'env', 'ci', 'troubleshooting']){
+    assert.match(html, new RegExp(`<section[^>]* id="${id}"`), `section #${id}`);
+    assert.match(html, new RegExp(`href="#${id}"`), `TOC entry for #${id}`);
+  }
+  assert.match(html, /thub config set url {3}https:\/\/thub\.example\.test/);
+  assert.match(html, /<a class="nav-link d-flex align-items-center active" href="\/help" aria-current="page"/);
+  // Troubleshooting: commands and parameters are <code>, placeholders escaped.
+  assert.match(html, /<code>journalctl -u thub-client@&lt;instance&gt; -f<\/code>/);
+  assert.match(html, /<span>The job is rejected with <code>422<\/code><\/span>/);
+  // Code placeholders are escaped, never parsed as tags.
+  assert.doesNotMatch(html, /<(url|jobId|groupId|resourceId|work|ref)>/);
+});

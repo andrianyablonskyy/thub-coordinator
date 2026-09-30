@@ -1,0 +1,24 @@
+//- Help page building blocks. Code blocks are plain text: escape `<` as
+//- `&lt;` inside them (`>` and `&&` are fine). public/js/help.js adds a copy
+//- button to each, which copies the decoded text.
+mixin code(caption)
+  figure.thub-code.mb-3
+    if caption
+      figcaption.thub-code-caption= caption
+    pre
+      code
+        block
+
+//- One section of the help page: an anchor for the table of contents and a
+//- heading. `data-help-section` is what the filter box searches.
+mixin section(id, heading, icon)
+  section.thub-help-section.mb-5(id=id data-help-section)
+    h2.h4.border-bottom.pb-2.mb-3
+      if icon
+        i.bi.me-2.text-body-secondary(class=`bi-${icon}`)
+      = heading
+    block
+
+mixin note(tone)
+  .alert.small.py-2(class=`alert-${tone || 'info'}`)
+    block

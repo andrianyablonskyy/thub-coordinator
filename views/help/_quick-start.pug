@@ -1,0 +1,37 @@
++section('quick-start', 'Quick start', 'rocket-takeoff')
+  p Five steps from nothing to a first job. Every step links to its full section.
+  ol.thub-help-steps
+    li
+      strong Install the Coordinator
+      |  on a cloud VM behind an HTTPS reverse proxy (#[a(href="#coordinator") Coordinator setup]):
+      +code('Coordinator host').
+        sudo npm i -g @andrian.yablonskyy/thub-coordinator
+        thub-admin join-key generate          # → put it in clientJoinKey
+        nano ~/.config/thub/coordinator.json  # publicUrl, clientJoinKey
+        sudo systemctl restart thub-coordinator
+        thub-admin create-admin admin 'a-strong-password'
+    li
+      strong Install a Client
+      |  on each lab machine, with the same join key (#[a(href="#client-setup") Client setup]):
+      +code('Lab machine (Ubuntu 26.04)').
+        sudo apt install -y nodejs npm docker.io      # + stlink-tools openocd for HW
+        sudo npm i -g @andrian.yablonskyy/thub-client
+        nano ~/.config/thub/client.json               # coordinatorUrl, type, joinKey
+        sudo systemctl enable --now thub-client@client
+      | It shows up on #[a(href="/resources") Resources] by itself, usually within 10 s.
+    li
+      strong Issue an agent token
+      |  on #[a(href="/admin/agents") Agents] (admins), or on the Coordinator host with
+      |  #[code thub-admin agent add &lt;name&gt; --kind ci|cli]. The token is shown once.
+    li
+      strong Install and configure the Agent
+      |  (#[a(href="#agent-setup") Agent setup]):
+      +code('Developer machine').
+        npm i -g @andrian.yablonskyy/thub-agent
+        thub config set url #{coordinatorUrl}
+        thub config set token agt_…
+    li
+      strong Run a job
+      |  (#[a(href="#agent-cli") Agent CLI reference]):
+      +code('Developer machine').
+        thub run --type sw --command 'uname -a && echo hello from the lab' --wait

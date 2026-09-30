@@ -42,6 +42,18 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                 li.nav-item
                   a.nav-link(href="/admin/agents" class=active === 'agents' ? 'active' : '') Agents
           ul.navbar-nav
+            if user
+              li.nav-item.d-flex.align-items-center.me-2
+                a.nav-link.d-flex.align-items-center(
+                  href="/help"
+                  class=active === 'help' ? 'active' : ''
+                  aria-current=active === 'help' ? 'page' : false
+                  data-bs-toggle="tooltip"
+                  data-bs-placement="bottom"
+                  data-bs-title="Product guide, setup and CLI reference"
+                )
+                  i.bi.bi-question-circle.me-1
+                  | Help
             if user && user.role === 'admin'
               li.nav-item.d-flex.align-items-center.me-2
                 form(method="post" action="/updates/check" onsubmit="this.querySelector('button').disabled = true; this.querySelector('i').className = 'spinner-border spinner-border-sm';")

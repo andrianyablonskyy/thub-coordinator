@@ -1,0 +1,44 @@
++section('ci', 'CI/CD integration (GitHub Actions)', 'github')
+  p.
+    The test job only needs the Agent and HTTPS access to the Coordinator, so it runs on an ordinary hosted runner.
+    Create a #[strong ci]-kind agent on #[a(href="/admin/agents") Agents] and store its token as the repository secret
+    #[code THUB_AGENT_TOKEN].
+  +code('.github/workflows/firmware.yml').
+    name: firmware
+    on: [push, pull_request]
+
+    jobs:
+      build:
+        runs-on: [self-hosted, fw-build]
+        outputs:
+          image_url: ${{ steps.upload.outputs.image_url }}
+        steps:
+          - uses: actions/checkout@v4
+          - run: cmake -B build -G Ninja && cmake --build build
+          - id: upload
+            env: { ART_TOKEN: "${{ secrets.ARTIFACTORY_TOKEN }}" }
+            run: |
+              URL="https://artifactory.example.com/fw-local/app/${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}/app.bin"
+              curl -fsS -H "Authorization: Bearer $ART_TOKEN" -T build/app.bin "$URL"
+              echo "image_url=$URL" >> "$GITHUB_OUTPUT"
+
+      test-hw:
+        needs: build
+        runs-on: ubuntu-latest
+        env:
+          THUB_URL: #{coordinatorUrl}
+          THUB_TOKEN: ${{ secrets.THUB_AGENT_TOKEN }}
+        steps:
+          - run: |
+              npx -y @andrian.yablonskyy/thub-agent run \
+                --type hw --board nucleo-f401re \
+                --download-file "${{ needs.build.outputs.image_url }}" \
+                --git-repo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" "$GITHUB_SHA" \
+                --command 'st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/hw-tests.sh' \
+                --suite smoke --timeout 30m --wait \
+                --meta runUrl="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+  ul.small.mb-0
+    li The step's exit code is the verdict (#[a(href="#agent-cli") exit codes]), so the workflow fails exactly when the tests do.
+    li If the workflow is canceled, the Agent (in #[code --wait] mode) cancels the TestHub job, so abandoned runs don't hold hardware.
+    li Downloads carry no credentials. Publish the image to a URL the Client can read, or fetch it in #[code --command] with a token passed as #[code --env].
+    li Other CI systems (GitLab CI, Jenkins, Azure Pipelines) work the same way: install Node.js, set #[code THUB_URL]/#[code THUB_TOKEN] and run #[code thub run … --wait].

@@ -1,0 +1,40 @@
++section('troubleshooting', 'Troubleshooting', 'life-preserver')
+  //- `…` in a question or answer marks a command or parameter: rendered as
+  //- <code>, with everything else HTML-escaped first (so `<instance>` shows as text).
+  -
+    const faq = [
+      ['A Client doesn\'t appear on Resources', 'Check `journalctl -u thub-client@<instance> -f`. A `503` at registration means the Coordinator has no `clientJoinKey`; a `401` means the `joinKey` differs. Also check that `coordinatorUrl` is reachable from the lab (`curl -sI <url>/login`).'],
+      ['A Client flaps or two machines show as one resource', 'Both use the same `.client-id` (a cloned VM or a shared config file). Delete `<varDir>/<instance>/.client-id` on one of them and restart it, or set a distinct `clientId`.'],
+      ['Name already in use (`409`)', 'Another live Client holds that name. Rename one of them in its config or from the resource card. A name held by an `OUT_OF_SERVICE` resource is reclaimed automatically.'],
+      ['The job is rejected with `422`', 'No registered Client can ever match its type, labels, group or client. Compare `thub resources` with your `--type`, `--board`/`--label` and `--group`.'],
+      ['The job stays `QUEUED`', 'Matching Clients are all `BUSY`, locked (`local`), in `MAINTENANCE` or offline, or the job is pinned with `--client`. It times out after `--timeout`.'],
+      ['`ERROR` during prepare', 'The clone, download or DUT image pull failed; the job log names the reason. For git, check the Client user\'s keys and `known_hosts` (`ssh -T git@<host>` as that user). For images, check the Client user\'s `docker login`.'],
+      ['Permission denied on `/dev/ttyUSB*` or `docker.sock`', 'Docker or the device groups were added after the Client was installed. Re-run `sudo npm i -g @andrian.yablonskyy/thub-client` so the unit gets the `dialout`/`plugdev`/`docker` groups, then restart.'],
+      ['A configured device is shown as missing', 'Check the `devpath` with `udevadm info -a -n <dev>`, then `thub-client udev --print`; restart the Client to regenerate the udev rules.'],
+      ['Job `LOST`', 'The Client missed 3 heartbeats (network, reboot, crash). With `requeueOnLost` the job is retried once on another Client.'],
+      ['A job can\'t write to `~` (read-only file system)', 'Under systemd the Client can only write to its state directory. Write to `$THUB_WORK_DIR`, and set `DOCKER_CONFIG` there for `docker login`.'],
+      ['Live logs don\'t stream through the proxy', 'Turn off response buffering for the Coordinator (nginx: `proxy_buffering off;`, Caddy: `flush_interval -1`).'],
+      ['Locked out of the dashboard', 'Restart the Coordinator once with `THUB_BOOTSTRAP_ADMIN_PASSWORD=<new>` (resets the `admin` user), then unset it.']
+    ]
+    const withCode = (text) => text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+  .accordion#help-faq
+    each item, i in faq
+      .accordion-item
+        h3.accordion-header
+          button.accordion-button.collapsed.small(
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target=`#faq-${i}`
+            aria-expanded="false"
+            aria-controls=`faq-${i}`
+          )
+            //- One inline box: .accordion-button is flex, which would drop
+            //- the spaces around <code>.
+            span!= withCode(item[0])
+        .accordion-collapse.collapse(id=`faq-${i}` data-bs-parent="#help-faq")
+          .accordion-body.small!= withCode(item[1])
+  p.small.text-body-secondary.mt-3.mb-0.
+    The full design reference (API, state machines, database schema) is in the project README. Everything
+    that happens is also recorded per job: open it from #[a(href="/jobs") Jobs] for its spec, timeline and log.
