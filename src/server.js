@@ -39,6 +39,7 @@ const fs = require('node:fs'),
   { createUpdatesService } = require('./services/updates'),
   { createLiveService } = require('./services/live'),
   { SqliteSessionStore } = require('./services/session-store'),
+  { securityHeaders, sameOriginOnly } = require('./security'),
 
   { createAgentRouter } = require('./api/agent'),
   { createResourceRouter } = require('./api/resource'),
@@ -130,6 +131,9 @@ function createApp(config, services){
   app.set('view engine', 'pug');
   app.set('views', path.join(__dirname, '..', 'views'));
   app.set('trust proxy', config.trustProxy);
+  app.disable('x-powered-by');
+  // CSP, framing, nosniff, Referrer-Policy, HSTS on HTTPS (security.js, §12).
+  app.use(securityHeaders);
   app.locals.services = services;
   // Shown in every dashboard page's footer (layout.pug).
   app.locals.coordinatorVersion = require('../package.json').version;
@@ -177,9 +181,10 @@ function createApp(config, services){
 
   app.use('/api/v1', createAgentRouter({ services, config }));
   app.use('/api/v1', createResourceRouter({ services, config }));
-  app.use('/api/v1/admin', createAdminRouter({ services }));
+  // Session-authenticated, like the dashboard: same-origin requests only.
+  app.use('/api/v1/admin', sameOriginOnly(config), createAdminRouter({ services }));
 
-  app.use('/', createWebRouter({ services, config }));
+  app.use('/', sameOriginOnly(config), createWebRouter({ services, config }));
 
   app.use((err, req, res, next) => {
     const status = err.status || 500;

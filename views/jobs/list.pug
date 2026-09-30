@@ -15,12 +15,12 @@ block content
     .col-12.col-md-5.col-lg-4
       +searchBox(filters.q, 'Search jobs: id, user, resource, command, repo…', list.urlFor({ q: '' }))
     .col-auto
-      select.form-select.form-select-sm(name="state" onchange="this.form.submit()")
+      select.form-select.form-select-sm(name="state" data-autosubmit)
         option(value="") any state
         each s in ['QUEUED','ASSIGNED','PREPARING','RUNNING','PASSED','FAILED','ERROR','TIMEOUT','CANCELED','LOST']
           option(value=s selected=filters.state === s)= s
     .col-auto
-      select.form-select.form-select-sm(name="source" onchange="this.form.submit()")
+      select.form-select.form-select-sm(name="source" data-autosubmit)
         option(value="") any source
         option(value="ci" selected=filters.source === 'ci') ci
         option(value="cli" selected=filters.source === 'cli') cli
@@ -128,8 +128,8 @@ block content
         each preset in cleanupInfo.presets
           button.btn.btn-sm.btn-outline-secondary(
             type="button"
+            data-fill="#cleanup-before"
             data-value=preset.value
-            onclick="document.getElementById('cleanup-before').value = this.dataset.value"
           )= preset.label
       p
         | Deletes finished jobs that ended before then, with their logs, and the resource, agent and group history logged before then — then compacts the database file.

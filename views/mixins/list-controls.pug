@@ -11,7 +11,7 @@ mixin pageSizePicker(list)
     label.small.text-body-secondary.mb-0.text-nowrap(for="list-page-size") Show
     select.form-select.form-select-sm.w-auto#list-page-size(
       aria-label="Records per page"
-      onchange="location.href = this.value"
+      data-navigate
     )
       each s in list.pageSizes
         option(value=list.urlFor({ size: s }) selected=list.prefs.size === s)= s === 'all' ? 'All' : s

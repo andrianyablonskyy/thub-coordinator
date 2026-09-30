@@ -64,7 +64,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                   | Help
             if user && user.role === 'admin'
               li.nav-item.d-flex.align-items-center.me-2
-                form(method="post" action="/updates/check" onsubmit="this.querySelector('button').disabled = true; this.querySelector('i').className = 'spinner-border spinner-border-sm';")
+                form(method="post" action="/updates/check" data-submit-busy)
                   input(type="hidden" name="returnTo" value=currentPath)
                   button.btn.btn-sm.btn-outline-secondary(
                     type="submit"
@@ -192,6 +192,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
     script(src="/js/copy-to-clipboard.js")
     script(src="/js/confirm.js")
     script(src="/js/list-search.js")
+    script(src="/js/actions.js")
     if user && liveTopics
       script(src="/js/live.js")
     if user && user.role === 'admin' && updates.coordinatorPending
