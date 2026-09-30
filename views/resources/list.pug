@@ -16,7 +16,8 @@ block content
     .ms-auto
       +pageSizePicker(list)
 
-  +listToolbar(list, 'resources')
+  div(data-live="list-toolbar")
+    +listToolbar(list, 'resources')
 
   table.table.table-hover.align-middle
     thead
@@ -31,7 +32,7 @@ block content
         +sortHeader(list, 'heartbeat', 'Last heartbeat', 'desc')
         if user.role === 'admin'
           th Actions
-    tbody
+    tbody(data-live="rows")
       each r in resources
         tr(role="button" tabindex="0" data-resource-card=`resource-card-${r.id}`)
           td= r.name

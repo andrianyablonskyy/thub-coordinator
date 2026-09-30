@@ -27,7 +27,8 @@ block content
     .col-auto.ms-auto
       +pageSizePicker(list)
 
-  +listToolbar(list, 'jobs')
+  div(data-live="list-toolbar")
+    +listToolbar(list, 'jobs')
 
   table.table.table-hover.align-middle
     thead
@@ -41,7 +42,7 @@ block content
         +sortHeader(list, 'duration', 'Duration', 'desc')
         if canManage
           th
-    tbody
+    tbody(data-live="rows")
       each j in jobs
         tr
           td: a(href=`/jobs/${j.id}`)= j.id

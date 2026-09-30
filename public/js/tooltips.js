@@ -13,6 +13,8 @@
 
 'use strict';
 
+// Delegated (one instance per element, created on first hover/focus), so
+// content swapped in by live updates (public/js/live.js) gets tooltips too.
 (function (){
-  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => new bootstrap.Tooltip(el));
+  new bootstrap.Tooltip(document.body, { selector: '[data-bs-toggle="tooltip"]' });
 })();

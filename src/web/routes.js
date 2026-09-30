@@ -39,6 +39,15 @@ const RESOURCE_SORT_VALUE = {
   },
   compareResourceValues = (sort, a, b) =>
     sort === 'version' ? compareVersions(a, b) : String(a).localeCompare(String(b), undefined, { numeric: true }),
+  // Agents page (list-prefs `agents`): never-used / never-reported last.
+  AGENT_SORT_VALUE = {
+    name: (a) => a.name,
+    kind: (a) => a.kind,
+    version: (a) => a.version,
+    created: (a) => a.created_at,
+    used: (a) => a.last_used_at,
+    status: (a) => (a.revoked_at ? 'revoked' : 'active')
+  },
 
   // §10.1: avatar uploads are small, single images — a hard size cap and an
   // allow-list of image mimetypes, same spirit as the join-key/token checks
@@ -145,7 +154,7 @@ function createWebRouter({ services, config }){
     // error toast (never auto-closes) — on a page view, not the polling
     // endpoint or a POST whose redirect would drop it.
     const updateError = res.locals.updates.coordinatorUpdateError;
-    if (updateError && user?.role === 'admin' && req.method === 'GET' && req.path !== '/updates/status' &&
+    if (updateError && user?.role === 'admin' && req.method === 'GET' && req.path !== '/updates/status' && !req.thubPassive &&
       req.session.seenUpdateError !== updateError.at){
       req.session.seenUpdateError = updateError.at;
       res.locals.messages = [
@@ -157,7 +166,9 @@ function createWebRouter({ services, config }){
     res.locals.nextCronRun = nextCronRun;
     res.locals.formatDateTime = formatDateTime;
     res.locals.currentPath = req.originalUrl;
-    if (req.session){
+    // A live-update re-fetch (server.js, req.thubPassive) renders the page
+    // only for its data: flash messages stay for the next real page view.
+    if (req.session && !req.thubPassive){
       req.session.flash = [];
     }
 
@@ -182,8 +193,11 @@ function createWebRouter({ services, config }){
     // so a mid-session profile change takes effect immediately, and so
     // `rolling: true` (server.js) actually extends by *this* user's chosen
     // duration each time, not whatever the session happened to start with.
-    if (req.session && user){
+    if (req.session && user && !req.thubPassive){
       req.session.cookie.maxAge = user.sessionTimeoutMin * 60 * 1000;
+    }
+    if (req.thubPassive){
+      res.set('Cache-Control', 'no-store');
     }
 
     next();
@@ -309,6 +323,44 @@ function createWebRouter({ services, config }){
     res.redirect('/profile');
   });
 
+  // Live updates (services/live.js, public/js/live.js): which topics
+  // changed — `resources`, `agents`, `jobs` — never the data itself; the
+  // page re-fetches itself for that, with the same session and templates.
+  // A passive request (server.js): it doesn't extend the idle timeout, and
+  // it ends with `session-ended` once the session expires or logs out.
+  const LIVE_PING_MS = 25_000,
+    LIVE_SESSION_CHECK_MS = 15_000;
+  router.get('/live', (req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    res.flushHeaders?.();
+    const write = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    // retry: how soon EventSource reconnects after the connection drops.
+    res.write('retry: 5000\n\n');
+    write('hello', { topics: services.live.TOPICS });
+
+    const unsubscribe = services.live.subscribe((topics) => write('changed', { topics })),
+      // Comment lines keep proxies from timing the idle stream out.
+      ping = setInterval(() => res.write(': ping\n\n'), LIVE_PING_MS),
+      sessionCheck = setInterval(() => {
+        req.sessionStore.get(req.sessionID, (err, sess) => {
+          if (!err && !sess?.user){
+            write('session-ended', {});
+            res.end();
+          }
+        });
+      }, LIVE_SESSION_CHECK_MS);
+    req.on('close', () => {
+      unsubscribe();
+      clearInterval(ping);
+      clearInterval(sessionCheck);
+    });
+  });
+
   // Help (views/help/): product guide and setup reference for every
   // signed-in user. Examples use this Coordinator's URL — the configured
   // publicUrl, unless that's still the localhost default and the page was
@@ -328,7 +380,7 @@ function createWebRouter({ services, config }){
         .filter((j) => j.created_at >= dayAgo).length,
       onlineCount = resources.filter((r) => r.status !== RESOURCE_STATES.OUT_OF_SERVICE && r.status !== RESOURCE_STATES.REGISTERED).length,
       groupsById = Object.fromEntries(services.groups.list().map((g) => [g.id, g]));
-    res.render('index', { title: 'Overview', active: 'overview', resources, queueLength, jobsLast24h, onlineCount, groupsById });
+    res.render('index', { title: 'Overview', active: 'overview', liveTopics: 'resources jobs', resources, queueLength, jobsLast24h, onlineCount, groupsById });
   });
 
   router.get('/resources', (req, res) => {
@@ -355,6 +407,7 @@ function createWebRouter({ services, config }){
     res.render('resources/list', {
       title: 'Resources',
       active: 'resources',
+      liveTopics: 'resources',
       resources: withActiveJobs(sorted.slice(pagination.offset, pagination.offset + pagination.limit)),
       groupsById,
       list: { ...view, pagination, pageUrl, q }
@@ -710,6 +763,7 @@ function createWebRouter({ services, config }){
     res.render('jobs/list', {
       title: 'Jobs',
       active: 'jobs',
+      liveTopics: 'jobs',
       jobs,
       filters,
       list: { ...view, pagination, pageUrl, q: filters.q },
@@ -842,17 +896,42 @@ function createWebRouter({ services, config }){
     res.redirect('/groups');
   });
 
-  router.get('/admin/agents', requireAdminRole, (req, res) => {
+  // Agents page: searched (?q=), sorted and paged like Resources (§10.1).
+  // Also what registering one renders, with its token shown once.
+  function renderAgents(req, res, extra = {}){
     const q = search.normalizeQuery(req.query.q),
       terms = search.parseTerms(q),
-      all = services.agents.list(),
-      agents = all.filter((a) => search.matches([a.id, a.name, a.kind, a.version, a.revoked_at ? 'revoked' : 'active'], terms));
-    res.render('admin/agents', { title: 'Agents', active: 'agents', agents, q, totalCount: all.length });
-  });
+      view = listView(req, res, 'agents', { q }),
+      { sort, dir, size } = view.prefs,
+      value = AGENT_SORT_VALUE[sort],
+      sorted = services.agents.list()
+        .filter((a) => search.matches([a.id, a.name, a.kind, a.version, a.revoked_at ? 'revoked' : 'active'], terms))
+        .sort((a, b) => {
+          const va = value(a),
+            vb = value(b);
+          if (va == null || vb == null){
+            return (va == null) - (vb == null);
+          }
+          return (dir === 'asc' ? 1 : -1) * compareResourceValues(sort, va, vb) || b.created_at.localeCompare(a.created_at);
+        }),
+      pagination = listPrefs.paginate(sorted.length, size, req.query.page),
+      pageUrl = (changes) => view.urlFor({ page: pagination.page, ...changes });
+    res.render('admin/agents', {
+      title: 'Agents',
+      active: 'agents',
+      liveTopics: 'agents',
+      agents: sorted.slice(pagination.offset, pagination.offset + pagination.limit),
+      q,
+      list: { ...view, pagination, pageUrl, q },
+      ...extra
+    });
+  }
+
+  router.get('/admin/agents', requireAdminRole, (req, res) => renderAgents(req, res));
 
   router.post('/admin/agents', requireAdminRole, (req, res) => {
-    const { agent, token } = services.agents.create({ name: req.body.name, kind: req.body.kind });
-    res.render('admin/agents', { title: 'Agents', active: 'agents', agents: services.agents.list(), newToken: token });
+    const { token } = services.agents.create({ name: req.body.name, kind: req.body.kind });
+    renderAgents(req, res, { newToken: token });
   });
 
   router.post('/admin/agents/:id/rename', requireAdminRole, (req, res) => {
@@ -866,12 +945,12 @@ function createWebRouter({ services, config }){
     catch (err){
       flash(req, 'danger', err.message);
     }
-    res.redirect('/admin/agents');
+    res.redirect(returnTo(req, '/admin/agents'));
   });
 
   router.post('/admin/agents/:id/revoke', requireAdminRole, (req, res) => {
     services.agents.revoke(req.params.id);
-    res.redirect('/admin/agents');
+    res.redirect(returnTo(req, '/admin/agents'));
   });
 
   return router;

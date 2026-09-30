@@ -15,6 +15,7 @@
       ['A job can\'t write to `~` (read-only file system)', 'Under systemd the Client can only write to its state directory. Write to `$THUB_WORK_DIR`, and set `DOCKER_CONFIG` there for `docker login`.'],
       ['Live logs don\'t stream through the proxy', 'Turn off response buffering for the Coordinator (nginx: `proxy_buffering off;`, Caddy: `flush_interval -1`).'],
       ['Finding a job, resource, group or agent', 'Use the search box on its list page (press `/` to jump to it). Every word must match, e.g. `lab-hw-01 FAILED` or a git ref. Job search covers ids, users, resources, agents, commands, repos and `--meta`, but not `--env` values (secrets). On a job page, search the log above the log viewer: `Enter`/`Shift+Enter` step through matches.'],
+      ['Lists don\'t update by themselves (navbar shows Offline or Paused)', '`Paused`: you\'re editing something on the page (a field, the inline rename, a dialog); it resumes when you\'re done. `Offline`: the browser can\'t hold the `/live` stream open, often a proxy buffering it (nginx: `proxy_buffering off;`); reloading the page always shows current data. `Session ended`: sign in again. Background updates never extend the session\'s idle timeout.'],
       ['Locked out of the dashboard', 'Restart the Coordinator once with `THUB_BOOTSTRAP_ADMIN_PASSWORD=<new>` (resets the `admin` user), then unset it.']
     ]
     const withCode = (text) => text

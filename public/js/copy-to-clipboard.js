@@ -13,24 +13,27 @@
 
 'use strict';
 
+// Delegated, so buttons swapped in by live updates (live.js) work.
 (function (){
-  document.querySelectorAll('[data-copy]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(btn.dataset.copy);
-      }
-      catch {
-        return; // clipboard unavailable (e.g. non-secure context) — fail quietly
-      }
-      const icon = btn.querySelector('i');
-      if (!icon){
-        return;
-      }
-      const original = icon.className;
-      icon.className = 'bi bi-check2';
-      setTimeout(() => {
-        icon.className = original;
-      }, 1200);
-    });
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-copy]');
+    if (!btn){
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(btn.dataset.copy);
+    }
+    catch {
+      return; // clipboard unavailable (e.g. non-secure context) — fail quietly
+    }
+    const icon = btn.querySelector('i');
+    if (!icon){
+      return;
+    }
+    const original = icon.className;
+    icon.className = 'bi bi-check2';
+    setTimeout(() => {
+      icon.className = original;
+    }, 1200);
   });
 })();

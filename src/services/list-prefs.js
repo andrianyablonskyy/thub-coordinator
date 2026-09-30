@@ -30,6 +30,10 @@ const PAGE_SIZES = [10, 25, 50, 100, 'all'],
     resources: {
       sorts: ['name', 'type', 'version', 'status', 'heartbeat'],
       defaults: { size: DEFAULT_PAGE_SIZE, sort: 'name', dir: 'asc' }
+    },
+    agents: {
+      sorts: ['name', 'kind', 'version', 'created', 'used', 'status'],
+      defaults: { size: DEFAULT_PAGE_SIZE, sort: 'created', dir: 'desc' }
     }
   };
 

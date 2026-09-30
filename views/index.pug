@@ -6,7 +6,8 @@ include mixins/updates
 block content
   h1.h4.mb-2 Overview
 
-  .row.g-3.mb-4
+  //- data-live: swapped in place when it changes (public/js/live.js).
+  .row.g-3.mb-4(data-live="overview-stats")
     .col-md-4
       .card
         .card-body
@@ -23,7 +24,7 @@ block content
           h6.card-subtitle.mb-2.text-body-secondary Resources online
           p.display-6= `${onlineCount} / ${resources.length}`
 
-  .row.g-3
+  .row.g-3(data-live="overview-cards")
     each r in resources
       .col-sm-6.col-md-4.col-lg-3
         .card.h-100(role="button" tabindex="0" data-resource-card=`resource-card-${r.id}` class=`border-${{IDLE:'success',BUSY:'primary',OUT_OF_SERVICE:'danger',MAINTENANCE:'secondary',REGISTERED:'secondary'}[r.status] || 'secondary'}`)

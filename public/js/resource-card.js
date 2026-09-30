@@ -21,18 +21,19 @@
     }
   }
 
-  document.querySelectorAll('[data-resource-card]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      // The Resources table's own action buttons stay plain actions.
-      if (!e.target.closest('form, button, a, input')){
-        open(el);
-      }
-    });
-    el.addEventListener('keydown', (e) => {
-      if ((e.key === 'Enter' || e.key === ' ') && e.target === el){
-        e.preventDefault();
-        open(el);
-      }
-    });
+  // Delegated, so rows and cards swapped in by live updates (live.js) work.
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-resource-card]');
+    // The Resources table's own action buttons stay plain actions.
+    if (el && !e.target.closest('form, button, a, input')){
+      open(el);
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    const el = e.target.closest?.('[data-resource-card]');
+    if (el && (e.key === 'Enter' || e.key === ' ') && e.target === el){
+      e.preventDefault();
+      open(el);
+    }
   });
 })();

@@ -37,6 +37,7 @@ const path = require('node:path'),
   { createCleanupService } = require('./services/cleanup'),
   { startDevMode } = require('./dev/virtual'),
   { createUpdatesService } = require('./services/updates'),
+  { createLiveService } = require('./services/live'),
 
   { createAgentRouter } = require('./api/agent'),
   { createResourceRouter } = require('./api/resource'),
@@ -58,7 +59,8 @@ function buildServices(config){
     heartbeatMonitor = createHeartbeatMonitor(db, { bus, events, registry, jobs, config }),
     retention = createRetentionService(db, { bus, logs, artifacts, config }),
     cleanup = createCleanupService(db, { jobs, config }),
-    updates = createUpdatesService({ config });
+    updates = createUpdatesService({ config }),
+    live = createLiveService(db, { bus, updates });
 
   jobs.reconcileOnStartup();
   updates.start();
@@ -86,7 +88,8 @@ function buildServices(config){
     heartbeatMonitor,
     retention,
     cleanup,
-    updates
+    updates,
+    live
   };
 }
 
@@ -127,6 +130,21 @@ function createApp(config, services){
       cookie: { httpOnly: true, sameSite: 'lax' }
     })
   );
+  // Background requests of the dashboard's live updates (public/js/live.js):
+  // the GET /live stream and the page re-fetches it triggers (header
+  // X-Thub-Live: 1). They must not count as activity — otherwise an open
+  // tab would keep the session alive forever and the idle timeout (§10.1)
+  // would never fire — so they don't extend it (`touch` is what `rolling`
+  // uses to push the expiry out) and web/routes.js leaves the session alone.
+  app.use((req, res, next) => {
+    if (req.session && (req.path === '/live' || req.get('X-Thub-Live') === '1')){
+      req.thubPassive = true;
+      req.session.touch = function (){
+        return this;
+      };
+    }
+    next();
+  });
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.use('/avatars', express.static(config.avatarsDir));
 

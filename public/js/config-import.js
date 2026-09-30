@@ -18,42 +18,46 @@
   const IGNORED = ['joinKey', 'coordinatorUrl', 'name'],
     MAX_BYTES = 64 * 1024;
 
-  document.querySelectorAll('form[data-config-import]').forEach((form) => {
-    const picker = form.querySelector('[data-config-import-file]');
-    form.querySelector('[data-config-import-pick]').addEventListener('click', () => {
+  // Delegated, so forms swapped in by live updates (live.js) work.
+  document.addEventListener('click', (e) => {
+    const pick = e.target.closest('[data-config-import-pick]'),
+      picker = pick?.closest('form[data-config-import]')?.querySelector('[data-config-import-file]');
+    if (picker){
       picker.value = ''; // the same file again still fires `change`
       picker.click();
-    });
+    }
+  });
 
-    picker.addEventListener('change', async () => {
-      const file = picker.files[0];
-      if (!file){
-        return;
-      }
-      const text = file.size > MAX_BYTES ? '' : await file.text();
-      form.querySelector('input[name="file"]').value = text;
-      form.querySelector('input[name="fileName"]').value = file.name;
+  document.addEventListener('change', async (e) => {
+    const picker = e.target.closest?.('[data-config-import-file]'),
+      form = picker?.closest('form[data-config-import]'),
+      file = picker?.files[0];
+    if (!form || !file){
+      return;
+    }
+    const text = file.size > MAX_BYTES ? '' : await file.text();
+    form.querySelector('input[name="file"]').value = text;
+    form.querySelector('input[name="fileName"]').value = file.name;
 
-      let parsed = null;
-      try {
-        parsed = JSON.parse(text);
-      }
-      catch {
-        parsed = null;
-      }
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)){
-        // Nothing to confirm: the Coordinator says what's wrong with it.
-        delete form.dataset.confirm;
-      }
-      else {
-        const present = IGNORED.filter((k) => k in parsed);
-        form.dataset.confirm = `Import ${file.name} into ${form.dataset.resourceName}? ` +
-          'It replaces the Client\'s config (capabilities, labels, groups, heartbeat settings, …); the Client writes it on its next heartbeat ' +
-          'and restarts once it has no job running.\n\n' +
-          `Ignored: joinKey, coordinatorUrl and name${present.length ? ` (in this file: ${present.join(', ')})` : ''}, ` +
-          'and the Client\'s id, file paths and secrets — each Client keeps its own.';
-      }
-      form.requestSubmit();
-    });
+    let parsed = null;
+    try {
+      parsed = JSON.parse(text);
+    }
+    catch {
+      parsed = null;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)){
+      // Nothing to confirm: the Coordinator says what's wrong with it.
+      delete form.dataset.confirm;
+    }
+    else {
+      const present = IGNORED.filter((k) => k in parsed);
+      form.dataset.confirm = `Import ${file.name} into ${form.dataset.resourceName}? ` +
+        'It replaces the Client\'s config (capabilities, labels, groups, heartbeat settings, …); the Client writes it on its next heartbeat ' +
+        'and restarts once it has no job running.\n\n' +
+        `Ignored: joinKey, coordinatorUrl and name${present.length ? ` (in this file: ${present.join(', ')})` : ''}, ` +
+        'and the Client\'s id, file paths and secrets — each Client keeps its own.';
+    }
+    form.requestSubmit();
   });
 })();

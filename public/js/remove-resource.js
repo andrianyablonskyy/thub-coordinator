@@ -20,8 +20,10 @@
   }
   const field = (name) => modalEl.querySelector(`[data-field="${name}"]`);
 
-  document.querySelectorAll('[data-remove-resource]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+  // Delegated, so buttons swapped in by live updates (live.js) work.
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-remove-resource]');
+    if (btn){
       const { removeResource: id, removeName: name, removeJob: job, removeReturn: returnTo } = btn.dataset;
       field('name').textContent = name;
       field('job').textContent = job;
@@ -40,6 +42,6 @@
       else {
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
       }
-    });
+    }
   });
 })();

@@ -87,3 +87,9 @@ test('jobs.page sorts and pages in SQL, with empty values last', () => {
   assert.equal(second.pagination.pages, 2);
   assert.equal(jobs.page({ state: 'PASSED' }).pagination.total, 0);
 });
+
+test('agents list: sortable columns, newest first by default', () => {
+  assert.deepEqual(normalize('agents'), { size: 25, sort: 'created', dir: 'desc' });
+  assert.deepEqual(normalize('agents', { size: 10, sort: 'used', dir: 'asc' }), { size: 10, sort: 'used', dir: 'asc' });
+  assert.equal(normalize('agents', { sort: 'token' }).sort, 'created'); // not a column: default
+});

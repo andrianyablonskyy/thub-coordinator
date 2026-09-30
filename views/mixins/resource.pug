@@ -322,7 +322,7 @@ mixin resourceCard(r, groupsById, returnTo)
               ) Connected USB devices
             
           .tab-content
-            .tab-pane.fade.show.active(id=`rc-${r.id}-details` role="tabpanel" aria-labelledby=`rc-${r.id}-details-tab` tabindex="0")
+            .tab-pane.fade.show.active(id=`rc-${r.id}-details` role="tabpanel" aria-labelledby=`rc-${r.id}-details-tab` tabindex="0" data-live=`rc-details-${r.id}`)
               +resourceDetails(r, groupsById, returnTo, local, external)
             +configPanes(r, returnTo)
             .tab-pane.fade(id=`rc-${r.id}-usb` role="tabpanel" aria-labelledby=`rc-${r.id}-usb-tab` tabindex="0")

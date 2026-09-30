@@ -7,13 +7,11 @@ block content
     h1.h4.mb-0 Agents (CI / developers)
     button.btn.btn-primary.btn-sm(type="button" data-bs-toggle="modal" data-bs-target="#addAgentModal") Register agent
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
-    +updatesToolbar('agent', 'agents', '/admin/agents')
+    +updatesToolbar('agent', 'agents', list.pageUrl())
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
-    +searchForm(q, 'Search agents: name, kind, version, status', '/admin/agents')
-  if q
-    p.small.text-body-secondary.mb-2
-      | #{agents.length} of #{totalCount} agents
-      +searchNote(q)
+    +searchForm(q, 'Search agents: name, kind, version, status', list.urlFor({ q: '' }))
+    .ms-auto
+      +pageSizePicker(list)
 
   if newToken
     .alert.alert-warning
@@ -21,23 +19,26 @@ block content
       |
       code= newToken
 
+  div(data-live="list-toolbar")
+    +listToolbar(list, 'agents')
+
   table.table.table-hover.align-middle
     thead
       tr
-        th Name
-        th Kind
-        th Version
-        th Created
-        th Last used
-        th Status
+        +sortHeader(list, 'name', 'Name')
+        +sortHeader(list, 'kind', 'Kind')
+        +sortHeader(list, 'version', 'Version', 'desc')
+        +sortHeader(list, 'created', 'Created', 'desc')
+        +sortHeader(list, 'used', 'Last used', 'desc')
+        +sortHeader(list, 'status', 'Status')
         th
-    tbody
+    tbody(data-live="rows")
       each a in agents
         tr(class=a.revoked_at ? 'opacity-50' : '')
           td= a.name
           td.text-uppercase= a.kind
           //- A revoked token can't pick an update up: no button.
-          td: +versionWithUpdate(a.version, updates.latest.agent, a.update_to, `/admin/agents/${a.id}/update`, '/admin/agents', !a.revoked_at)
+          td: +versionWithUpdate(a.version, updates.latest.agent, a.update_to, `/admin/agents/${a.id}/update`, list.pageUrl(), !a.revoked_at)
           td= fmtDate(a.created_at)
           td= fmtDate(a.last_used_at, 'never')
           td= a.revoked_at ? 'revoked' : 'active'
@@ -57,12 +58,14 @@ block content
                   data-confirm-title="Revoke agent token?"
                   data-confirm-ok="Revoke"
                 )
+                  input(type="hidden" name="returnTo" value=list.pageUrl())
                   button.btn.btn-sm.btn-outline-danger(type="submit") Revoke
 
             .modal(tabindex="-1" id=`editAgentModal-${a.id}` aria-labelledby=`editAgentTitle-${a.id}`)
               .modal-dialog
                 .modal-content
                   form(method="post" action=`/admin/agents/${a.id}/rename`)
+                    input(type="hidden" name="returnTo" value=list.pageUrl())
                     .modal-header
                       h5.modal-title(id=`editAgentTitle-${a.id}`) Edit agent
                       button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
@@ -78,7 +81,7 @@ block content
           td.text-body-secondary(colspan="7")
             if q
               | No agent matches “#{q}”. 
-              a(href="/admin/agents") Show all agents
+              a(href=list.urlFor({ q: '' })) Show all agents
             else
               | No agents yet.
 
