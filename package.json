@@ -19,7 +19,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "@andrian.yablonskyy/thub-common": "^1.0.31",
+    "@andrian.yablonskyy/thub-common": "^1.0.32",
     "better-sqlite3": "^12.4.1",
     "express": "^5.1.0",
     "express-session": "^1.18.2",
