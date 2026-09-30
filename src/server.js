@@ -38,6 +38,7 @@ const path = require('node:path'),
   { startDevMode } = require('./dev/virtual'),
   { createUpdatesService } = require('./services/updates'),
   { createLiveService } = require('./services/live'),
+  { SqliteSessionStore } = require('./services/session-store'),
 
   { createAgentRouter } = require('./api/agent'),
   { createResourceRouter } = require('./api/resource'),
@@ -60,7 +61,8 @@ function buildServices(config){
     retention = createRetentionService(db, { bus, logs, artifacts, config }),
     cleanup = createCleanupService(db, { jobs, config }),
     updates = createUpdatesService({ config }),
-    live = createLiveService(db, { bus, updates });
+    live = createLiveService(db, { bus, updates }),
+    sessionStore = new SqliteSessionStore(db);
 
   jobs.reconcileOnStartup();
   updates.start();
@@ -89,7 +91,8 @@ function buildServices(config){
     retention,
     cleanup,
     updates,
-    live
+    live,
+    sessionStore
   };
 }
 
@@ -99,6 +102,18 @@ function commonPath(){
 
 function commonVersion(){
   return require('@andrian.yablonskyy/thub-common/package.json').version;
+}
+
+// The session cookie's Secure flag (config session.secureCookie, §12).
+// "auto": always Secure for an https:// publicUrl — the cookie must never
+// travel over plain HTTP there — else express-session's per-request 'auto'
+// (Secure on HTTPS connections), so plain-HTTP development still works.
+function cookieSecure(config){
+  const setting = config.session?.secureCookie ?? 'auto';
+  if (setting === true || setting === false){
+    return setting;
+  }
+  return /^https:\/\//i.test(config.publicUrl || '') ? true : 'auto';
 }
 
 function createApp(config, services){
@@ -119,6 +134,9 @@ function createApp(config, services){
   app.use(
     session({
       secret: config.sessionSecret,
+      // In the SQLite database (services/session-store.js), not in memory:
+      // survives restarts, and expired sessions are pruned.
+      store: services.sessionStore,
       resave: false,
       saveUninitialized: false,
       // Idle timeout, not a fixed one (§10.1): `rolling` re-sends a fresh
@@ -127,7 +145,7 @@ function createApp(config, services){
       // (routes.js) after their *last* request. Each user's own preference
       // is applied per-request in web/routes.js, since it isn't known here.
       rolling: true,
-      cookie: { httpOnly: true, sameSite: 'lax' }
+      cookie: { httpOnly: true, sameSite: 'lax', secure: cookieSecure(config) }
     })
   );
   // Background requests of the dashboard's live updates (public/js/live.js):
@@ -225,4 +243,4 @@ if (require.main === module){
   start();
 }
 
-module.exports = { start, buildServices, createApp };
+module.exports = { start, buildServices, createApp, cookieSecure };

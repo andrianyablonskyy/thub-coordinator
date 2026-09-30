@@ -25,6 +25,7 @@
       "trustProxy": "loopback",
       "dataDir": "/home/thub/var/lib/thub",
       "sessionSecret": "&lt;long random string>",
+      "session": { "secureCookie": "auto" },
       "clientJoinKey": "&lt;output of: thub-admin join-key generate>",
       "heartbeat": { "intervalSec": 10, "missedLimit": 3, "sweepIntervalSec": 5 },
       "scheduler": { "assignAckTimeoutSec": 15, "requeueOnLost": true, "maxQueuedPerAgent": 20, "tickIntervalSec": 10 },
@@ -52,6 +53,9 @@
         tr
           td: code sessionSecret
           td Signs dashboard sessions and artifact download links. Keep it secret and never use the #[code change-me-…] placeholder.
+        tr
+          td: code session.secureCookie
+          td #[code "auto"] (default): the session cookie is Secure (HTTPS-only) whenever #[code publicUrl] is https://. #[code true]/#[code false] force it. Sessions are stored in the database and survive restarts.
         tr
           td: code clientJoinKey
           td The shared secret Clients self-register with. Unset or #[code null] turns registration off (#[code 503]).

@@ -28,6 +28,12 @@ const DEFAULTS = {
   trustProxy: 'loopback',
   dataDir: path.join(process.cwd(), '.data'),
   sessionSecret: 'dev-only-change-me',
+  session: {
+    // The dashboard session cookie's Secure flag (server.js cookieSecure):
+    // "auto" = Secure whenever publicUrl is https:// (else per request:
+    // Secure only on a connection that is itself HTTPS); true / false force it.
+    secureCookie: 'auto'
+  },
   // Shared secret Clients present to self-register (see api/resource.js).
   // null disables auto-registration entirely — set it explicitly to turn it on.
   clientJoinKey: null,
@@ -120,6 +126,12 @@ function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
   }
   if (process.env.THUB_CLIENT_JOIN_KEY){
     config.clientJoinKey = process.env.THUB_CLIENT_JOIN_KEY;
+  }
+
+  if (![true, false, 'auto'].includes(config.session.secureCookie)){
+    throw new Error(
+      `session.secureCookie must be "auto", true or false (got ${JSON.stringify(config.session.secureCookie)}) in ${candidate || 'the config'}`
+    );
   }
 
   if (!Object.hasOwn(JOB_RETENTION, config.retention.jobRetention)){

@@ -208,14 +208,35 @@ function createWebRouter({ services, config }){
     next();
   });
 
+  // A Secure-only session cookie (server.js cookieSecure, §12) is never
+  // sent back over plain HTTP, so signing in would just loop back here.
+  // Say why instead — usually a proxy not passing X-Forwarded-Proto.
+  function httpsProblem(req){
+    if (req.session.cookie.secure !== true || req.secure){
+      return null;
+    }
+    return {
+      type: 'danger',
+      sticky: true,
+      text: `Signing in needs HTTPS: this Coordinator's session cookie is sent only over HTTPS (publicUrl is ${config.publicUrl}), ` +
+        'but this request reached it as plain HTTP. Open the dashboard through that https:// address; behind a reverse proxy, ' +
+        'make it send "X-Forwarded-Proto: https" and check trustProxy. To allow plain HTTP, set session.secureCookie to false.'
+    };
+  }
+
   router.get('/login', (req, res) => {
     if (req.session.user){
       return res.redirect('/');
     }
-    res.render('login', { title: 'Sign in' });
+    const problem = httpsProblem(req);
+    res.render('login', { title: 'Sign in', ...(problem ? { messages: [problem] } : {}) });
   });
 
   router.post('/login', (req, res) => {
+    const problem = httpsProblem(req);
+    if (problem){
+      return res.status(400).render('login', { title: 'Sign in', messages: [problem] });
+    }
     const { username, password } = req.body,
       user = services.adminUsers.verify(username, password);
     if (!user){
