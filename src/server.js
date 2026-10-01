@@ -40,6 +40,7 @@ const fs = require('node:fs'),
   { createLiveService } = require('./services/live'),
   { SqliteSessionStore } = require('./services/session-store'),
   { securityHeaders, sameOriginOnly } = require('./security'),
+  { createSettingsService } = require('./services/settings'),
 
   { createAgentRouter } = require('./api/agent'),
   { createResourceRouter } = require('./api/resource'),
@@ -59,6 +60,9 @@ function removeLegacyArtifacts(config){
 function buildServices(config){
   removeLegacyArtifacts(config);
   const db = openDb(config.dbPath),
+    // First: dashboard settings (README §13.2) go into `config` before any
+    // service reads it — some read theirs only once, at creation.
+    settings = createSettingsService(db, { config }).applyAtStartup(),
     events = createEventsService(db),
     registry = createRegistryService(db, { bus, events }),
     agents = createAgentsService(db, { events }),
@@ -102,7 +106,8 @@ function buildServices(config){
     cleanup,
     updates,
     live,
-    sessionStore
+    sessionStore,
+    settings
   };
 }
 

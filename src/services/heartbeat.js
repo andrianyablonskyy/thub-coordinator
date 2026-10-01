@@ -18,9 +18,29 @@ const { RESOURCE_STATES, ACTIVE_JOB_STATES } = require('@andrian.yablonskyy/thub
 // §5.1 sweeper: runs every sweepIntervalSec, marks resources OUT_OF_SERVICE
 // after missedLimit missed heartbeats and moves any active job to LOST.
 function createHeartbeatMonitor(db, { bus, events, registry, jobs, config }){
-  function sweepOnce(){
-    const { intervalSec, missedLimit } = config.heartbeat,
-      cutoff = new Date(Date.now() - missedLimit * intervalSec * 1000).toISOString(),
+  // heartbeat.intervalSec can change while running (dashboard Settings,
+  // §13.2). Clients learn the new one from their next heartbeat reply, so
+  // right after it's *lowered* they're still on the old, longer one: keep
+  // judging by that until every Client has had time to switch over.
+  let seenInterval = config.heartbeat.intervalSec,
+    graceInterval = 0,
+    graceUntil = 0;
+  function effectiveInterval(now){
+    const current = config.heartbeat.intervalSec;
+    if (current !== seenInterval){
+      if (current < seenInterval){
+        graceInterval = seenInterval;
+        graceUntil = now + (config.heartbeat.missedLimit + 1) * seenInterval * 1000;
+      }
+      seenInterval = current;
+    }
+    return now < graceUntil ? Math.max(current, graceInterval) : current;
+  }
+
+  function sweepOnce(now = Date.now()){
+    const { missedLimit } = config.heartbeat,
+      intervalSec = effectiveInterval(now),
+      cutoff = new Date(now - missedLimit * intervalSec * 1000).toISOString(),
 
       stale = db
         .prepare(

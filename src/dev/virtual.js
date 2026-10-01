@@ -173,7 +173,6 @@ function seedHistory(services, agentId, resourceIds){
 // services the Client API uses, so SSE and durations all work.
 function startVirtualClients(services, config){
   const { registry, jobs, logs, bus } = services,
-    intervalMs = config.heartbeat.intervalSec * 1000,
     clients = new Map(); // resourceId -> { def, activity, running }
 
   for (const def of VIRTUAL_CLIENTS){
@@ -232,9 +231,14 @@ function startVirtualClients(services, config){
         }
       }
     },
-    timer = setInterval(beat, intervalMs);
-  timer.unref?.();
-  beat();
+    // Like a real Client, follow heartbeat.intervalSec as it changes (§13.2).
+    tick = () => {
+      beat();
+      timer = setTimeout(tick, config.heartbeat.intervalSec * 1000);
+      timer.unref?.();
+    };
+  let timer = null;
+  tick();
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
     stillActive = (jobId) => ACTIVE_JOB_STATES.has(jobs.get(jobId)?.state);
@@ -287,7 +291,7 @@ function startVirtualClients(services, config){
 
   return {
     resourceIds: Object.fromEntries([...clients].map(([id, c]) => [c.def.type, id])),
-    stop: () => clearInterval(timer)
+    stop: () => clearTimeout(timer)
   };
 }
 

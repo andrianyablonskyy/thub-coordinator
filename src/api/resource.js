@@ -127,7 +127,9 @@ function createResourceRouter({ services, config }){
       if (req.resource.remove_requested_at && !activeJobId){
         services.jobs.completeRemoval(req.params.id, { by: 'removal-confirmed' });
       }
-      res.json({ serverTime: new Date().toISOString(), commands });
+      // The current interval in every reply, not only at registration, so a
+      // change from the dashboard (§13.2) reaches running Clients at once.
+      res.json({ serverTime: new Date().toISOString(), commands, heartbeatIntervalSec: config.heartbeat.intervalSec });
     }
     catch (err){
       next(err);

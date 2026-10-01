@@ -33,6 +33,7 @@ const { loadConfig } = require('../src/config'),
   { createJobsService } = require('../src/services/jobs'),
   { createCleanupService } = require('../src/services/cleanup'),
   { generateToken } = require('../src/services/tokens'),
+  { createSettingsService } = require('../src/services/settings'),
   { PACKAGES, fetchLatestVersion, isNewer, isValidVersion, npmBin, formatDateTime, parseDateTime } = require('@andrian.yablonskyy/thub-common'),
   { spawnSync } = require('node:child_process'),
   { version: installedVersion } = require('../package.json');
@@ -51,6 +52,11 @@ function usage(){
   thub-admin group add <name> [--comment <text>]
   thub-admin group list
   thub-admin group remove <groupId>
+  thub-admin settings list        Settings changed from the dashboard (Settings page)
+  thub-admin settings reset [<key>...]
+                                  Drop them (all, or the named ones) — back to the config
+                                  file's values at the next restart; the way back if a
+                                  setting locked you out of the dashboard
   thub-admin check-update         Compare this Coordinator with the latest published version
   thub-admin self-update [--to X.Y.Z]
                                   Update this Coordinator (sudo npm i -g; restarts the service)
@@ -135,6 +141,23 @@ function main(){
     adminUsers = createAdminUsersService(db),
     jobs = createJobsService(db, { bus, events, registry, config }),
     groups = createGroupsService(db, { events, registry });
+
+  if (cmd === 'settings' && (sub === 'list' || sub === 'reset')){
+    const settings = createSettingsService(db, { config });
+    if (sub === 'reset'){
+      const n = settings.reset(rest);
+      console.log(`Removed ${n} dashboard setting(s). Restart the Coordinator to use the config file's values: sudo systemctl restart thub-coordinator`);
+      return;
+    }
+    const changed = settings.list().filter((s) => s.source === 'dashboard');
+    if (!changed.length){
+      console.log('No settings changed from the dashboard — everything comes from the config file (or the environment).');
+    }
+    for (const s of changed){
+      console.log(`${s.key} = ${s.type === 'secret' ? '(secret)' : JSON.stringify(s.value)}   (${s.updatedBy || '?'}, ${s.updatedAt})`);
+    }
+    return;
+  }
 
   if (cmd === 'create-admin'){
     const { positional, flags } = parseFlags([sub, ...rest].filter(Boolean)),

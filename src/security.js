@@ -74,7 +74,6 @@ function originOf(url){
 // Agent/Client APIs use bearer tokens, which a browser never attaches by
 // itself, and don't go through here.
 function sameOriginOnly(config){
-  const configured = originOf(config.publicUrl);
   return (req, res, next) => {
     if (!UNSAFE_METHODS.has(req.method)){
       return next();
@@ -85,8 +84,10 @@ function sameOriginOnly(config){
       return next();
     }
     // The address the browser used (Host, as the reverse proxy passes it),
-    // or the configured publicUrl (a proxy that rewrites Host).
-    const allowed = [configured, `${req.protocol}://${req.get('host')}`];
+    // or the configured publicUrl (a proxy that rewrites Host) — read on
+    // every request, since the dashboard can change it (§13.2).
+    const configured = originOf(config.publicUrl),
+      allowed = [configured, `${req.protocol}://${req.get('host')}`];
     if (from && allowed.includes(from)){
       return next();
     }

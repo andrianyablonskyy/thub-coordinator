@@ -29,8 +29,10 @@ const fs = require('node:fs'),
   listPrefs = require('../services/list-prefs'),
   search = require('../services/search');
 
-// Job log viewer: lines per page it loads (and the most one request may ask for).
-const LOG_PAGE = 1000,
+// When this process started: the settings page tells a restart happened by it changing.
+const STARTED_AT = new Date().toISOString(),
+  // Job log viewer: lines per page it loads (and the most one request may ask for).
+  LOG_PAGE = 1000,
   LOG_PAGE_MAX = 5000,
 
   // Resources page sort keys (list-prefs.js) -> comparators. Empty values
@@ -988,6 +990,97 @@ function createWebRouter({ services, config }){
       ...extra
     });
   }
+
+  // Coordinator settings (services/settings.js, README §13.2): stored in
+  // the database over the config file. "Restart now" only under systemd,
+  // whose Restart=always brings the process back (INVOCATION_ID is set for
+  // every unit it starts); run by hand, exiting would just stop it.
+  const canRestart = Boolean(process.env.INVOCATION_ID);
+
+  router.get('/admin/settings', requireAdminRole, (req, res) => {
+    const items = services.settings.list(),
+      groups = [...new Set(items.map((s) => s.group))].map((name) => ({ name, items: items.filter((s) => s.group === name) }));
+    res.render('admin/settings', {
+      title: 'Settings',
+      active: 'settings',
+      groups,
+      pendingRestart: items.filter((s) => s.pendingRestart),
+      canRestart,
+      startedAt: STARTED_AT,
+      restarting: req.query.restarting || null,
+      readOnly: {
+        listen: config.listen,
+        dataDir: config.dataDir,
+        configPath: config.configPath || '(built-in defaults)'
+      }
+    });
+  });
+
+  router.post('/admin/settings', requireAdminRole, (req, res) => {
+    const posted = req.body.s || {},
+      changes = {},
+      reset = [].concat(req.body.reset || []);
+    for (const s of services.settings.SETTINGS){
+      if (s.type === 'secret'){
+        // Empty means "unchanged": the current secret is never put in the page.
+        if (req.body.clear?.[s.key] === '1'){
+          changes[s.key] = '';
+        }
+        else if (posted[s.key]){
+          changes[s.key] = posted[s.key];
+        }
+      }
+      else if (s.key in posted){
+        // A checkbox posts a hidden "false" and, when checked, "true" after it.
+        changes[s.key] = [].concat(posted[s.key]).at(-1);
+      }
+    }
+    try {
+      const result = services.settings.save({ changes, reset }, {
+        by: req.session.user.username,
+        // Don't let an admin lock everyone out: an HTTPS-only cookie
+        // can't come back over the plain-HTTP connection they're using.
+        guard: (after) => {
+          const secureCookie = after['session.secureCookie'],
+            httpsOnly = secureCookie === true || (secureCookie === 'auto' && /^https:\/\//i.test(after.publicUrl || ''));
+          return httpsOnly && !req.secure
+            ? 'Secure session cookie: you\'re connected over plain HTTP, so with this setting nobody could sign in this way ' +
+              'after the restart. Open the dashboard over https:// first (behind a proxy: it must send X-Forwarded-Proto: https), ' +
+              'or set it to false.'
+            : null;
+        }
+      });
+      if (!result.changed.length){
+        flash(req, 'info', 'Nothing changed.');
+      }
+      else {
+        const label = (k) => services.settings.SETTINGS.find((s) => s.key === k).label;
+        flash(req, result.restart.length ? 'warning' : 'success', [
+          result.now.length ? `Saved and applied: ${result.now.map(label).join(', ')}.` : '',
+          result.restart.length ? `Saved, applies after a restart: ${result.restart.map(label).join(', ')}.` : ''
+        ].filter(Boolean).join('\n'));
+      }
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect('/admin/settings');
+  });
+
+  router.post('/admin/settings/restart', requireAdminRole, (req, res) => {
+    if (!canRestart){
+      flash(req, 'danger', 'This Coordinator isn\'t running under systemd, so it can\'t restart itself — restart it by hand.');
+      return res.redirect('/admin/settings');
+    }
+    res.redirect(`/admin/settings?restarting=${encodeURIComponent(STARTED_AT)}`);
+    // After the redirect is out; systemd (Restart=always) starts it again.
+    res.on('finish', () => setTimeout(() => process.kill(process.pid, 'SIGTERM'), 500));
+  });
+
+  // Polled by the settings page while restarting (public/js/settings.js).
+  router.get('/admin/settings/status', requireAdminRole, (req, res) => {
+    res.set('Cache-Control', 'no-store').json({ startedAt: STARTED_AT });
+  });
 
   router.get('/admin/agents', requireAdminRole, (req, res) => renderAgents(req, res));
 

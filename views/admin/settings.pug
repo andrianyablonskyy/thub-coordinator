@@ -1,0 +1,133 @@
+extends ../layout
+
+//- One setting's input (services/settings.js SETTINGS: type text | number
+//- | checkbox | select | secret). Names: s[<key>]; reset[] / clear[<key>].
+mixin settingInput(s, locked)
+  - const id = `setting-${s.key.replace(/\./g, '-')}`
+  if s.type === 'checkbox'
+    .form-check.form-switch
+      input(type="hidden" name=`s[${s.key}]` value="false" disabled=locked)
+      input.form-check-input(id=id type="checkbox" name=`s[${s.key}]` value="true" checked=s.value === true disabled=locked)
+      label.form-check-label.visually-hidden(for=id)= s.label
+  else if s.type === 'select'
+    select.form-select.form-select-sm(id=id name=`s[${s.key}]` disabled=locked)
+      each o in s.options
+        option(value=o selected=String(s.value) === String(o))= s.labels && s.labels[o] ? `${o} — ${s.labels[o]}` : o
+  else if s.type === 'secret'
+    .input-group.input-group-sm
+      input.form-control(
+        id=id
+        type="password"
+        name=`s[${s.key}]`
+        autocomplete="new-password"
+        placeholder=s.value ? `set (…${String(s.value).slice(-4)}) — type to replace` : 'not set — registration is off'
+        disabled=locked
+        data-secret-input
+      )
+      button.btn.btn-outline-secondary(type="button" data-secret-generate=`#${id}` disabled=locked) Generate
+      button.btn.btn-outline-secondary(type="button" data-secret-show=`#${id}` disabled=locked aria-label="Show")
+        i.bi.bi-eye
+    if s.value && !locked
+      .form-check.mt-1
+        input.form-check-input(id=`${id}-clear` type="checkbox" name=`clear[${s.key}]` value="1")
+        label.form-check-label.small(for=`${id}-clear`) Clear it (turns self-registration off)
+  else
+    input.form-control.form-control-sm(
+      id=id
+      type=s.type === 'number' ? 'number' : 'text'
+      name=`s[${s.key}]`
+      value=s.value === null || s.value === undefined ? '' : String(s.value)
+      disabled=locked
+    )
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-2
+    h1.h4.mb-0 Settings
+  p.text-body-secondary.small.
+    Coordinator options, saved in its database on top of the config file (#[code= readOnly.configPath]).
+    An environment variable still wins over both. Options marked #[span.badge.text-bg-secondary after restart]
+    are read only at startup.
+
+  if restarting
+    .alert.alert-info.d-flex.align-items-center.gap-2(data-restarting=restarting role="status")
+      span.spinner-border.spinner-border-sm(aria-hidden="true")
+      span Restarting the Coordinator… this page reloads by itself once it's back.
+  else if pendingRestart.length
+    .alert.alert-warning.d-flex.flex-wrap.align-items-center.gap-2
+      i.bi.bi-arrow-clockwise
+      span.me-auto
+        | Saved but not active until a restart: #{pendingRestart.map((s) => s.label).join(', ')}.
+      if canRestart
+        form(
+          method="post"
+          action="/admin/settings/restart"
+          data-confirm="Restart the Coordinator now? The dashboard and API are unavailable for a few seconds; Clients and Agents reconnect by themselves and running jobs carry on."
+          data-confirm-title="Restart the Coordinator?"
+          data-confirm-ok="Restart now"
+          data-confirm-tone="warning"
+        )
+          button.btn.btn-sm.btn-warning(type="submit") Restart now
+      else
+        span.small Restart it by hand: #[code sudo systemctl restart thub-coordinator].
+
+  form(method="post" action="/admin/settings")
+    each group in groups
+      .card.mb-3
+        .card-header.fw-semibold= group.name
+        ul.list-group.list-group-flush
+          each s in group.items
+            - const locked = s.source === 'env'
+            li.list-group-item
+              .row.g-2.align-items-start
+                .col-md-4
+                  label.form-label.mb-0.fw-medium(for=`setting-${s.key.replace(/\./g, '-')}`)= s.label
+                  .small.text-body-secondary
+                    code.small= s.key
+                  .d-flex.flex-wrap.gap-1.mt-1
+                    if s.applies === 'now'
+                      span.badge.text-bg-success applies now
+                    else
+                      span.badge.text-bg-secondary after restart
+                    if s.pendingRestart
+                      span.badge.text-bg-warning restart pending
+                    if s.source === 'env'
+                      span.badge.text-bg-dark(data-bs-toggle="tooltip" data-bs-title=`Set by the environment variable ${s.env}; unset it to change this here`)= `from ${s.env}`
+                    else if s.source === 'dashboard'
+                      span.badge.text-bg-info(data-bs-toggle="tooltip" data-bs-title=`Changed ${fmtDate(s.updatedAt)}${s.updatedBy ? ` by ${s.updatedBy}` : ''}`) from dashboard
+                    else
+                      span.badge.text-bg-light.border config file / default
+                .col-md-5
+                  +settingInput(s, locked)
+                  .form-text= s.help
+                .col-md-3
+                  if s.source === 'dashboard'
+                    .form-check.small
+                      input.form-check-input(id=`reset-${s.key}` type="checkbox" name="reset" value=s.key)
+                      label.form-check-label(for=`reset-${s.key}`)
+                        | Back to the config file's value
+                        if s.type !== 'secret'
+                          |  (
+                          code= s.fileValue === null || s.fileValue === undefined ? 'unset' : String(s.fileValue)
+                          | )
+    .d-flex.justify-content-end.gap-2.mb-4
+      a.btn.btn-outline-secondary(href="/admin/settings") Discard changes
+      button.btn.btn-primary(type="submit") Save settings
+
+  .card.mb-4
+    .card-header.fw-semibold Config file only
+    .card-body.small
+      p.text-body-secondary.
+        These change the address, storage or session signing the dashboard itself runs on, so they're set in the
+        config file (then #[code sudo systemctl restart thub-coordinator]).
+      dl.row.mb-0
+        dt.col-sm-3 listen
+        dd.col-sm-9: code= readOnly.listen
+        dt.col-sm-3 dataDir
+        dd.col-sm-9: code= readOnly.dataDir
+        dt.col-sm-3 sessionSecret
+        dd.col-sm-9 set (never shown)
+      p.small.text-body-secondary.mt-3.mb-0
+        | Locked out by a setting? On the Coordinator host: #[code thub-admin settings reset], then restart it.
+
+block scripts
+  script(src="/js/settings.js")

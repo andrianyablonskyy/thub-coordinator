@@ -60,7 +60,7 @@
           td The shared secret Clients self-register with. Unset or #[code null] turns registration off (#[code 503]).
         tr
           td: code heartbeat.*
-          td Clients heartbeat every #[code intervalSec]. After #[code missedLimit] misses a resource goes #[code OUT_OF_SERVICE] and its job becomes #[code LOST].
+          td Clients heartbeat every #[code intervalSec] — the Coordinator tells them, so it's set here only (and on Settings). After #[code missedLimit] misses a resource goes #[code OUT_OF_SERVICE] and its job becomes #[code LOST]; #[code sweepIntervalSec] is how often that's checked.
         tr
           td: code scheduler.*
           td #[code assignAckTimeoutSec]: how long an assignment waits for the Client to accept. #[code requeueOnLost]: retry a #[code LOST] job once. #[code maxQueuedPerAgent]: queue limit per agent.
@@ -73,6 +73,10 @@
         tr
           td: code updates.*
           td How often to check npm for new versions (#[code 0] turns the periodic check off), and an optional private registry.
+  +note('info').
+    Most of these can also be changed by admins on the dashboard's #[a(href="/admin/settings") Settings] page — stored in the
+    database on top of this file; some apply at once, the rest after a restart (#[strong Restart now] under systemd). An environment
+    variable still wins. Locked out by a setting? #[code thub-admin settings reset] on the Coordinator host, then restart.
   p.small.
     Resolution order: #[code THUB_COORDINATOR_CONFIG] (a path) → #[code ~/.config/thub/coordinator.json] → the bundled
     default. These environment variables override the file: #[code THUB_LISTEN], #[code THUB_PUBLIC_URL],

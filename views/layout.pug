@@ -43,6 +43,8 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
               if user.role === 'admin'
                 li.nav-item
                   a.nav-link(href="/admin/agents" class=active === 'agents' ? 'active' : '') Agents
+                li.nav-item
+                  a.nav-link(href="/admin/settings" class=active === 'settings' ? 'active' : '') Settings
           ul.navbar-nav
             if user && liveTopics
               //- Live-update status, driven by public/js/live.js.

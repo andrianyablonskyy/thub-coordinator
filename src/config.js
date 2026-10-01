@@ -106,7 +106,9 @@ function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
       (p) => p && fs.existsSync(p)
     ),
     fileConfig = candidate ? JSON.parse(fs.readFileSync(candidate, 'utf8')) || {} : {},
-    config = deepMerge(DEFAULTS, fileConfig);
+    // A copy: the dashboard's settings change the loaded config in place
+    // (services/settings.js), which must never reach DEFAULTS itself.
+    config = deepMerge(structuredClone(DEFAULTS), fileConfig);
 
   // Environment overrides for the bits you don't want in a committed file.
   if (process.env.THUB_LISTEN){
