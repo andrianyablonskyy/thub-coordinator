@@ -13,6 +13,8 @@
     #[code ~/.config/thub/coordinator.json] (with a random #[code sessionSecret]) and
     #[code ~/var/lib/thub] (database, avatars). It installs, enables and starts
     #[code thub-coordinator.service], plus the root helper behind the navbar's #[strong Update app] button.
+    The unit uses #[code ProtectSystem=strict] with #[code PrivateTmp=yes], so the data directory and a
+    private #[code /tmp] (SQLite's temp files) are the only places the service can write.
 
   h3.h6 2. Configure
   p.small.
@@ -123,6 +125,9 @@
     thub-admin resource maintenance &lt;resourceId> --on
     thub-admin jobs reset --yes                             # cancel every active job
     thub-admin jobs clean --yes --before "01/09/2026 00:00:00"
+  p.small.
+    On #[a(href="/admin/users") Users] (admins), click a name to edit that user. The quick filter is
+    #[strong All | Admin | Maintainer | User | Blocked]. The search box also matches usernames and emails.
   +note('warning').
     Forgot the admin password? Start the Coordinator once with #[code THUB_BOOTSTRAP_ADMIN_PASSWORD=…]
     (and optionally #[code THUB_BOOTSTRAP_ADMIN_USER], default #[code admin]). The password is reset on

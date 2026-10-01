@@ -103,7 +103,10 @@
   p.small.
     SW Clients have no settings of their own: they run whatever DUT image a job brings (#[code --docker-image]).
     Admins can also edit an HW Client's devices from its resource card (#[strong ST-Link | UART | DUT USB]
-    tabs). #[strong Connected USB devices → Import to config] fills them from the host's #[code lsusb].
+    tabs). The tabs show the config the Client runs, as it reported it at its last start, or a saved
+    change it hasn't applied yet. #[strong Connected USB devices → Import to config] fills them from the host's #[code lsusb].
+    There's no ST-Link serial field: the job's #[code --command] picks the probe
+    (#[code $THUB_DUT_STLINK_&lt;n&gt;]), and the Client reads each serial from its udev symlink.
 
   h3.h6 Several DUT slots on one machine
   +code('One instance per slot').

@@ -14,7 +14,7 @@ This gives you two global commands: `thub-coordinator` (the server itself) and `
 
 - `~/.config/thub/coordinator.json` with every default option (see Configuration below), if it doesn't exist yet.
 - `~/var/lib/thub` (the `dataDir`: SQLite DB, uploaded artifacts, avatars) with its `artifacts/`, `avatars/` and `work/` subdirectories.
-- On Linux as root: `/etc/systemd/system/thub-coordinator.service`, enabled and started, so the Coordinator runs now and on every boot. A re-install/upgrade restarts it on the new code.
+- On Linux as root: `/etc/systemd/system/thub-coordinator.service` (`ProtectSystem=strict` with a private writable `/tmp`, which SQLite needs), enabled and started, so the Coordinator runs now and on every boot. A re-install/upgrade restarts it on the new code.
 
 Under `sudo`, `~` means the home of the user who ran `sudo` (`SUDO_USER`), not `/root`. That user owns the config and data and the service runs as them. Without root the config and directories are still created; the systemd step is skipped.
 
