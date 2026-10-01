@@ -1,5 +1,6 @@
 extends ../layout
 include ../mixins/updates
+include ../mixins/group-select
 include ../mixins/list-controls
 
 block content
@@ -9,7 +10,7 @@ block content
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
     +updatesToolbar('agent', 'agents', list.pageUrl())
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
-    +searchForm(q, 'Search agents: name, kind, version, status', list.urlFor({ q: '' }))
+    +searchForm(q, 'Search agents: name, kind, group, version, status', list.urlFor({ q: '' }))
     .ms-auto
       +pageSizePicker(list)
 
@@ -27,6 +28,7 @@ block content
       tr
         +sortHeader(list, 'name', 'Name')
         +sortHeader(list, 'kind', 'Kind')
+        +sortHeader(list, 'group', 'Group')
         +sortHeader(list, 'version', 'Version', 'desc')
         +sortHeader(list, 'created', 'Created', 'desc')
         +sortHeader(list, 'used', 'Last used', 'desc')
@@ -37,6 +39,11 @@ block content
         tr(class=a.revoked_at ? 'opacity-50' : '')
           td= a.name
           td.text-uppercase= a.kind
+          td
+            if a.group_id && groupsById[a.group_id]
+              span.badge.text-bg-info= groupsById[a.group_id].name
+            else
+              span.text-body-secondary any
           //- A revoked token can't pick an update up: no button.
           td: +versionWithUpdate(a.version, updates.latest.agent, a.update_to, `/admin/agents/${a.id}/update`, list.pageUrl(), !a.revoked_at)
           td= fmtDate(a.created_at)
@@ -73,12 +80,14 @@ block content
                       label.form-label(for=`agentName-${a.id}`) Name
                       input.form-control(id=`agentName-${a.id}` type="text" name="name" value=a.name required maxlength="100")
                       .form-text Only a label — the agent's token, and everything using it, keep working.
+                      label.form-label.mt-3(for=`agentGroup-${a.id}`) Group
+                      +groupSelect(`agentGroup-${a.id}`, a.group_id, groups)
                     .modal-footer
                       button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
                       button.btn.btn-primary(type="submit") Save
       else
         tr
-          td.text-body-secondary(colspan="7")
+          td.text-body-secondary(colspan="8")
             if q
               | No agent matches “#{q}”. 
               a(href=list.urlFor({ q: '' })) Show all agents
@@ -96,6 +105,9 @@ block content
             .mb-3
               label.form-label Name
               input.form-control(type="text" name="name" placeholder="ci-firmware" required)
+            .mb-3
+              label.form-label(for="newAgentGroup") Group
+              +groupSelect('newAgentGroup', null, groups)
             .mb-3
               p.small.text-body-secondary.mb-0.
                 For a pipeline: its jobs get A- ids and it can read every job. People use their own access key

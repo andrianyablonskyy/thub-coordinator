@@ -15,9 +15,10 @@
 
 const { v4: uuid } = require('uuid');
 
-// Admin-managed resource groups (README §13.1) — a job can be constrained
-// to run only on resources that are members of a given group
-// (`thub run --group <id>`, job-spec.schema.js's `target.group`).
+// Admin-managed resource groups (README §13.1). An agent — a user, or a CI
+// token — may be given one on the dashboard; its jobs then run only on
+// resources that are members of it (job-spec.schema.js's `target.group`,
+// filled in by jobs.create — never taken from the Agent).
 // Membership itself lives on the resource (registry.js's `group_ids`,
 // declared by the Client's own config), not here — this service only
 // owns the groups' own identity (id/name/comment).
@@ -69,6 +70,9 @@ function createGroupsService(db, { events, registry }){
         registry.setGroups(resource.id, resource.group_ids.filter((g) => g !== id));
       }
     }
+    // Agents in it go back to running anywhere.
+    db.prepare('UPDATE users SET group_id = NULL WHERE group_id = ?').run(id);
+    db.prepare('UPDATE agents SET group_id = NULL WHERE group_id = ?').run(id);
     db.prepare('DELETE FROM groups WHERE id = ?').run(id);
     events.record('group', id, 'group.deleted', { name: group.name });
   }

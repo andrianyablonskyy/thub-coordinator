@@ -121,7 +121,7 @@
     thub-admin user list | block | unblock | role | password | key | delete …
     thub-admin join-key generate                            # → clientJoinKey here, joinKey on every Client
     thub-admin agent add ci-firmware                        # CI token for a pipeline: job ids A-00001…
-    thub-admin group add ci-nightly --comment "nightly pool" # → a group id for thub run --group
+    thub-admin group add ci-nightly --comment "nightly pool" # then give it to users / CI tokens on the dashboard
     thub-admin resource maintenance &lt;resourceId> --on
     thub-admin jobs reset --yes                             # cancel every active job
     thub-admin jobs clean --yes --before "01/09/2026 00:00:00"

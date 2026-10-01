@@ -955,6 +955,7 @@ function createWebRouter({ services, config }){
       active: 'jobs',
       job,
       pinnedClient: job.spec.target.client ? services.registry.get(job.spec.target.client) : null,
+      targetGroup: job.spec.target.group ? services.groups.get(job.spec.target.group) : null,
       waitingReason: job.state === JOB_STATES.QUEUED
         ? services.registry.waitingReason(job.spec.target.type, job.spec.target.labels || [], job.spec.target.group,
           job.spec.target.client)
@@ -1033,10 +1034,19 @@ function createWebRouter({ services, config }){
     const q = search.normalizeQuery(req.query.q),
       terms = search.parseTerms(q),
       resources = services.registry.list(),
+      // Who runs their jobs in each group: users, and CI tokens still in use.
+      agentsIn = [
+        ...services.adminUsers.list().map((u) => ({ name: u.username, groupId: u.groupId })),
+        ...services.agents.list().filter((a) => !a.user_id && !a.revoked_at).map((a) => ({ name: a.name, groupId: a.group_id }))
+      ],
       all = services.groups.list(),
       groups = all
-        .filter((g) => search.matches([g.id, g.name, g.comment], terms))
-        .map((g) => ({ ...g, resourceCount: resources.filter((r) => r.group_ids.includes(g.id)).length }));
+        .filter((g) => search.matches([g.name, g.comment], terms))
+        .map((g) => ({
+          ...g,
+          resourceCount: resources.filter((r) => r.group_ids.includes(g.id)).length,
+          agentNames: agentsIn.filter((a) => a.groupId === g.id).map((a) => a.name)
+        }));
     res.render('groups/list', {
       title: 'Groups',
       active: 'groups',
@@ -1070,11 +1080,13 @@ function createWebRouter({ services, config }){
       terms = search.parseTerms(q),
       view = listView(req, res, 'agents', { q }),
       { sort, dir, size } = view.prefs,
-      value = AGENT_SORT_VALUE[sort],
+      groupsById = Object.fromEntries(services.groups.list().map((g) => [g.id, g])),
+      groupName = (a) => groupsById[a.group_id]?.name || null,
+      value = sort === 'group' ? groupName : AGENT_SORT_VALUE[sort],
       // CI tokens only: a person's key belongs to their user (Users, §10.3).
       sorted = services.agents.list()
         .filter((a) => !a.user_id)
-        .filter((a) => search.matches([a.id, a.name, a.kind, a.version, a.revoked_at ? 'revoked' : 'active'], terms))
+        .filter((a) => search.matches([a.name, a.kind, a.version, groupName(a), a.revoked_at ? 'revoked' : 'active'], terms))
         .sort((a, b) => {
           const va = value(a),
             vb = value(b);
@@ -1090,6 +1102,8 @@ function createWebRouter({ services, config }){
       active: 'agents',
       liveTopics: 'agents',
       agents: sorted.slice(pagination.offset, pagination.offset + pagination.limit),
+      groups: services.groups.list(),
+      groupsById,
       q,
       list: { ...view, pagination, pageUrl, q },
       ...extra
@@ -1200,6 +1214,7 @@ function createWebRouter({ services, config }){
       username: (u) => userDisplayName(u).toLowerCase(),
       role: (u) => ROLE_ORDER[u.role],
       status: (u) => (u.blocked ? 1 : 0),
+      group: (u) => (u.groupId ? services.groups.get(u.groupId)?.name.toLowerCase() : null) || null,
       used: (u) => u.key?.lastUsedAt || null
     },
     // Who manages whom on Users (§10.3): an admin everyone; a maintainer
@@ -1210,7 +1225,7 @@ function createWebRouter({ services, config }){
     managesUser = (actor, u) => Boolean(u) && (isAdmin(actor) || u.role === 'user' || u.id === actor.id),
     userFiltersFor = (actor) => (isAdmin(actor) ? USER_ROLE_FILTERS : ['user', 'blocked']),
     // The audit log's Action column names changed fields like this.
-    FIELD_LABEL = { username: 'username', email: 'email', role: 'role', first_name: 'first name', last_name: 'last name' };
+    FIELD_LABEL = { username: 'username', email: 'email', role: 'role', first_name: 'first name', last_name: 'last name', group_id: 'group' };
 
   // The audit log's Action column: what was done, to whom. `nameOf` gives
   // the account's current username (else the one its events recorded).
@@ -1283,7 +1298,8 @@ function createWebRouter({ services, config }){
       visible = services.adminUsers.list().filter((u) => managesUser(me, u)),
       visibleIds = new Set(visible.map((u) => u.id)),
       searched = visible
-        .filter((u) => search.matches([u.username, u.email, u.firstName, u.lastName, u.role, u.blocked ? 'blocked' : 'active'], terms)),
+        .filter((u) => search.matches([u.username, u.email, u.firstName, u.lastName, u.role, services.groups.get(u.groupId)?.name,
+          u.blocked ? 'blocked' : 'active'], terms)),
       // Counts for the filter buttons: within the search, before the role filter.
       roleCounts = Object.fromEntries(filters.map((r) => [r, searched.filter((u) => (r === 'blocked' ? u.blocked : u.role === r)).length])),
       sorted = searched
@@ -1314,6 +1330,8 @@ function createWebRouter({ services, config }){
       me,
       // The roles this admin or maintainer may give.
       roles: isAdmin(me) ? services.adminUsers.ROLES : ['user'],
+      groups: services.groups.list(),
+      groupsById: Object.fromEntries(services.groups.list().map((g) => [g.id, g])),
       roleHelp: {
         user: 'Agent only: submits jobs, reads their own results; no dashboard',
         maintainer: 'Agent + the dashboard without Settings; manages Agent-only users and CI tokens; sees and cancels every job',
@@ -1359,12 +1377,12 @@ function createWebRouter({ services, config }){
   router.get('/admin/users', (req, res) => renderUsers(req, res));
 
   router.post('/admin/users', userAction((req, ctx) => {
-    const { username, email, role, firstName, lastName } = req.body;
+    const { username, email, role, firstName, lastName, groupId } = req.body;
     if (!isAdmin(ctx.actor) && normalizeRole(role) !== 'user'){
       throw new Error('Only an admin can create a maintainer or an admin.');
     }
     const
-      created = services.adminUsers.create({ username, email, role, firstName, lastName, requireEmail: true }, ctx),
+      created = services.adminUsers.create({ username, email, role, firstName, lastName, groupId, requireEmail: true }, ctx),
       key = req.body.issueKey === '1' ? services.adminUsers.issueKey(created.id, ctx) : null;
     if (!key && !created.tempPassword){
       return { message: `User ${created.username} created.` };
@@ -1373,12 +1391,12 @@ function createWebRouter({ services, config }){
   }));
 
   router.post('/admin/users/:id', userAction((req, ctx) => {
-    const { username, email, role, firstName, lastName } = req.body;
+    const { username, email, role, firstName, lastName, groupId } = req.body;
     if (!isAdmin(ctx.actor) && role !== undefined && normalizeRole(role) !== services.adminUsers.getById(req.params.id).role){
       throw new Error('Only an admin can change a role.');
     }
     const
-      { user, tempPassword } = services.adminUsers.update(req.params.id, { username, email, role, firstName, lastName }, ctx);
+      { user, tempPassword } = services.adminUsers.update(req.params.id, { username, email, role, firstName, lastName, groupId }, ctx);
     return tempPassword
       ? { secret: { title: `${user.username} can now use the dashboard`, password: tempPassword, username: user.username } }
       : { message: `Saved ${user.username}.` };
@@ -1430,16 +1448,28 @@ function createWebRouter({ services, config }){
 
   router.post('/admin/agents', (req, res) => {
     // CI tokens only; people get their key from their user (§10.3).
-    const { token } = services.agents.create({ name: req.body.name, kind: 'ci' });
-    renderAgents(req, res, { newToken: token });
+    try {
+      const { agent, token } = services.agents.create({ name: req.body.name, kind: 'ci' });
+      services.agents.setGroup(agent.id, req.body.groupId);
+      renderAgents(req, res, { newToken: token });
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+      res.redirect('/admin/agents');
+    }
   });
 
   router.post('/admin/agents/:id/rename', (req, res) => {
     try {
-      const before = services.agents.get(req.params.id)?.name,
+      const before = services.agents.get(req.params.id),
         agent = services.agents.rename(req.params.id, req.body.name);
-      if (before !== agent.name){
-        flash(req, 'success', `Renamed agent "${before}" to "${agent.name}".`);
+      if (before.name !== agent.name){
+        flash(req, 'success', `Renamed agent "${before.name}" to "${agent.name}".`);
+      }
+      if (req.body.groupId !== undefined && (req.body.groupId || null) !== (before.group_id || null)){
+        const group = req.body.groupId ? services.groups.get(req.body.groupId) : null;
+        services.agents.setGroup(req.params.id, req.body.groupId);
+        flash(req, 'success', group ? `"${agent.name}" now runs its jobs in group ${group.name}.` : `"${agent.name}" now runs its jobs on any resource.`);
       }
     }
     catch (err){

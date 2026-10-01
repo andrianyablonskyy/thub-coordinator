@@ -25,6 +25,7 @@ const test = require('node:test'),
   { createRegistryService } = require('../src/services/registry'),
   { createAgentsService } = require('../src/services/agents'),
   { createGroupsService } = require('../src/services/groups'),
+  { createAdminUsersService } = require('../src/services/admin-users'),
   { createJobsService } = require('../src/services/jobs'),
   { createLogsService } = require('../src/services/logs'),
   { createScheduler } = require('../src/services/scheduler'),
@@ -334,43 +335,52 @@ test('a legacy resource with no clientId (pre-dates the feature) is adopted by n
   assert.equal(registry.list().length, 1);
 });
 
-test('a job with target.group only schedules onto resources that are members of that group', () => {
-  const { registry, agents, groups, jobs, scheduler } = buildTestServices(),
+test('an agent given a group (dashboard) runs its jobs only on that group\'s resources; whatever the Agent sends is replaced', () => {
+  const { db, registry, agents, groups, jobs, scheduler } = buildTestServices(),
+    users = createAdminUsersService(db, {}),
     { agent } = agents.create({ name: 'ci', kind: 'ci' }),
     groupA = groups.create({ name: 'group-a' }),
     groupB = groups.create({ name: 'group-b' }),
-
     inGroupA = registerResource(registry, { name: 'lab-a', type: 'sw', groups: [groupA.id] }),
     inGroupB = registerResource(registry, { name: 'lab-b', type: 'sw', groups: [groupB.id] });
   registry.heartbeat(inGroupA.id, { state: 'idle' });
   registry.heartbeat(inGroupB.id, { state: 'idle' });
 
-  const job = jobs.create({
-    agentId: agent.id,
-    source: 'cli',
-    spec: makeSpec({ target: { type: 'sw', labels: [], group: groupA.id } })
-  });
+  // A CI token in group B, whose (older) Agent still asks for group A.
+  agents.setGroup(agent.id, groupB.id);
+  const job = jobs.create({ agentId: agent.id, source: 'ci', spec: makeSpec({ target: { type: 'sw', labels: [], group: groupA.id } }) });
+  assert.equal(jobs.get(job.id).spec.target.group, groupB.id);
   scheduler.runPass();
+  assert.equal(jobs.get(job.id).resource_id, inGroupB.id);
 
-  const assigned = jobs.get(job.id);
-  assert.equal(assigned.state, JOB_STATES.ASSIGNED);
-  assert.equal(assigned.resource_id, inGroupA.id); // not inGroupB, despite being IDLE and type-matching
+  // A user's group follows their key (kept across rotations); none = any resource.
+  const dev = users.create({ username: 'dev', email: 'd@example.com', role: 'user', groupId: groupA.id }, { by: 't' });
+  users.issueKey(dev.id, { by: 't' });
+  const devAgent = agents.list().find((a) => a.user_id === dev.id),
+    devJob = jobs.create({ agentId: devAgent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', labels: [] } }) });
+  assert.equal(jobs.get(devJob.id).spec.target.group, groupA.id);
+  users.issueKey(dev.id, { by: 't' }); // rotated
+  const rotatedJob = jobs.create({ agentId: devAgent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', labels: [] } }) });
+  assert.equal(jobs.get(rotatedJob.id).spec.target.group, groupA.id);
+  users.update(dev.id, { groupId: '' }, { by: 't' });
+  const anyJob = jobs.create({ agentId: devAgent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', labels: [] } }) });
+  assert.equal(jobs.get(anyJob.id).spec.target.group, undefined);
+
+  // Deleting a group sends its agents back to any resource.
+  groups.remove(groupB.id);
+  assert.equal(agents.get(agent.id).group_id, null);
+  assert.throws(() => agents.setGroup(agent.id, 'no-such-group'), /Unknown group/);
 });
 
-test('a job with target.group is rejected (422) when no resource is ever a member of that group', () => {
+test('a job is rejected (422) when no resource is ever a member of its agent\'s group — named, not by id', () => {
   const { registry, agents, groups, jobs } = buildTestServices(),
     { agent } = agents.create({ name: 'ci', kind: 'ci' }),
     group = groups.create({ name: 'empty-group' });
   registerResource(registry, { name: 'lab-01', type: 'sw', groups: [] }); // exists, but not a member
-
+  agents.setGroup(agent.id, group.id);
   assert.throws(
-    () =>
-      jobs.create({
-        agentId: agent.id,
-        source: 'cli',
-        spec: makeSpec({ target: { type: 'sw', labels: [], group: group.id } })
-      }),
-    /No registered resource/
+    () => jobs.create({ agentId: agent.id, source: 'cli', spec: makeSpec({ target: { type: 'sw', labels: [] } }) }),
+    /No registered resource can ever satisfy type=sw labels= group=empty-group \(this agent's group, set on the dashboard\)/
   );
 });
 

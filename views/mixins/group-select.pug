@@ -1,0 +1,9 @@
+//- The resource group an agent's jobs run in (§13.1) — a user's on Users, a
+//- CI token's on CI tokens. Only here, on the dashboard: `thub run` has no
+//- --group. Groups by name; none = any resource.
+mixin groupSelect(id, selected, groups)
+  select.form-select(id=id name="groupId")
+    option(value="" selected=!selected) Any resource (no group)
+    each g in groups
+      option(value=g.id selected=g.id === selected)= g.name
+  .form-text Its jobs run only on resources in this group. Manage groups on #[a(href="/groups") Groups].

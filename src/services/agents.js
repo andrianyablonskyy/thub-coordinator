@@ -29,7 +29,8 @@ function createAgentsService(db, { events }){
   }
 
   function list(){
-    return db.prepare('SELECT id, name, kind, user_id, version, update_to, created_at, last_used_at, revoked_at FROM agents ORDER BY created_at DESC').all();
+    return db.prepare('SELECT id, name, kind, user_id, group_id, version, update_to, created_at, last_used_at, revoked_at FROM agents ORDER BY created_at DESC')
+      .all();
   }
 
   function create({ name, kind }){
@@ -56,6 +57,24 @@ function createAgentsService(db, { events }){
     if (trimmed !== agent.name){
       db.prepare('UPDATE agents SET name = ? WHERE id = ?').run(trimmed, id);
       events.record('agent', id, 'agent.renamed', { from: agent.name, to: trimmed });
+    }
+    return get(id);
+  }
+
+  // The resource group a CI token's jobs run in (§13.1), set on CI tokens:
+  // an existing group's id, or null for any resource.
+  function setGroup(id, groupId){
+    const agent = get(id);
+    if (!agent){
+      throw Object.assign(new Error('Unknown agent'), { status: 404 });
+    }
+    const group = groupId || null;
+    if (group && !db.prepare('SELECT 1 FROM groups WHERE id = ?').get(group)){
+      throw Object.assign(new Error('Unknown group'), { status: 400 });
+    }
+    if (group !== (agent.group_id || null)){
+      db.prepare('UPDATE agents SET group_id = ? WHERE id = ?').run(group, id);
+      events.record('agent', id, 'agent.group_set', { from: agent.group_id || null, to: group });
     }
     return get(id);
   }
@@ -97,7 +116,7 @@ function createAgentsService(db, { events }){
     return ids.length;
   }
 
-  return { get, getByTokenHash, list, create, rename, revoke, touchLastUsed, setUpdateTo, requestUpdateAll };
+  return { get, getByTokenHash, list, create, rename, setGroup, revoke, touchLastUsed, setUpdateTo, requestUpdateAll };
 }
 
 module.exports = { createAgentsService };

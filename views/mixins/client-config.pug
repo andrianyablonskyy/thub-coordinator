@@ -145,16 +145,11 @@ mixin groupsPane(r, returnTo, groupsById)
                   span.fw-medium= g.name
                   if g.comment
                     span.small.text-body-secondary= ` — ${g.comment}`
-                  br
-                  code.small.text-body-secondary= g.id
             each id in unknown
               label.list-group-item.d-flex.gap-2.align-items-start
                 input.form-check-input.flex-shrink-0.mt-1(type="checkbox" name="groups" value=id checked)
-                span
-                  span.text-body-secondary (deleted group)
-                  br
-                  code.small.text-body-secondary= id
-          .form-text A job run with #[code thub run --group &lt;id&gt;] is scheduled only on Clients in that group; one that asks for no group can run on any Client.
+                span.text-body-secondary (a deleted group)
+          .form-text An agent given a group (on Users or CI tokens) runs its jobs only on Clients in it; an agent without one, on any Client.
           if canEdit && r.config_support === 'file'
             .d-flex.justify-content-end.mt-3
               button.btn.btn-sm.btn-primary(type="submit" data-bs-toggle="tooltip" data-bs-title="Save the groups — in effect at once; the Client writes them to its config file") Save groups

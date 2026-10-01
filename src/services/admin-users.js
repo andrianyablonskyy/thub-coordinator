@@ -101,6 +101,7 @@ function toProfile(row){
     theme: row.theme,
     sessionTimeoutMin: row.session_timeout_min,
     listPrefs: parseListPrefs(row.list_prefs),
+    groupId: row.group_id || null,
     blocked: Boolean(row.blocked_at),
     blockedAt: row.blocked_at || null,
     mustChangePassword: Boolean(row.must_change_password),
@@ -211,17 +212,30 @@ function createAdminUsersService(db, { events } = {}){
   // callers may leave it out — the Users page flags a missing one.
   // A dashboard role without a password gets a temporary one, returned
   // once, to be changed at the first sign-in.
-  function create({ username, email, role, password, firstName, lastName, requireEmail = false }, { by } = {}){
+  // The resource group a user's jobs run in (§13.1): an existing group's id,
+  // or null for any resource.
+  function checkGroup(groupId){
+    if (!groupId){
+      return null;
+    }
+    if (!db.prepare('SELECT 1 FROM groups WHERE id = ?').get(groupId)){
+      throw bad('Unknown group');
+    }
+    return groupId;
+  }
+
+  function create({ username, email, role, password, firstName, lastName, groupId, requireEmail = false }, { by } = {}){
     const id = `usr_${uuid()}`,
+      group = checkGroup(groupId),
       name = checkUsername(username),
       r = normalizeRole(role),
       mail = email || requireEmail ? checkEmail(email) : '',
       temp = !password && DASHBOARD_ROLES.includes(r) ? tempPassword() : null,
       pw = password || temp;
     db.prepare(
-      `INSERT INTO users (id, username, email, password_hash, role, first_name, last_name, must_change_password, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, name, mail, pw ? hashPassword(pw) : null, r, firstName || null, lastName || null, temp ? 1 : 0, new Date().toISOString());
+      `INSERT INTO users (id, username, email, password_hash, role, first_name, last_name, must_change_password, group_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, name, mail, pw ? hashPassword(pw) : null, r, firstName || null, lastName || null, temp ? 1 : 0, group, new Date().toISOString());
     audit(id, 'user.created', { by, username: name, role: r });
     return { id, username: name, role: r, tempPassword: temp };
   }
@@ -292,14 +306,15 @@ function createAdminUsersService(db, { events } = {}){
       email: fields.email !== undefined ? checkEmail(fields.email, id) : target.email,
       role: fields.role !== undefined ? normalizeRole(fields.role) : target.role,
       first_name: fields.firstName !== undefined ? fields.firstName || null : target.first_name,
-      last_name: fields.lastName !== undefined ? fields.lastName || null : target.last_name
+      last_name: fields.lastName !== undefined ? fields.lastName || null : target.last_name,
+      group_id: fields.groupId !== undefined ? checkGroup(fields.groupId) : target.group_id
     };
     guardAdmins(target, { actorId, losesAdmin: next.role !== 'admin' });
     // Promoted to the dashboard without a password: a temporary one.
     const temp = DASHBOARD_ROLES.includes(next.role) && !target.password_hash ? tempPassword() : null;
     db.transaction(() => {
-      db.prepare('UPDATE users SET username = ?, email = ?, role = ?, first_name = ?, last_name = ? WHERE id = ?')
-        .run(next.username, next.email, next.role, next.first_name, next.last_name, id);
+      db.prepare('UPDATE users SET username = ?, email = ?, role = ?, first_name = ?, last_name = ?, group_id = ? WHERE id = ?')
+        .run(next.username, next.email, next.role, next.first_name, next.last_name, next.group_id, id);
       if (temp){
         db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(hashPassword(temp), id);
       }

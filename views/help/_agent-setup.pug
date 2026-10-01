@@ -43,9 +43,9 @@
     thub config set url   #{coordinatorUrl}
     thub config set key   thk_…
     thub config set user  "Your Name"      # optional: job owner label
-    thub config set group &lt;groupId>       # optional: default --group
   p.small.
-    These are saved in #[code ~/.config/thub/agent.json]. Order of precedence: flags (#[code --url], #[code --key]) →
+    These are saved in #[code ~/.config/thub/agent.json]. Which resource group your jobs run in isn't an Agent
+    setting: an admin or maintainer sets it for your user on the dashboard (#[code thub whoami] shows it). Order of precedence: flags (#[code --url], #[code --key]) →
     environment → config file.
   table.table.table-sm.small
     thead
@@ -59,9 +59,6 @@
       tr
         td: code THUB_KEY
         td Your access key, or a CI token in a pipeline. Keep it in your CI's secret store. (#[code THUB_TOKEN], #[code --token] and a saved #[code token] still work: the old names.)
-      tr
-        td: code THUB_GROUP
-        td Default #[code --group]
       tr
         td: code THUB_USER
         td Default #[code --user]

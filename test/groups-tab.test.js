@@ -205,3 +205,41 @@ test('resource card CSS: stacked tabs let only the visible one take the mouse (e
   assert.match(off, /^[^{]*> form > fieldset,[^{]*\.tab-pane \{\s*pointer-events: none;/);
   assert.match(css, /\.thub-resource-card \.tab-content \.tab-pane\.active \{[^}]*pointer-events: auto;/);
 });
+
+test('agent groups are set on the dashboard (Users, CI tokens) and shown by name — never a group id', async (t) => {
+  const { base, services, admin, viewer } = await start(t),
+    g = services.groups.create({ name: 'nightly-pool', comment: 'night runs' }),
+    form = (cookie, p, body) => fetch(`${base}${p}`, { method: 'POST', headers: { cookie }, body: new URLSearchParams(body), redirect: 'manual' }),
+    page = async (cookie, p) => (await fetch(`${base}${p}`, { headers: { cookie } })).text();
+  services.registry.registerAuto({ clientId: 'sw9', name: 'lab-sw-09', type: 'sw', labels: [], groups: [g.id] });
+
+  // A maintainer puts an Agent-only user in the group, an admin a CI token.
+  await form(viewer, '/admin/users', { username: 'dev', email: 'd@example.com', role: 'user', groupId: g.id });
+  const dev = services.adminUsers.getByUsername('dev');
+  assert.equal(services.adminUsers.getById(dev.id).groupId, g.id);
+  await form(admin, '/admin/agents', { name: 'ci-night', groupId: g.id });
+  const ci = services.agents.list().find((a) => a.name === 'ci-night');
+  assert.equal(ci.group_id, g.id);
+  await form(admin, `/admin/agents/${ci.id}/rename`, { name: 'ci-night', groupId: '' });
+  assert.equal(services.agents.get(ci.id).group_id, null);
+  await form(admin, `/admin/agents/${ci.id}/rename`, { name: 'ci-night', groupId: g.id });
+
+  // A job from the user lands in the group; its page names it.
+  services.adminUsers.issueKey(dev.id, { by: 'admin' });
+  const devAgent = services.agents.list().find((a) => a.user_id === dev.id),
+    job = services.jobs.create({ agentId: devAgent.id, source: 'cli', spec: { target: { type: 'sw', labels: [] }, command: './t.sh' } });
+  assert.match(await page(admin, `/jobs/${job.id}`), /<dt class="col-sm-2">Group<\/dt><dd class="col-sm-10">nightly-pool<\/dd>/);
+
+  const users = await page(admin, '/admin/users'),
+    agents = await page(admin, '/admin/agents'),
+    groups = await page(admin, '/groups');
+  assert.match(users, /<span class="badge text-bg-info">nightly-pool<\/span>/);
+  assert.match(users, new RegExp(`<option value="${g.id}" selected="selected">nightly-pool</option>`)); // the picker (a value, not shown)
+  assert.match(agents, /<span class="badge text-bg-info">nightly-pool<\/span>/);
+  assert.match(groups, /data-bs-title="dev, ci-night"[^>]*>2</); // Agents column: users, then CI tokens
+  // The id is never shown as text on a page (it's only in values and URLs).
+  for (const html of [users, agents, groups, await page(admin, '/resources'), await page(admin, `/jobs/${job.id}`)]){
+    const text = html.replace(/<[^>]*>/g, ' ');
+    assert.ok(!text.includes(g.id), 'a group id shows as text');
+  }
+});

@@ -33,6 +33,10 @@ block content
     dd.col-sm-10= job.resource ? job.resource.name : job.resource_name ? `${job.resource_name} (removed)` : '—'
     dt.col-sm-2 Target
     dd.col-sm-10= `${job.spec.target.type} — ${(job.spec.target.labels || []).join(', ')}`
+    if job.spec.target.group
+      //- The submitting agent's group (set on the dashboard), by name.
+      dt.col-sm-2 Group
+      dd.col-sm-10= targetGroup ? targetGroup.name : '(a deleted group)'
     if job.spec.target.client
       dt.col-sm-2 Client
       dd.col-sm-10= pinnedClient ? pinnedClient.name : job.spec.target.client

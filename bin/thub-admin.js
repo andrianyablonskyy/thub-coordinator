@@ -342,7 +342,7 @@ function main(){
       return usage(), process.exit(4);
     }
     const group = groups.create({ name, comment: flags.comment });
-    console.log(`Group ${group.id} created ("${group.name}"). Use it with: thub run --group ${group.id}`);
+    console.log(`Group ${group.id} created ("${group.name}"). Give it to users or CI tokens on the dashboard (Users / CI tokens).`);
     return;
   }
 

@@ -106,13 +106,17 @@ function createAgentRouter({ services, config }){
 
   // `thub whoami` / `thub key show` (§10.3): who this key belongs to.
   router.get('/me', auth, (req, res) => {
+    // The group its jobs run in (set on the dashboard, §13.1), by name.
+    const groupId = req.user ? services.adminUsers.getById(req.user.id)?.groupId : services.agents.get(req.agent.id)?.group_id,
+      group = groupId ? services.groups.get(groupId)?.name || null : null;
     if (!req.user){
-      return res.json({ kind: req.agent.kind, name: req.agent.name });
+      return res.json({ kind: req.agent.kind, name: req.agent.name, group });
     }
     const { username, email, role } = req.user,
       key = services.adminUsers.keyOf(req.user.id);
     res.json({
       kind: req.agent.kind,
+      group,
       user: { username, email, role },
       key: { hint: key.token_hint, createdAt: key.token_created_at || key.created_at, lastUsedAt: key.last_used_at }
     });

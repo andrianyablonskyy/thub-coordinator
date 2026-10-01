@@ -141,6 +141,15 @@ function createJobsService(db, { bus, events, registry, config }){
     return { rows: rows.map(rowToJob), pagination };
   }
 
+  // The group an agent's jobs run in: its user's, or the CI token's own.
+  function agentGroup(agentId){
+    return db.prepare(
+      `SELECT g.id, g.name FROM agents a LEFT JOIN users u ON u.id = a.user_id
+       JOIN groups g ON g.id = CASE WHEN a.user_id IS NOT NULL THEN u.group_id ELSE a.group_id END
+       WHERE a.id = ?`
+    ).get(agentId) || null;
+  }
+
   function countQueuedForAgent(agentId){
     return db
       .prepare('SELECT COUNT(*) AS n FROM jobs WHERE agent_id = ? AND state IN (\'QUEUED\',\'ASSIGNED\')')
@@ -157,6 +166,13 @@ function createJobsService(db, { bus, events, registry, config }){
       throw Object.assign(new Error(`Invalid job spec (${VERSIONS}): ${errors.join('; ')}`), { status: 400 });
     }
     spec.source = source;
+    // The group is the agent's, set on the dashboard (§13.1) — whatever an
+    // older Agent sent as `target.group` is replaced.
+    const group = agentGroup(agentId);
+    delete spec.target.group;
+    if (group){
+      spec.target.group = group.id;
+    }
 
     // `target.client` (thub run --client) accepts a resource id or name;
     // store the id so the job stays pinned to the same Client across renames.
@@ -168,12 +184,12 @@ function createJobsService(db, { bus, events, registry, config }){
       spec.target.client = resource.id;
     }
 
-    const { type, labels, group, client } = spec.target;
-    if (!registry.everSatisfiable(type, labels, group, client)){
+    const { type, labels, group: groupId, client } = spec.target;
+    if (!registry.everSatisfiable(type, labels, groupId, client)){
       throw Object.assign(
         new Error(
           `No registered resource can ever satisfy type=${spec.target.type} labels=${spec.target.labels.join(',')}` +
-            (spec.target.group ? ` group=${spec.target.group}` : '') +
+            (group ? ` group=${group.name} (this agent's group, set on the dashboard)` : '') +
             (spec.target.client ? ` client=${spec.target.client}` : '')
         ),
         { status: 422 }

@@ -45,7 +45,7 @@ block content
           td
             if r.group_ids.length
               each gid in r.group_ids
-                span.badge.text-bg-info.me-1(data-bs-toggle="tooltip" data-bs-title=gid)= groupsById[gid] ? groupsById[gid].name : `(unknown: ${gid})`
+                span.badge.text-bg-info.me-1= groupsById[gid] ? groupsById[gid].name : '(deleted group)'
             else
               span.text-body-secondary —
           td= r.busy_source ? `${r.busy_source}${r.busy_reason ? ' — ' + r.busy_reason : ''}` : '—'

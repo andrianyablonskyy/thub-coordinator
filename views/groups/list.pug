@@ -8,12 +8,12 @@ block content
       button.btn.btn-primary.btn-sm(type="button" data-bs-toggle="modal" data-bs-target="#addGroupModal") Add group
 
   p.text-body-secondary.small: i.
-    A job can be constrained to run only on resources in a group with `thub run --group &lt;id&gt;` (§13.1).
-    Which groups a Client is in is set on its resource card (Groups tab, admins), or as `groups` in the Client's own config — the tab writes it there.
+    Give an agent a group — a user on #[a(href="/admin/users") Users], a CI token on #[a(href="/admin/agents") CI tokens] —
+    and its jobs run only on resources in that group (§13.1). Which groups a Client is in is set on its resource card (Groups tab).
 
   if totalCount
     .d-flex.flex-wrap.align-items-center.gap-2.mb-2
-      +searchForm(q, 'Search groups: name, id, comment', '/groups')
+      +searchForm(q, 'Search groups: name, comment', '/groups')
       if q
         span.small.text-body-secondary
           | #{groups.length} of #{totalCount} groups
@@ -24,9 +24,9 @@ block content
       thead
         tr
           th Name
-          th ID
           th Comment
           th Resources
+          th Agents
           th Created
           if canManage
             th Actions
@@ -34,18 +34,9 @@ block content
         each g in groups
           tr
             td= g.name
-            td
-              code.small.me-1= g.id
-              button.btn.btn-sm.btn-outline-secondary.copy-btn(
-                type="button"
-                aria-label="Copy group ID to clipboard"
-                data-bs-toggle="tooltip"
-                data-bs-title="Copy to clipboard"
-                data-copy=g.id
-              )
-                i.bi.bi-clipboard
             td= g.comment || '—'
             td= g.resourceCount
+            td(data-bs-toggle=g.agentNames.length ? 'tooltip' : null data-bs-title=g.agentNames.join(', ') || null)= g.agentNames.length
             td= fmtDate(g.created_at)
             if canManage
               td
@@ -53,7 +44,7 @@ block content
                 form.d-inline.ms-1(
                   method="post"
                   action=`/groups/${g.id}/delete`
-                  data-confirm=`Delete group "${g.name}"? Resources listing it just stop matching on it, and jobs targeting it (--group) can no longer be scheduled.`
+                  data-confirm=`Delete group "${g.name}"? Resources listing it just stop matching on it, and its agents go back to running their jobs on any resource.`
                   data-confirm-title="Delete group?"
                   data-confirm-ok="Delete group"
                 )
@@ -73,17 +64,6 @@ block content
                         .mb-3
                           label.form-label Comment
                           textarea.form-control(name="comment" rows="2")= g.comment || ''
-                        p.text-body-secondary.small.mb-0
-                          | ID:
-                          code.me-1= g.id
-                          button.btn.btn-sm.btn-outline-secondary.copy-btn(
-                            type="button"
-                            aria-label="Copy group ID to clipboard"
-                            data-bs-toggle="tooltip"
-                            data-bs-title="Copy to clipboard"
-                            data-copy=g.id
-                          )
-                            i.bi.bi-clipboard
                       .modal-footer
                         button.btn.btn-primary(type="submit") Save
   else if q
@@ -108,6 +88,5 @@ block content
               .mb-3
                 label.form-label Comment
                 textarea.form-control(name="comment" rows="2" placeholder="Optional")
-              p.text-body-secondary.small.mb-0 The group's id (a UUID) is generated once it's created.
             .modal-footer
               button.btn.btn-primary(type="submit") Create
