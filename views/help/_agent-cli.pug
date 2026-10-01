@@ -19,8 +19,7 @@
     const groups = [
       { title: 'Where to run', rows: [
         ['--type hw|sw', 'Required. Runner type.', '--type hw'],
-        ['--board <name>', 'Shorthand for --label board:<name>.', '--board nucleo-f401re'],
-        ['--label <l>', 'Required label (repeatable). The Client must have all of them.', '--label uart --label stlink'],
+        ['--label <l>', 'Required label (repeatable). The runner must have all of them. 1–64 characters, no spaces, commas or semicolons.', '--label uart --label stlink'],
         ['--client <name|id>', 'Only this Client; waits for it even if others are idle.', '--client lab-hw-01']
       ] },
       { title: 'What to run', rows: [
@@ -73,13 +72,13 @@
 
   h3.h6 Examples
   +code('Flash and test a board, fail CI on failure').
-    thub run --type hw --board nucleo-f401re \
+    thub run --type hw --label board:nucleo-f401re \
       --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
       --git-repo https://github.com/yourorg/firmware-tests.git v1.4.0 \
       --command 'st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh "$@"' \
       --arg --junit --timeout 45m --wait
   +code('Reproduce a failure on the exact bench, labeled with your name').
-    thub run --type hw --board nucleo-f401re --client lab-hw-01 --user "$USER" \
+    thub run --type hw --label board:nucleo-f401re --client lab-hw-01 --user "$USER" \
       --download-file "$IMAGE_URL" --git-repo "$TESTS_REPO" --command ./ci/test.sh
     # Ctrl-C detaches; the job keeps running. Re-attach:
     thub status M-00126

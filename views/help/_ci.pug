@@ -31,7 +31,7 @@
         steps:
           - run: |
               npx -y @andrian.yablonskyy/thub-agent run \
-                --type hw --board nucleo-f401re \
+                --type hw --label board:nucleo-f401re \
                 --download-file "${{ needs.build.outputs.image_url }}" \
                 --git-repo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" "$GITHUB_SHA" \
                 --command 'st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/hw-tests.sh' \

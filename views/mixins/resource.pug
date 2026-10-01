@@ -502,8 +502,10 @@ mixin resourceDetails(r, groupsById, returnTo, local, external)
     dt.col-sm-4 Labels
     dd.col-sm-8
       if r.labels.length
-        each l in r.labels
-          span.badge.text-bg-light.border.me-1= l
+        //- One label per line, as on the Labels tab.
+        .d-flex.flex-column.align-items-start.gap-1
+          each l in r.labels
+            span.badge.text-bg-light.border.font-monospace= l
       else
         span.text-body-secondary —
     dt.col-sm-4 Busy source / reason

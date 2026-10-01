@@ -35,8 +35,7 @@
   -
     const jobVars = [
       ['JOB_TYPE', '--type', 'hw or sw'],
-      ['JOB_BOARD', '--board', 'the board name'],
-      ['JOB_LABEL / JOB_LABEL_<n>', '--board, --label', 'all labels, comma-separated / each'],
+      ['JOB_LABEL / JOB_LABEL_<n>', '--label', 'all labels, comma-separated / each'],
       ['JOB_GROUP', '(dashboard)', 'the submitting agent\'s group, if it has one'],
       ['JOB_CLIENT', '--client', 'this Client\'s name'],
       ['JOB_USER', '--user', 'as given'],
@@ -118,7 +117,7 @@
       python:3.14 ./run-tests.sh
   +code('Submitting the job that feeds these').
     export API_TOKEN=…
-    thub run --type hw --board nucleo-f401re \
+    thub run --type hw --label board:nucleo-f401re \
       --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
       --git-repo git@github.com:yourorg/firmware-tests.git main \
       --env TARGET=production --env API_TOKEN \

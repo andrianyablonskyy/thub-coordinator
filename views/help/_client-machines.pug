@@ -50,7 +50,7 @@
     li Check the runner card's #[strong Capabilities]: each configured device must be present (a missing one is flagged).
     li Your job's #[code --command] flashes the board. The Client never flashes by itself; it passes the ST-Link serials and the downloaded files in the environment (#[a(href="#env") Environment variables]).
   +code('A typical HW job').
-    thub run --type hw --board nucleo-f401re \
+    thub run --type hw --label board:nucleo-f401re \
       --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
       --git-repo https://github.com/yourorg/firmware-tests.git v1.4.0 \
       --command 'st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh' \

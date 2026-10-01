@@ -96,8 +96,55 @@ mixin configTabItems(r)
   if r.type === 'hw'
     each t in [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB']]
       +configTab(p, t[0], t[1])
+  +configTab(p, 'labels', 'Labels')
   +configTab(p, 'groups', 'Groups')
   +configTab(p, 'reboot', 'Reboot')
+
+//- Labels tab: what a job's --label / --label board:must find on this Client,
+//- one per line. Saved like the Groups tab (registry.setClientLabels): in
+//- effect on the Coordinator at once, written to the config file's
+//- `labels` by the Client.
+mixin labelsPane(r, returnTo)
+  - const p = `cfg-${r.id}`
+  - const canEdit = can.operate && r.config_support === 'file'
+  - const pending = r.config_import && r.config_import.revision > r.config_applied_revision && r.config_import.fields && r.config_import.fields.labels
+  +configPane(p, 'labels')
+    if pending || r.config_error
+      .d-flex.justify-content-end.gap-1.mb-2
+        if pending
+          span.badge.text-bg-warning(
+            data-bs-toggle="tooltip"
+            data-bs-title="In effect on the Coordinator; the Client writes them to its config file on its next heartbeat, then restarts once idle"
+          ) not written to the Client yet
+        if r.config_error
+          span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=r.config_error) refused by the Client
+    if r.config_support !== 'file'
+      p.small.text-body-secondary Labels can't be set here: #{noConfigReport} Or set #[code labels] in its config file.
+    form(
+      method="post"
+      action=`/runners/${r.id}/labels`
+      data-confirm=`Save the labels of ${r.name}? They apply at once; the Client also writes them to its config file and restarts once it has no job running.`
+      data-confirm-title="Save runner labels?"
+      data-confirm-ok="Save"
+      data-confirm-tone="primary"
+    )
+      input(type="hidden" name="returnTo" value=returnTo)
+      fieldset(disabled=!canEdit)
+        label.form-label.small(for=`${p}-labels-input`) One label per line
+        textarea.form-control.font-monospace(
+          id=`${p}-labels-input`
+          name="labels"
+          rows="6"
+          spellcheck="false"
+          autocapitalize="off"
+          placeholder="board:nucleo-f401re\nuart\nstlink"
+        )= r.labels.join('\n')
+        .form-text
+          | A job runs here only if this runner has every label it asks for (#[code thub run --label uart --label board:nucleo-f401re]).
+          | Each up to 64 characters, no spaces, commas or semicolons; up to 64 labels.
+        if canEdit
+          .d-flex.justify-content-end.mt-3
+            button.btn.btn-sm.btn-primary(type="submit" data-bs-toggle="tooltip" data-bs-title="Save the labels — in effect at once; the Client writes them to its config file") Save labels
 
 //- Groups tab: which resource groups this Client belongs to (thub run
 //- --group). Saved as a config revision the Client writes to its config
@@ -198,6 +245,7 @@ mixin configPanes(r, returnTo, groupsById)
           +deviceTable('usbs', 'DUT USB devices', current.usbs || [], ['Device', 'udev devpath'])
           .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-usb) or a /dev path. udev devpath: the USB port it's plugged into.
           +saveCapabilities(canEdit)
+  +labelsPane(r, returnTo)
   +groupsPane(r, returnTo, groupsById || {})
   +configPane(p, 'reboot')
     dl.row.mb-0

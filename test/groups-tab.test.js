@@ -289,3 +289,54 @@ test('Resources renamed Runners: the page is /runners; old /resources links and 
   assert.match(html, /href="\/runners"[^>]*>(<i [^>]*><\/i>)?Runners</);
   assert.doesNotMatch(html.replace(/<[^>]*>/g, ' '), /\bResources?\b/); // no visible "Resource(s)" left on the page
 });
+
+test('Labels tab: in effect at once, sent to the Client as its next config revision; validated', async (t) => {
+  const { base, services, admin } = await start(t),
+    id = register(services, 'lab-sw-30'),
+    save = (labels) => fetch(`${base}/runners/${id}/labels`, {
+      method: 'POST', headers: { cookie: admin }, body: new URLSearchParams({ labels, returnTo: '/runners' }), redirect: 'manual'
+    }),
+    card = async () => {
+      const html = await (await fetch(`${base}/runners`, { headers: { cookie: admin } })).text();
+      return html.slice(html.indexOf(`id="resource-card-${id}"`));
+    };
+  assert.match(await card(), new RegExp(`id="cfg-${id}-labels-tab"`)); // the tab
+
+  await save('board:nucleo-f401re\nuart\n\nuart\n');
+  const r = services.registry.get(id);
+  assert.deepEqual(r.labels, ['board:nucleo-f401re', 'uart']); // trimmed, deduplicated, at once
+  assert.deepEqual(services.registry.pendingConfig(id).file, { labels: ['board:nucleo-f401re', 'uart'] });
+  assert.match(await card(), /not written to the Client yet/);
+  assert.match(await card(), />board:nucleo-f401re\nuart<\/textarea>/);
+
+  // Scheduling follows at once: a job asking for them can run here.
+  services.registry.heartbeat(id, { state: 'IDLE' });
+  const { agent } = services.agents.create({ name: 'ci', kind: 'ci' }),
+    spec = { target: { type: 'sw', labels: ['uart', 'board:nucleo-f401re'] }, command: './t' };
+  assert.ok(services.jobs.create({ agentId: agent.id, source: 'ci', spec }));
+
+  // A groups save meanwhile keeps the labels in the same revision.
+  services.registry.setClientGroups(id, [], { by: 'admin' });
+  assert.deepEqual(services.registry.pendingConfig(id).file, { labels: ['board:nucleo-f401re', 'uart'], groups: [] });
+
+  await save('has space');
+  assert.deepEqual(services.registry.get(id).labels, ['board:nucleo-f401re', 'uart']); // refused
+  for (const bad of ['a,b', 'a;b', 'a\tb', 'x'.repeat(65)]){
+    assert.throws(() => services.registry.setClientLabels(id, [bad], { by: 'x' }), /1–64 characters, no spaces, commas or semicolons/, bad);
+  }
+  assert.deepEqual(services.registry.setClientLabels(id, ['x'.repeat(64), 'board:b'], { by: 'x' }).labels, ['x'.repeat(64), 'board:b']);
+  await save('uart, stlink'); // a comma is part of the label (refused), not a separator
+  assert.deepEqual(services.registry.get(id).labels, ['x'.repeat(64), 'board:b']);
+  // One per line in the card's Labels row and the Runners table.
+  const html = await card(),
+    labelsRow = html.slice(html.indexOf('<dt class="col-sm-4">Labels</dt>'));
+  assert.match(labelsRow, /^<dt[^>]*>Labels<\/dt><dd[^>]*><div class="d-flex flex-column[^"]*">/);
+  assert.match(labelsRow, /^[^]*?<span class="badge[^"]*">x{64}<\/span><span class="badge[^"]*">board:b<\/span><\/div>/);
+
+  // A job asking for a label no runner could have: refused, saying why.
+  assert.throws(() => services.jobs.create({ agentId: agent.id, source: 'ci', spec: { target: { type: 'sw', labels: ['has space'] }, command: './t' } }),
+    /Invalid label: has space — 1–64 characters/);
+
+  const old = register(services, 'lab-old-30', { configFile: null });
+  assert.throws(() => services.registry.setClientLabels(old, ['x'], { by: 'x' }), /too old/);
+});

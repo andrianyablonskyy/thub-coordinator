@@ -18,8 +18,14 @@ const { v4: uuid } = require('uuid'),
     shareableClientConfigFile, HW_DEVICES_SECTION } = require('@andrian.yablonskyy/thub-common'),
   { generateToken, hashToken } = require('./tokens');
 
-// Never kept from or put in a Client's config file: its credentials.
-const CONFIG_FILE_SECRETS = ['joinKey'],
+// A label (a runner's, on the Labels tab; a job's, --label): 1–64
+// characters, no whitespace, commas or semicolons — JOB_LABEL joins them
+// with commas, and a label is one line on the dashboard.
+const LABEL_RE = /^[^\s,;]{1,64}$/,
+  LABEL_RULE = '1–64 characters, no spaces, commas or semicolons',
+
+  // Never kept from or put in a Client's config file: its credentials.
+  CONFIG_FILE_SECRETS = ['joinKey'],
   // The first Client that applies a whole config file (an Import's other
   // fields, the Groups tab), not only its hw-devices section.
   CONFIG_FILE_CLIENT = '1.0.30';
@@ -796,6 +802,38 @@ function createRegistryService(db, { bus, events }){
     return get(resourceId);
   }
 
+  // Labels tab (runner card): the labels a job's --label / --label board:must
+  // find on this Client. Like the Groups tab: they belong to its config
+  // file (`labels`, which every registration reports), so they go out as
+  // its next config revision, and the Coordinator applies them at once.
+  // Each label: see LABEL_RE (top); at most 64 of them.
+  function setClientLabels(resourceId, labels, { by } = {}){
+    const r = get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    const list = [...new Set(labels.map((l) => String(l).trim()).filter(Boolean))],
+      bad = list.filter((l) => !LABEL_RE.test(l));
+    if (bad.length){
+      throw Object.assign(new Error(`Invalid label: ${bad.join(', ')} — ${LABEL_RULE}`), { status: 400 });
+    }
+    if (list.length > 64){
+      throw Object.assign(new Error('At most 64 labels'), { status: 400 });
+    }
+    const desired = currentSection(r);
+    if (!desired || r.config_support !== 'file'){
+      throw Object.assign(new Error(`${r.name} is too old to take its labels from the dashboard — update its Client first`), { status: 409 });
+    }
+    const revision = r.config_revision + 1,
+      fields = { ...(pendingImport(r) || {}), labels: list };
+    db.transaction(() => {
+      db.prepare(`UPDATE resources SET config_desired = ?, config_revision = ?, config_error = NULL, config_import = ?, labels = ?
+                  WHERE id = ?`).run(JSON.stringify(desired), revision, JSON.stringify({ revision, fields }), JSON.stringify(list), resourceId);
+    })();
+    events.record('resource', resourceId, 'resource.labels_set', { by, revision, labels: list });
+    return get(resourceId);
+  }
+
   // Export (resource card): the Client's config file as it last reported it
   // (secrets excluded), with what's saved for it but not applied yet — so
   // exporting right after an edit or import gives what the Client will run.
@@ -878,6 +916,7 @@ function createRegistryService(db, { bus, events }){
   return {
     get,
     reportClientConfig,
+    setClientLabels,
     getByName,
     getByClientId,
     getByTokenHash,
@@ -912,4 +951,4 @@ function createRegistryService(db, { bus, events }){
   };
 }
 
-module.exports = { createRegistryService };
+module.exports = { LABEL_RE, LABEL_RULE, createRegistryService };

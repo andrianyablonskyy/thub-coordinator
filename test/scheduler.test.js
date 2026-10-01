@@ -845,3 +845,15 @@ test('migration 027 drops joinKey copies from stored config files', () => {
   assert.deepEqual(JSON.parse(db.prepare('SELECT client_config_file FROM resources WHERE id = ?').get('a').client_config_file), { name: 'a', labels: [] });
   assert.equal(db.prepare('SELECT client_config_file FROM resources WHERE id = ?').get('b').client_config_file, null);
 });
+
+test('a job runs only on a runner that has every label it asks for', () => {
+  const { registry, agents, jobs, scheduler } = buildTestServices(),
+    { agent } = agents.create({ name: 'ci', kind: 'ci' }),
+    some = registerResource(registry, { name: 'lab-some', type: 'hw', labels: ['board:nucleo', 'uart'] }),
+    all = registerResource(registry, { name: 'lab-all', type: 'hw', labels: ['board:nucleo', 'uart', 'stlink', 'extra'] });
+  registry.heartbeat(some.id, { state: 'idle' });
+  registry.heartbeat(all.id, { state: 'idle' });
+  const job = jobs.create({ agentId: agent.id, source: 'ci', spec: makeSpec({ target: { type: 'hw', labels: ['board:nucleo', 'uart', 'stlink'] } }) });
+  scheduler.runPass();
+  assert.equal(jobs.get(job.id).resource_id, all.id); // lab-some lacks stlink, though it's idle too
+});

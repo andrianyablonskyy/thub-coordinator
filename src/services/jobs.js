@@ -14,6 +14,7 @@
 'use strict';
 
 const { validateJobSpec, maskEnv, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/thub-common'),
+  { LABEL_RE, LABEL_RULE } = require('./registry'),
   { paginate } = require('./list-prefs'),
   { parseTerms, likeClause } = require('./search'),
   { sanitizeArtifacts } = require('./job-artifacts'),
@@ -164,6 +165,12 @@ function createJobsService(db, { bus, events, registry, config }){
     );
     if (!valid){
       throw Object.assign(new Error(`Invalid job spec (${VERSIONS}): ${errors.join('; ')}`), { status: 400 });
+    }
+    // A label no runner could have (the Labels tab's rule): say so, rather
+    // than "no runner can ever satisfy" it.
+    const badLabels = (spec.target.labels || []).filter((l) => !LABEL_RE.test(l));
+    if (badLabels.length){
+      throw Object.assign(new Error(`Invalid label: ${badLabels.join(', ')} — ${LABEL_RULE}`), { status: 400 });
     }
     spec.source = source;
     // The group is the agent's, set on the dashboard (§13.1) — whatever an

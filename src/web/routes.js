@@ -686,6 +686,21 @@ function createWebRouter({ services, config }){
 
   // Groups tab (resource card): the Client's group membership, as a config
   // revision the Client writes to its file (registry.setClientGroups).
+  // Labels tab (runner card): one label per line.
+  router.post('/runners/:id/labels', (req, res) => {
+    try {
+      // One per line: a comma or semicolon is in a label (and refused), not a separator.
+      const labels = String(req.body.labels || '').split(/\r?\n/),
+        r = services.registry.setClientLabels(req.params.id, labels, { by: req.session.user.username });
+      flash(req, 'success', `Labels of ${r.name} saved: ${r.labels.length ? r.labels.join(', ') : 'none'} — in effect now.\n` +
+        'The Client writes them to its config file on its next heartbeat, then restarts once it has no job running.');
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/runners'));
+  });
+
   router.post('/runners/:id/groups', (req, res) => {
     try {
       const ids = [].concat(req.body.groups || []).filter((g) => typeof g === 'string' && g),
