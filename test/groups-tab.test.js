@@ -52,10 +52,10 @@ test('Groups tab: in effect at once, sent to the Client as its next config revis
     nightly = services.groups.create({ name: 'nightly' }),
     pr = services.groups.create({ name: 'pr-pool', comment: 'pull requests' }),
     id = register(services, 'lab-sw-01'),
-    save = (cookie, groups) => fetch(`${base}/resources/${id}/groups`, {
-      method: 'POST', headers: { cookie }, body: new URLSearchParams([...groups.map((g) => ['groups', g]), ['returnTo', '/resources']]), redirect: 'manual'
+    save = (cookie, groups) => fetch(`${base}/runners/${id}/groups`, {
+      method: 'POST', headers: { cookie }, body: new URLSearchParams([...groups.map((g) => ['groups', g]), ['returnTo', '/runners']]), redirect: 'manual'
     }),
-    page = async () => (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text();
+    page = async () => (await fetch(`${base}/runners`, { headers: { cookie: admin } })).text();
 
   assert.equal((await save(viewer, [nightly.id])).status, 302); // a maintainer may (§10.3)
   assert.equal((await save(admin, [nightly.id, pr.id])).status, 302);
@@ -105,7 +105,7 @@ test('device tabs show what the Client runs — not an old saved revision; group
     }).resourceId,
     id = register('1.1'),
     devpaths = async () => {
-      const html = await (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text(),
+      const html = await (await fetch(`${base}/runners`, { headers: { cookie: admin } })).text(),
         table = html.slice(html.indexOf(`id="cfg-${id}-stlinks"`), html.indexOf(`id="cfg-${id}-uarts"`));
       return [...table.matchAll(/data-f="devpath" value="([^"]*)"/g)].map((m) => m[1]).filter(Boolean); // not the blank add-row template
     };
@@ -134,7 +134,7 @@ test('ST-Link tab has no Serial field; a serial set in the config file is kept o
       clientId: 'hw2', name: 'lab-hw-02', type: 'hw', labels: [],
       config: { stlinks: [{ index: 1, serial: '066DFF48', devpath: '1.2' }] }, configFile: { name: 'lab-hw-02', type: 'hw' }
     }).resourceId,
-    html = await (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text(),
+    html = await (await fetch(`${base}/runners`, { headers: { cookie: admin } })).text(),
     table = html.slice(html.indexOf(`id="cfg-${id}-stlinks"`), html.indexOf(`id="cfg-${id}-uarts"`));
   assert.doesNotMatch(table, /data-f="serial"|>Serial</);
   // Rides along in data-extra, which public/js/client-config.js spreads back into the row.
@@ -147,7 +147,7 @@ test('resource card: USB actions update live and every disabled button says why'
       clientId: 'hw3', name: 'lab-hw-03', type: 'hw', labels: [], config: { stlinks: [{ index: 1 }] }, configFile: { name: 'lab-hw-03', type: 'hw' }
     }),
     card = async () => {
-      const html = await (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text();
+      const html = await (await fetch(`${base}/runners`, { headers: { cookie: admin } })).text();
       return html.slice(html.indexOf(`id="resource-card-${reg.resourceId}"`));
     };
   let html = await card();
@@ -169,7 +169,7 @@ test('Import and Export work for a Client that doesn\'t re-register (no joinKey)
   const { base, services, admin } = await start(t),
     { resourceId, resourceToken } = services.registry.registerAuto({ clientId: 'hw4', name: 'lab-hw-04', type: 'hw', labels: [] }),
     card = async () => {
-      const html = await (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text();
+      const html = await (await fetch(`${base}/runners`, { headers: { cookie: admin } })).text();
       return html.slice(html.indexOf(`id="resource-card-${resourceId}"`));
     };
   assert.match(await card(), /Import unavailable: this Client is too old/); // nothing reported, no version known
@@ -188,7 +188,7 @@ test('Import and Export work for a Client that doesn\'t re-register (no joinKey)
   const html = await card();
   assert.match(html, /data-config-import-pick/); // Import enabled
   assert.doesNotMatch(html, /Import unavailable/);
-  const exported = await (await fetch(`${base}/resources/${resourceId}/config/export`, { headers: { cookie: admin } })).json();
+  const exported = await (await fetch(`${base}/runners/${resourceId}/config/export`, { headers: { cookie: admin } })).json();
   assert.equal(exported.joinKey, undefined);
   assert.deepEqual(exported['hw-devices'], { stlinks: [{ index: 1, devpath: '1.1' }] });
 
@@ -238,7 +238,7 @@ test('agent groups are set on the dashboard (Users, CI tokens) and shown by name
   assert.match(agents, /<span class="badge text-bg-info">nightly-pool<\/span>/);
   assert.match(groups, /data-bs-title="dev, ci-night"[^>]*>2</); // Agents column: users, then CI tokens
   // The id is never shown as text on a page (it's only in values and URLs).
-  for (const html of [users, agents, groups, await page(admin, '/resources'), await page(admin, `/jobs/${job.id}`)]){
+  for (const html of [users, agents, groups, await page(admin, '/runners'), await page(admin, `/jobs/${job.id}`)]){
     const text = html.replace(/<[^>]*>/g, ' ');
     assert.ok(!text.includes(g.id), 'a group id shows as text');
   }
@@ -274,4 +274,18 @@ test('CI tokens: the name opens Edit; a new token replaces the old one; delete k
   assert.ok((await (await fetch(`${base}/jobs?q=ci-fw`, { headers: { cookie: admin } })).text()).includes(job.id)); // still found by its name
   assert.match(await (await form(`/admin/agents/${agent.id}/token`)).headers.get('location'), /agents/); // can't come back
   assert.equal(services.agents.get(agent.id).revoked_at !== null, true);
+});
+
+test('Resources renamed Runners: the page is /runners; old /resources links and forms still land', async (t) => {
+  const { base, admin } = await start(t),
+    old = await fetch(`${base}/resources?q=lab`, { headers: { cookie: admin }, redirect: 'manual' });
+  assert.equal(old.status, 301);
+  assert.equal(old.headers.get('location'), '/runners?q=lab');
+  const post = await fetch(`${base}/resources/abc/rename`, { method: 'POST', headers: { cookie: admin }, redirect: 'manual' });
+  assert.equal(post.status, 308); // keeps the method and body
+  assert.equal(post.headers.get('location'), '/runners/abc/rename');
+  const html = await (await fetch(`${base}/runners`, { headers: { cookie: admin } })).text();
+  assert.match(html, /<title>Runners · TestHub<\/title>/);
+  assert.match(html, /href="\/runners"[^>]*>(<i [^>]*><\/i>)?Runners</);
+  assert.doesNotMatch(html.replace(/<[^>]*>/g, ' '), /\bResources?\b/); // no visible "Resource(s)" left on the page
 });

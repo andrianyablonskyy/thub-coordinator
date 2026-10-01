@@ -5,19 +5,19 @@ include ../mixins/updates
 include ../mixins/list-controls
 
 block content
-  h1.h4.mb-3 Resources
+  h1.h4.mb-3 Runners
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
-    +updatesToolbar('client', 'clients', '/resources')
+    +updatesToolbar('client', 'clients', '/runners')
   p.text-body-secondary.small: i.
-    Resources register themselves — start a Client with the shared join key and it appears here. Click a resource for its details, including IP addresses.
+    Runners register themselves — start a Client with the shared join key and it appears here. Click a runner for its details, including IP addresses.
 
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
-    +searchForm(list.q, 'Search resources: name, label, group, status, IP…', list.urlFor({ q: '' }))
+    +searchForm(list.q, 'Search runners: name, label, group, status, IP…', list.urlFor({ q: '' }))
     .ms-auto
       +pageSizePicker(list)
 
   div(data-live="list-toolbar")
-    +listToolbar(list, 'resources')
+    +listToolbar(list, 'runners')
 
   table.table.table-hover.align-middle
     thead
@@ -37,7 +37,7 @@ block content
         tr(role="button" tabindex="0" data-resource-card=`resource-card-${r.id}`)
           td= r.name
           td.text-uppercase= r.type
-          td: +versionWithUpdate(r.client_version, updates.latest.client, r.update_to, `/resources/${r.id}/update`, list.pageUrl(), true, r.activity && r.activity.state === 'update-hold')
+          td: +versionWithUpdate(r.client_version, updates.latest.client, r.update_to, `/runners/${r.id}/update`, list.pageUrl(), true, r.activity && r.activity.state === 'update-hold')
           td: +resourceBadge(r.status, r.remove_requested_at)
           td
             each l in r.labels

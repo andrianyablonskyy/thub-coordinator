@@ -133,7 +133,7 @@ test('live: /live streams hello and changes; passive re-fetches keep the idle ti
   await new Promise((r) => setTimeout(r, 1100));
 
   // …survives a passive re-fetch, which also doesn't push the expiry out.
-  const passive = await fetch(`${base}/resources`, { headers: { cookie, 'X-Thub-Live': '1' } });
+  const passive = await fetch(`${base}/runners`, { headers: { cookie, 'X-Thub-Live': '1' } });
   assert.equal(passive.status, 200);
   assert.match(passive.headers.get('cache-control'), /no-store/);
   const passiveExpires = expiresOf(passive);
@@ -149,5 +149,5 @@ test('live: /live streams hello and changes; passive re-fetches keep the idle ti
   // passive re-fetch is redirected to the login page.
   await fetch(`${base}/logout`, { method: 'POST', headers: { cookie }, redirect: 'manual' });
   assert.equal((await fetch(`${base}/live`, { headers: { cookie, accept: 'text/event-stream' } })).status, 401);
-  assert.equal((await fetch(`${base}/resources`, { headers: { cookie, 'X-Thub-Live': '1' }, redirect: 'manual' })).status, 302);
+  assert.equal((await fetch(`${base}/runners`, { headers: { cookie, 'X-Thub-Live': '1' }, redirect: 'manual' })).status, 302);
 });

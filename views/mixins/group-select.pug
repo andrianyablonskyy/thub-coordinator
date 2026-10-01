@@ -3,7 +3,7 @@
 //- --group. Groups by name; none = any resource.
 mixin groupSelect(id, selected, groups)
   select.form-select(id=id name="groupId")
-    option(value="" selected=!selected) Any resource (no group)
+    option(value="" selected=!selected) Any runner (no group)
     each g in groups
       option(value=g.id selected=g.id === selected)= g.name
-  .form-text Its jobs run only on resources in this group. Manage groups on #[a(href="/groups") Groups].
+  .form-text Its jobs run only on runners in this group. Manage groups on #[a(href="/groups") Groups].

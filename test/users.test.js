@@ -185,7 +185,7 @@ test('dashboard: only maintainers and admins sign in; security pages are admins\
   assert.match(dev.text, /no dashboard access/);
 
   const mo = await signIn('mo', 'pw');
-  assert.equal((await get(mo.cookie, '/resources')).status, 200);
+  assert.equal((await get(mo.cookie, '/runners')).status, 200);
   assert.equal((await get(mo.cookie, '/admin/settings')).status, 403); // admins' only
   for (const url of ['/admin/users', '/admin/agents']){
     assert.equal((await get(mo.cookie, url)).status, 200, url); // within limits — see below
@@ -195,7 +195,7 @@ test('dashboard: only maintainers and admins sign in; security pages are admins\
 
   // Blocked while signed in: the next click goes to the sign-in page.
   u.setBlocked(maint.id, true, { actorId: admin.id });
-  const after = await get(mo.cookie, '/resources');
+  const after = await get(mo.cookie, '/runners');
   assert.equal(after.status, 302);
   assert.equal(after.headers.get('location'), '/login');
   assert.match((await signIn('mo', 'pw')).text, /blocked/);

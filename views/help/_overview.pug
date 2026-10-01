@@ -12,7 +12,7 @@
             i.bi.bi-hdd-network.me-1
             | Coordinator
           p.card-text.small.mb-0.
-            This service. It holds the job queue and the resource registry, and runs the scheduler and
+            This service. It holds the job queue and the runner registry, and runs the scheduler and
             the heartbeat monitor. It stores job state and logs in SQLite,
             and serves this dashboard. It's the only thing that needs a public HTTPS port.
     .col-md-4
@@ -51,13 +51,13 @@
     li #[strong The Coordinator is the single source of truth.] It assigns a job inside a single SQLite transaction, so a job can never be assigned twice.
     li #[strong A job is a command, not a script upload.] The Client runs your #[code --command] as its service user, never as root. Issue agent tokens only to trusted pipelines and people.
 
-  h3.h6 Resource and job states
+  h3.h6 Runner and job states
   .row.g-3.small
     .col-md-6
       table.table.table-sm.mb-0
         thead
           tr
-            th Resource
+            th Runner
             th Meaning
         tbody
           tr

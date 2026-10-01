@@ -9,7 +9,7 @@ block content
 
   p.text-body-secondary.small: i.
     Give an agent a group — a user on #[a(href="/admin/users") Users], a CI token on #[a(href="/admin/agents") CI tokens] —
-    and its jobs run only on resources in that group (§13.1). Which groups a Client is in is set on its resource card (Groups tab).
+    and its jobs run only on runners in that group (§13.1). Which groups a Client is in is set on its runner card (Groups tab).
 
   if totalCount
     .d-flex.flex-wrap.align-items-center.gap-2.mb-2
@@ -25,7 +25,7 @@ block content
         tr
           th Name
           th Comment
-          th Resources
+          th Runners
           th Agents
           th Created
           if canManage
@@ -44,7 +44,7 @@ block content
                 form.d-inline.ms-1(
                   method="post"
                   action=`/groups/${g.id}/delete`
-                  data-confirm=`Delete group "${g.name}"? Resources listing it just stop matching on it, and its agents go back to running their jobs on any resource.`
+                  data-confirm=`Delete group "${g.name}"? Runners listing it just stop matching on it, and its agents go back to running their jobs on any runner.`
                   data-confirm-title="Delete group?"
                   data-confirm-ok="Delete group"
                 )

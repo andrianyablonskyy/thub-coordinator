@@ -13,7 +13,7 @@ block content
 
   form.row.g-2.mb-3(method="get" role="search")
     .col-12.col-md-5.col-lg-4
-      +searchBox(filters.q, 'Search jobs: id, user, resource, command, repo…', list.urlFor({ q: '' }))
+      +searchBox(filters.q, 'Search jobs: id, user, runner, command, repo…', list.urlFor({ q: '' }))
     .col-auto
       select.form-select.form-select-sm(name="state" data-autosubmit)
         option(value="") any state
@@ -37,7 +37,7 @@ block content
         +sortHeader(list, 'source', 'Source')
         +sortHeader(list, 'user', 'User')
         +sortHeader(list, 'state', 'State')
-        +sortHeader(list, 'resource', 'Resource')
+        +sortHeader(list, 'resource', 'Runner')
         +sortHeader(list, 'created', 'Created', 'desc')
         +sortHeader(list, 'duration', 'Duration', 'desc')
         if canManage
@@ -132,7 +132,7 @@ block content
             data-value=preset.value
           )= preset.label
       p
-        | Deletes finished jobs that ended before then, with their logs, and the resource, agent and group history logged before then — then compacts the database file.
+        | Deletes finished jobs that ended before then, with their logs, and the runner, agent and group history logged before then — then compacts the database file.
         |
         strong This cannot be undone.
         |  Active jobs are never touched.

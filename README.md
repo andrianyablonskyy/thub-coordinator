@@ -149,8 +149,8 @@ Server-rendered Pug templates styled with Bootstrap 5.3, with a little vanilla J
 
 | Page | Content |
 |---|---|
-| `/` | Resource cards by status, queue length, jobs in the last 24 h. Click a card for its resource card (below). |
-| `/resources` | Type, Client version, labels, groups, status, busy source/reason, last heartbeat age; admin maintenance/rotate-token actions. Click a row for its resource card (below). |
+| `/` | Runner cards by status, queue length, jobs in the last 24 h. Click a card for its runner card (below). |
+| `/runners` | **Runners** (formerly Resources; `/resources` redirects): Type, Client version, labels, groups, status, busy source/reason, last heartbeat age; admin maintenance/rotate-token actions. Click a row for its resource card (below). |
 | `/groups` | Resource groups — id/name/comment, member count; admin create/rename/delete. Membership itself is set per-resource in the Client's own config. |
 | `/jobs` | Filterable job list (state, source, resource), with the job's `user` label if set; admin **Reset queue** / **Clean history**. |
 | `/jobs/:id` | Spec, timeline, live log viewer with stream filter, artifact downloads, cancel button. |
@@ -159,7 +159,7 @@ Server-rendered Pug templates styled with Bootstrap 5.3, with a little vanilla J
 
 Notifications (results of dashboard actions, errors) appear as toasts in the top-right corner and close themselves by severity: **errors stay until closed**, warnings close after **30 s**, info and success after **10 s**. A one-time secret such as a rotated resource token never closes on its own.
 
-**Resource card.** Clicking a resource on `/` or `/resources` opens a card with its name, type, status, host uptime and current task/status with its duration (both from the Client's heartbeats, anchored to the Coordinator's clock; as of the last heartbeat for an OUT_OF_SERVICE resource), Client version, IP addresses, capabilities (reported at registration: HW udev devices with a **missing** flag for any whose device node doesn't exist; SW image, source and limits), labels, groups, busy source/reason, last heartbeat and (admins only) the maintenance/rotate-token actions. IP addresses are the Client host's interface addresses except loopback (reported at registration and on every heartbeat) plus the external address — the one the Coordinator last saw the Client connect from, taken from `X-Forwarded-For` when the request came through a proxy `trustProxy` trusts. Admins get a **Cancel** button on it, enabled only while the Client is doing something: it cancels its current job, releases a manual local lock, or aborts a self-update hold on its host (the last two delivered as `unlock` / `cancel-update` heartbeat commands).
+**Runner card.** Clicking a runner on `/` or `/runners` opens a card with its name, type, status, host uptime and current task/status with its duration (both from the Client's heartbeats, anchored to the Coordinator's clock; as of the last heartbeat for an OUT_OF_SERVICE resource), Client version, IP addresses, capabilities (reported at registration: HW udev devices with a **missing** flag for any whose device node doesn't exist; SW image, source and limits), labels, groups, busy source/reason, last heartbeat and (admins only) the maintenance/rotate-token actions. IP addresses are the Client host's interface addresses except loopback (reported at registration and on every heartbeat) plus the external address — the one the Coordinator last saw the Client connect from, taken from `X-Forwarded-For` when the request came through a proxy `trustProxy` trusts. Admins get a **Cancel** button on it, enabled only while the Client is doing something: it cancels its current job, releases a manual local lock, or aborts a self-update hold on its host (the last two delivered as `unlock` / `cancel-update` heartbeat commands).
 
 The Coordinator's own version (`ver. X.Y.Z`) is shown under the TestHub logo, top left of every page.
 

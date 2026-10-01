@@ -48,7 +48,7 @@ mixin updatesToolbar(app, label, returnTo)
           | Check for updates
       form.d-inline(
         method="post"
-        action=app === 'agent' ? '/admin/agents/update-all' : '/resources/update-all'
+        action=app === 'agent' ? '/admin/agents/update-all' : '/runners/update-all'
         data-confirm=`Request a self-update of every ${label} to the latest version${updates.latest[app] ? ` (v${updates.latest[app]})` : ''}?`
         data-confirm-title=`Update all ${label}?`
         data-confirm-ok="Request update"

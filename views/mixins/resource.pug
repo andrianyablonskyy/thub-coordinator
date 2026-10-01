@@ -6,7 +6,7 @@ include client-config
 
 //- Update isn't here: it sits next to the version (+versionWithUpdate).
 mixin resourceActions(r, returnTo)
-  form.d-inline(method="post" action=`/resources/${r.id}/maintenance`)
+  form.d-inline(method="post" action=`/runners/${r.id}/maintenance`)
     input(type="hidden" name="enabled" value=r.status === 'MAINTENANCE' ? '0' : '1')
     input(type="hidden" name="returnTo" value=returnTo)
     if r.status === 'MAINTENANCE'
@@ -14,7 +14,7 @@ mixin resourceActions(r, returnTo)
         type="submit"
         aria-label="Enable"
         data-bs-toggle="tooltip"
-        data-bs-title="Bring this resource back into rotation so the scheduler can assign it jobs again"
+        data-bs-title="Bring this runner back into rotation so the scheduler can assign it jobs again"
       )
         i.bi.bi-play-circle
     else
@@ -22,14 +22,14 @@ mixin resourceActions(r, returnTo)
         type="submit"
         aria-label="Disable"
         data-bs-toggle="tooltip"
-        data-bs-title="Take this resource out of rotation for maintenance — the scheduler will skip it"
+        data-bs-title="Take this runner out of rotation for maintenance — the scheduler will skip it"
       )
         i.bi.bi-tools
   //- Credentials: admins only (§10.3).
   if can.admin
     form.d-inline.ms-1(
       method="post"
-      action=`/resources/${r.id}/rotate-token`
+      action=`/runners/${r.id}/rotate-token`
       data-confirm=`Issue a new token for ${r.name}? Its current token stops working at once, and the Client won't reconnect until it has the new one.`
       data-confirm-title="Rotate resource token?"
       data-confirm-ok="Rotate token"
@@ -58,7 +58,7 @@ mixin removeResourceButton(r, returnTo)
       type="button"
       aria-label="Remove"
       data-bs-toggle="tooltip"
-      data-bs-title="Remove this resource from the list — it's running a job"
+      data-bs-title="Remove this runner from the list — it's running a job"
       data-remove-resource=r.id
       data-remove-name=r.name
       data-remove-job=r.activeJob.id
@@ -68,7 +68,7 @@ mixin removeResourceButton(r, returnTo)
   else
     form.d-inline.ms-1(
       method="post"
-      action=`/resources/${r.id}/remove`
+      action=`/runners/${r.id}/remove`
       data-confirm=`Remove ${r.name} from the list? Its job history is kept. A Client that's still running shows up again when it restarts and re-registers.`
       data-confirm-title=`Remove ${r.name}?`
       data-confirm-ok="Remove"
@@ -78,7 +78,7 @@ mixin removeResourceButton(r, returnTo)
         type="submit"
         aria-label="Remove"
         data-bs-toggle="tooltip"
-        data-bs-title="Remove this resource from the list"
+        data-bs-title="Remove this runner from the list"
       )
         i.bi.bi-trash
 
@@ -110,7 +110,7 @@ mixin removeResourceModal()
               |
               code CANCELED
               | ), then
-            li remove the resource as soon as its Client confirms the job stopped (at most about a minute if the Client doesn't answer).
+            li remove the runner as soon as its Client confirms the job stopped (at most about a minute if the Client doesn't answer).
           p.small.text-body-secondary.mb-0 Its job history is kept. A Client that's still running shows up again when it restarts and re-registers.
         .modal-footer
           button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Keep it
@@ -231,7 +231,7 @@ mixin rebootScheduleRow(r, returnTo)
     if can.operate
       form.d-flex.gap-1.mt-1(
         method="post"
-        action=`/resources/${r.id}/reboot-schedule`
+        action=`/runners/${r.id}/reboot-schedule`
         data-confirm=`Reboot the host of ${r.name} on this schedule? It reboots the whole host — every Client instance on it. Running jobs finish first: new ones wait, for up to 2 h, and otherwise that time is skipped.`
         data-confirm-title="Schedule host reboots?"
         data-confirm-ok="Save schedule"
@@ -248,7 +248,7 @@ mixin rebootScheduleRow(r, returnTo)
         )
         button.btn.btn-sm.btn-outline-primary(type="submit" data-bs-toggle="tooltip" data-bs-title="Save this schedule — the Client applies it on its next heartbeat") Save
       if r.reboot_schedule
-        form.d-inline(method="post" action=`/resources/${r.id}/reboot-schedule`)
+        form.d-inline(method="post" action=`/runners/${r.id}/reboot-schedule`)
           input(type="hidden" name="returnTo" value=returnTo)
           input(type="hidden" name="clear" value="1")
           button.btn.btn-sm.btn-link.p-0.small(type="submit" data-bs-toggle="tooltip" data-bs-title="Remove the schedule — the host isn't rebooted on a schedule any more") Clear schedule
@@ -270,7 +270,7 @@ mixin cancelActivityButton(r, returnTo)
   if what
     form.d-inline.ms-2(
       method="post"
-      action=`/resources/${r.id}/cancel-activity`
+      action=`/runners/${r.id}/cancel-activity`
       data-confirm=`Cancel ${what} on ${r.name}?`
       data-confirm-title=`Cancel ${what}?`
       data-confirm-ok=`Cancel ${what}`
@@ -338,7 +338,7 @@ mixin usbScanPane(r)
   //- Import to config (public/js/usb-import.js): HW Clients that report
   //- their config only; enabled once there's a scan to import from.
   - const importWhy = r.type !== 'hw' ? 'Only HW Clients have USB device lists to import into' : !(r.config_desired || r.client_config) ? noConfigReport[0].toUpperCase() + noConfigReport.slice(1) : null
-  div(data-usb-scan=`/resources/${r.id}/usb-scan` data-pending=r.usb_scan_request_id ? '1' : null data-requested-at=r.usb_scan_requested_at)
+  div(data-usb-scan=`/runners/${r.id}/usb-scan` data-pending=r.usb_scan_request_id ? '1' : null data-requested-at=r.usb_scan_requested_at)
     .d-flex.align-items-center.gap-2.mb-2
       if can.operate
         //- Live (public/js/live.js): a Client that comes back online gets its
@@ -381,7 +381,7 @@ mixin rebootButton(r, returnTo)
   else
     form.d-inline.ms-1(
       method="post"
-      action=`/resources/${r.id}/reboot`
+      action=`/runners/${r.id}/reboot`
       data-confirm=r.activeJob
         ? `${r.name} is running job ${r.activeJob.id}. Rebooting cancels that job (reason: user reboot request), then reboots the host on the Client's next heartbeat. Every Client instance on that host goes down with it.`
         : `Reboot the host of ${r.name}? It reboots on the Client's next heartbeat, once nothing on the host is busy. Every Client instance on that host goes down with it.`
@@ -405,7 +405,7 @@ mixin rebootButton(r, returnTo)
 //- a whole file, or an older HW Client's devices only.
 mixin configTransferButtons(r, returnTo)
   a.btn.btn-sm.btn-outline-secondary.ms-1(
-    href=`/resources/${r.id}/config/export`
+    href=`/runners/${r.id}/config/export`
     download
     aria-label=`Export ${r.name}'s config`
     data-bs-toggle="tooltip"
@@ -419,7 +419,7 @@ mixin configTransferButtons(r, returnTo)
   else
     form.d-inline.ms-1(
       method="post"
-      action=`/resources/${r.id}/config/import`
+      action=`/runners/${r.id}/config/import`
       data-config-import
       data-resource-name=r.name
       data-confirm-title=`Import config into ${r.name}?`
@@ -461,7 +461,7 @@ mixin resourceDetails(r, groupsById, returnTo, local, external)
         )
           i.bi.bi-pencil(data-bs-toggle="tooltip" data-bs-title="Rename")
         .collapse(id=`rename-${r.id}`)
-          form.d-flex.gap-1.mt-1(method="post" action=`/resources/${r.id}/rename`)
+          form.d-flex.gap-1.mt-1(method="post" action=`/runners/${r.id}/rename`)
             input(type="hidden" name="returnTo" value=returnTo)
             input.form-control.form-control-sm(
               name="name"
@@ -479,7 +479,7 @@ mixin resourceDetails(r, groupsById, returnTo, local, external)
     dd.col-sm-8: +resourceBadge(r.status, r.remove_requested_at)
     +uptimeRows(r, returnTo)
     dt.col-sm-4 Client version
-    dd.col-sm-8: +versionWithUpdate(r.client_version, updates.latest.client, r.update_to, `/resources/${r.id}/update`, returnTo, true, r.activity && r.activity.state === 'update-hold')
+    dd.col-sm-8: +versionWithUpdate(r.client_version, updates.latest.client, r.update_to, `/runners/${r.id}/update`, returnTo, true, r.activity && r.activity.state === 'update-hold')
     dt.col-sm-4 IP addresses
     dd.col-sm-8
       if !local.length && !external

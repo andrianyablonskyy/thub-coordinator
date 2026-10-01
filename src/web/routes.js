@@ -292,6 +292,15 @@ function createWebRouter({ services, config }){
     req.session.destroy(() => res.redirect('/login'));
   });
 
+  // Resources were renamed Runners on the dashboard: old links and
+  // bookmarks (and a form from a page loaded before) still land.
+  router.use((req, res, next) => {
+    if (!/^\/resources(\/|$)/.test(req.path)){
+      return next();
+    }
+    res.redirect(req.method === 'GET' || req.method === 'HEAD' ? 301 : 308, req.originalUrl.replace(/^\/resources/, '/runners'));
+  });
+
   router.use(requireAdminSession);
   router.use((req, res, next) => {
     const u = req.session.user;
@@ -496,7 +505,7 @@ function createWebRouter({ services, config }){
     res.render('index', { title: 'Overview', active: 'overview', liveTopics: 'resources jobs', resources, queueLength, jobsLast24h, onlineCount, groupsById });
   });
 
-  router.get('/resources', (req, res) => {
+  router.get('/runners', (req, res) => {
     const groupsById = Object.fromEntries(services.groups.list().map((g) => [g.id, g])),
       q = search.normalizeQuery(req.query.q),
       terms = search.parseTerms(q),
@@ -518,7 +527,7 @@ function createWebRouter({ services, config }){
       pagination = listPrefs.paginate(sorted.length, size, req.query.page),
       pageUrl = (changes) => view.urlFor({ page: pagination.page, ...changes });
     res.render('resources/list', {
-      title: 'Resources',
+      title: 'Runners',
       active: 'resources',
       liveTopics: 'resources',
       resources: withActiveJobs(sorted.slice(pagination.offset, pagination.offset + pagination.limit)),
@@ -527,21 +536,21 @@ function createWebRouter({ services, config }){
     });
   });
 
-  router.post('/resources/:id/maintenance', (req, res) => {
+  router.post('/runners/:id/maintenance', (req, res) => {
     services.registry.setMaintenance(req.params.id, req.body.enabled === '1');
-    res.redirect(returnTo(req, '/resources'));
+    res.redirect(returnTo(req, '/runners'));
   });
 
   // Cancel whatever the Client is doing (resource card): its job, a manual
   // local lock, or a self-update hold (README §10). The Client applies the
   // lock/update ones via heartbeat commands; a job is canceled right here.
-  router.post('/resources/:id/cancel-activity', (req, res) => {
+  router.post('/runners/:id/cancel-activity', (req, res) => {
     const r = services.registry.get(req.params.id),
       job = r && services.jobs.activeForResource(r.id),
       activity = r?.activity?.state;
     try {
       if (!r){
-        throw Object.assign(new Error('Unknown resource'), { status: 404 });
+        throw Object.assign(new Error('Unknown runner'), { status: 404 });
       }
       if (job){
         services.jobs.cancel(job.id, { isAdmin: true });
@@ -572,10 +581,10 @@ function createWebRouter({ services, config }){
     catch (err){
       flash(req, 'danger', err.message);
     }
-    res.redirect(returnTo(req, '/resources'));
+    res.redirect(returnTo(req, '/runners'));
   });
 
-  router.post('/resources/:id/remove', (req, res) => {
+  router.post('/runners/:id/remove', (req, res) => {
     try {
       const { resource: r, pending, stoppedJob, canceledJobs } = services.jobs.removeResource(req.params.id, {
         by: req.session.user.username,
@@ -592,12 +601,12 @@ function createWebRouter({ services, config }){
     catch (err){
       flash(req, 'danger', err.message);
     }
-    res.redirect(returnTo(req, '/resources'));
+    res.redirect(returnTo(req, '/runners'));
   });
 
   // Reboot now (resource card footer): cancels a running job, then the
   // Client reboots its host on its next heartbeat (jobs.requestReboot).
-  router.post('/resources/:id/reboot', (req, res) => {
+  router.post('/runners/:id/reboot', (req, res) => {
     try {
       const { resource: r, canceledJob } = services.jobs.requestReboot(req.params.id, { by: req.session.user.username });
       flash(req, 'warning', `Rebooting ${r.name}'s host on its next heartbeat.` + (canceledJob ? `\nCanceled its running job ${canceledJob}.` : ''));
@@ -605,7 +614,7 @@ function createWebRouter({ services, config }){
     catch (err){
       flash(req, 'danger', err.message);
     }
-    res.redirect(returnTo(req, '/resources'));
+    res.redirect(returnTo(req, '/runners'));
   });
 
   // "Connected USB devices" tab (public/js/usb-scan.js): Refresh queues a
@@ -621,7 +630,7 @@ function createWebRouter({ services, config }){
     };
   }
 
-  router.post('/resources/:id/usb-scan', (req, res) => {
+  router.post('/runners/:id/usb-scan', (req, res) => {
     try {
       services.registry.requestUsbScan(req.params.id, { by: req.session.user.username });
       res.json(usbScanView(req, services.registry.get(req.params.id)));
@@ -631,16 +640,16 @@ function createWebRouter({ services, config }){
     }
   });
 
-  router.get('/resources/:id/usb-scan', (req, res) => {
+  router.get('/runners/:id/usb-scan', (req, res) => {
     const r = services.registry.get(req.params.id);
     if (!r){
-      return res.status(404).json({ error: 'Unknown resource' });
+      return res.status(404).json({ error: 'Unknown runner' });
     }
     res.set('Cache-Control', 'no-store').json(usbScanView(req, r));
   });
 
   // Rename (resource card, Name row); empty = back to the Client's own name.
-  router.post('/resources/:id/rename', (req, res) => {
+  router.post('/runners/:id/rename', (req, res) => {
     try {
       const before = services.registry.get(req.params.id)?.name,
         r = services.registry.rename(req.params.id, req.body.name, { by: req.session.user.username });
@@ -651,13 +660,13 @@ function createWebRouter({ services, config }){
     catch (err){
       flash(req, 'danger', err.message);
     }
-    res.redirect(returnTo(req, '/resources'));
+    res.redirect(returnTo(req, '/runners'));
   });
 
   // Capabilities (resource card, Config tab): public/js/client-config.js
   // sends the edited hw/sw section as JSON in `config`. Applied by the Client
   // on its next heartbeat, then it restarts once idle.
-  router.post('/resources/:id/config', (req, res) => {
+  router.post('/runners/:id/config', (req, res) => {
     try {
       let config;
       try {
@@ -673,12 +682,12 @@ function createWebRouter({ services, config }){
     catch (err){
       flash(req, 'danger', err.message);
     }
-    res.redirect(returnTo(req, '/resources'));
+    res.redirect(returnTo(req, '/runners'));
   });
 
   // Groups tab (resource card): the Client's group membership, as a config
   // revision the Client writes to its file (registry.setClientGroups).
-  router.post('/resources/:id/groups', (req, res) => {
+  router.post('/runners/:id/groups', (req, res) => {
     try {
       const ids = [].concat(req.body.groups || []).filter((g) => typeof g === 'string' && g),
         r = services.registry.setClientGroups(req.params.id, ids, {
@@ -691,12 +700,12 @@ function createWebRouter({ services, config }){
     catch (err){
       flash(req, 'danger', err.message);
     }
-    res.redirect(returnTo(req, '/resources'));
+    res.redirect(returnTo(req, '/runners'));
   });
 
   // Export (resource card, admins — the file holds the join key): the
   // Client's config file as JSON, secrets excluded.
-  router.get('/resources/:id/config/export', (req, res) => {
+  router.get('/runners/:id/config/export', (req, res) => {
     try {
       const r = services.registry.get(req.params.id),
         file = services.registry.exportClientConfig(req.params.id);
@@ -704,13 +713,13 @@ function createWebRouter({ services, config }){
     }
     catch (err){
       flash(req, 'danger', err.message);
-      res.redirect('/resources');
+      res.redirect('/runners');
     }
   });
 
   // Import (resource card, public/js/config-import.js): a config file, applied
   // by the Client on its next heartbeat like a Config tab Save.
-  router.post('/resources/:id/config/import', (req, res) => {
+  router.post('/runners/:id/config/import', (req, res) => {
     try {
       let file;
       try {
@@ -727,12 +736,12 @@ function createWebRouter({ services, config }){
     catch (err){
       flash(req, 'danger', err.message);
     }
-    res.redirect(returnTo(req, '/resources'));
+    res.redirect(returnTo(req, '/runners'));
   });
 
   // Scheduled host reboot (resource card): save a cron expression, or clear
   // it; the Client applies it on its next heartbeat.
-  router.post('/resources/:id/reboot-schedule', (req, res) => {
+  router.post('/runners/:id/reboot-schedule', (req, res) => {
     try {
       const cron = req.body.clear === '1' ? '' : req.body.cron,
         r = services.registry.setRebootSchedule(req.params.id, cron, { by: req.session.user.username });
@@ -743,17 +752,17 @@ function createWebRouter({ services, config }){
     catch (err){
       flash(req, 'danger', err.message);
     }
-    res.redirect(returnTo(req, '/resources'));
+    res.redirect(returnTo(req, '/runners'));
   });
 
-  router.post('/resources/:id/rotate-token', requireAdminRole, (req, res) => {
+  router.post('/runners/:id/rotate-token', requireAdminRole, (req, res) => {
     const { generateToken, hashToken } = require('../services/tokens');
     const token = generateToken('res');
     services.db.prepare('UPDATE resources SET token_hash = ? WHERE id = ?').run(hashToken(token), req.params.id);
     services.events.record('resource', req.params.id, 'resource.token_rotated', {});
     // Sticky: shown only once, so it mustn't close before it's copied.
-    flash(req, 'warning', `New resource token (copy it now):\n${token}`, { sticky: true });
-    res.redirect(returnTo(req, '/resources'));
+    flash(req, 'warning', `New runner token (copy it now):\n${token}`, { sticky: true });
+    res.redirect(returnTo(req, '/runners'));
   });
 
   // Self-update (README §10.2). Clients get a `self-update` heartbeat
@@ -797,13 +806,13 @@ function createWebRouter({ services, config }){
       parts.push('Latest Client version unknown.');
     }
     else if (!connected.length){
-      parts.push('No connected resources.');
+      parts.push('No connected runners.');
     }
     else if (outdated.length){
-      parts.push(`${outdated.length} of ${connected.length} connected resource(s) can update to Client v${s.latest.client}: ${names(outdated)}.`);
+      parts.push(`${outdated.length} of ${connected.length} connected runner(s) can update to Client v${s.latest.client}: ${names(outdated)}.`);
     }
     else {
-      parts.push(`All ${connected.length} connected resource(s) run the latest Client (v${s.latest.client}).`);
+      parts.push(`All ${connected.length} connected runner(s) run the latest Client (v${s.latest.client}).`);
     }
     if (unknown.length){
       parts.push(`Version unknown (Client too old to report it): ${names(unknown)}.`);
@@ -833,20 +842,20 @@ function createWebRouter({ services, config }){
     });
   });
 
-  router.post('/resources/update-all', updateAction(async () => {
+  router.post('/runners/update-all', updateAction(async () => {
     const version = await services.updates.targetVersion('client'),
       n = services.registry.requestUpdateAll(version);
-    return `Requested update to client v${version} on ${n} resource(s).`;
+    return `Requested update to client v${version} on ${n} runner(s).`;
   }));
 
-  router.post('/resources/:id/update', updateAction(async (req) => {
+  router.post('/runners/:id/update', updateAction(async (req) => {
     // Cancel (next to the version): withdraw the request and, if the host is
     // already holding for the update, abort that too (the Client's next
     // heartbeat) — the one control for canceling a Client update.
     if (req.body.cancel === '1'){
       const r = services.registry.get(req.params.id);
       if (!r){
-        throw Object.assign(new Error('Unknown resource'), { status: 404 });
+        throw Object.assign(new Error('Unknown runner'), { status: 404 });
       }
       services.registry.setUpdateTo(r.id, null);
       if (r.activity?.state === 'update-hold'){
@@ -1069,7 +1078,7 @@ function createWebRouter({ services, config }){
 
   router.post('/groups/:id/delete', (req, res) => {
     services.groups.remove(req.params.id);
-    flash(req, 'warning', 'Group deleted; any resource that listed it just stopped matching on it.');
+    flash(req, 'warning', 'Group deleted; any runner that listed it just stopped matching on it.');
     res.redirect('/groups');
   });
 
@@ -1469,7 +1478,7 @@ function createWebRouter({ services, config }){
       if (req.body.groupId !== undefined && (req.body.groupId || null) !== (before.group_id || null)){
         const group = req.body.groupId ? services.groups.get(req.body.groupId) : null;
         services.agents.setGroup(req.params.id, req.body.groupId);
-        flash(req, 'success', group ? `"${agent.name}" now runs its jobs in group ${group.name}.` : `"${agent.name}" now runs its jobs on any resource.`);
+        flash(req, 'success', group ? `"${agent.name}" now runs its jobs in group ${group.name}.` : `"${agent.name}" now runs its jobs on any runner.`);
       }
     }
     catch (err){

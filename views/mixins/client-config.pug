@@ -129,7 +129,7 @@ mixin groupsPane(r, returnTo, groupsById)
     else
       form(
         method="post"
-        action=`/resources/${r.id}/groups`
+        action=`/runners/${r.id}/groups`
         data-confirm=`Save the groups of ${r.name}? They apply at once; the Client also writes them to its config file and restarts once it has no job running.`
         data-confirm-title="Save Client groups?"
         data-confirm-ok="Save"
@@ -173,7 +173,7 @@ mixin configPanes(r, returnTo, groupsById)
   else
     form(
       method="post"
-      action=`/resources/${r.id}/config`
+      action=`/runners/${r.id}/config`
       data-client-config="hw"
       data-confirm=`Apply these devices to ${r.name}? The Client writes them to its config file on its next heartbeat and restarts once it has no job running.`
       data-confirm-title="Save Client devices?"

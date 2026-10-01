@@ -29,7 +29,7 @@ block content
     if job.spec.user
       dt.col-sm-2 User
       dd.col-sm-10= job.spec.user
-    dt.col-sm-2 Resource
+    dt.col-sm-2 Runner
     dd.col-sm-10= job.resource ? job.resource.name : job.resource_name ? `${job.resource_name} (removed)` : '—'
     dt.col-sm-2 Target
     dd.col-sm-10= `${job.spec.target.type} — ${(job.spec.target.labels || []).join(', ')}`

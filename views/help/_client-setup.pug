@@ -74,7 +74,7 @@
         tr
           td: code name
           td No
-          td Resource name. Under systemd, the instance name (#[code thub-client@dut1] → #[code dut1]) is used unless an admin renames it on the dashboard.
+          td Runner name. Under systemd, the instance name (#[code thub-client@dut1] → #[code dut1]) is used unless an admin renames it on the dashboard.
         tr
           td: code labels
           td No
@@ -82,7 +82,7 @@
         tr
           td: code groups
           td No
-          td The resource groups this Client belongs to. Set them on its resource card (Groups tab), which writes them here.
+          td The runner groups this Client belongs to. Set them on its runner card (Groups tab), which writes them here.
         tr
           td: code varDir
           td No
@@ -101,7 +101,7 @@
           td An explicit identity UUID (or #[code THUB_CLIENT_ID]). Normally generated once and kept in #[code .client-id].
   p.small.
     SW Clients have no settings of their own: they run whatever DUT image a job brings (#[code --docker-image]).
-    Admins can also edit an HW Client's devices from its resource card (#[strong ST-Link | UART | DUT USB]
+    Admins can also edit an HW Client's devices from its runner card (#[strong ST-Link | UART | DUT USB]
     tabs). The tabs show the config the Client runs, as it reported it at its last start, or a saved
     change it hasn't applied yet. #[strong Connected USB devices → Import to config] fills them from the host's #[code lsusb].
     The card's #[strong Export] and #[strong Import] icons download a Client's config file (never its

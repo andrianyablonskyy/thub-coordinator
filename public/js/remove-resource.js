@@ -29,8 +29,8 @@
       field('job').textContent = job;
       field('job').href = `/jobs/${encodeURIComponent(job)}`;
       field('job-text').textContent = job;
-      field('form').action = `/resources/${encodeURIComponent(id)}/remove`;
-      field('return').value = returnTo || '/resources';
+      field('form').action = `/runners/${encodeURIComponent(id)}/remove`;
+      field('return').value = returnTo || '/runners';
 
       // Clicked from inside a resource card: close that first — Bootstrap
       // doesn't stack modals.

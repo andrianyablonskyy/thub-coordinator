@@ -63,13 +63,13 @@
           td The shared secret Clients self-register with. Unset or #[code null] turns registration off (#[code 503]).
         tr
           td: code heartbeat.*
-          td Clients heartbeat every #[code intervalSec] — the Coordinator tells them, so it's set here only (and on Settings). After #[code missedLimit] misses a resource goes #[code OUT_OF_SERVICE] and its job becomes #[code LOST]; #[code sweepIntervalSec] is how often that's checked.
+          td Clients heartbeat every #[code intervalSec] — the Coordinator tells them, so it's set here only (and on Settings). After #[code missedLimit] misses a runner goes #[code OUT_OF_SERVICE] and its job becomes #[code LOST]; #[code sweepIntervalSec] is how often that's checked.
         tr
           td: code scheduler.*
           td #[code assignAckTimeoutSec]: how long an assignment waits for the Client to accept. #[code requeueOnLost]: retry a #[code LOST] job once. #[code maxQueuedPerAgent]: queue limit per agent.
         tr
           td: code rateLimit.*
-          td Requests per minute per caller (agent/resource token, dashboard user, else IP; default 500), and sign-in attempts per IP (default 10). Past it: #[code 429] with #[code Retry-After]. #[code 0] turns a limit off.
+          td Requests per minute per caller (agent/runner token, dashboard user, else IP; default 500), and sign-in attempts per IP (default 10). Past it: #[code 429] with #[code Retry-After]. #[code 0] turns a limit off.
         tr
           td: code jobs.*
           td Default and maximum job timeout, in seconds.
@@ -152,5 +152,5 @@
   p.small.mb-0.
     The Coordinator checks npm for new Coordinator, Agent and Client versions. Admins update the Coordinator
     with #[strong Update app] in the navbar, and Agents and Clients from the #[a(href="/admin/agents") Agents]
-    and #[a(href="/resources") Resources] pages. Clients install an update only between jobs.
+    and #[a(href="/runners") Runners] pages. Clients install an update only between jobs.
     Manual alternatives: #[code thub-admin self-update], #[code thub self-update] and #[code thub-client self-update].
