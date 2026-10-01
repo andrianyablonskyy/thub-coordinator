@@ -627,6 +627,24 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, '/resources'));
   });
 
+  // Groups tab (resource card): the Client's group membership, as a config
+  // revision the Client writes to its file (registry.setClientGroups).
+  router.post('/resources/:id/groups', requireAdminRole, (req, res) => {
+    try {
+      const ids = [].concat(req.body.groups || []).filter((g) => typeof g === 'string' && g),
+        r = services.registry.setClientGroups(req.params.id, ids, {
+          by: req.session.user.username,
+          knownGroupIds: services.groups.list().map((g) => g.id)
+        });
+      flash(req, 'success', `Groups of ${r.name} saved: ${r.group_ids.length ? `${r.group_ids.length} group(s)` : 'none'} — in effect now.\n` +
+        'The Client writes them to its config file on its next heartbeat, then restarts once it has no job running.');
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/resources'));
+  });
+
   // Export (resource card, admins — the file holds the join key): the
   // Client's config file as JSON, secrets excluded.
   router.get('/resources/:id/config/export', requireAdminRole, (req, res) => {

@@ -696,6 +696,39 @@ function createRegistryService(db, { bus, events }){
     return { resource: get(resourceId), ignored };
   }
 
+  // Groups tab (resource card): the Client's group membership. It belongs to
+  // the Client's config file (`groups`, which every registration reports),
+  // so it goes out as the next config revision — like an Import's top-level
+  // fields — for the Client to write there and restart with. The Coordinator
+  // applies it at once too, so scheduling follows without waiting for that.
+  // Fields of an Import not applied yet are carried along, not lost.
+  function setClientGroups(resourceId, groupIds, { by, knownGroupIds } = {}){
+    const r = get(resourceId);
+    if (!r){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    const ids = [...new Set(groupIds)],
+      unknown = knownGroupIds ? ids.filter((id) => !knownGroupIds.includes(id) && !r.group_ids.includes(id)) : [];
+    if (unknown.length){
+      throw Object.assign(new Error(`Unknown group: ${unknown.join(', ')}`), { status: 400 });
+    }
+    // Writing top-level fields needs a Client that reports its config file
+    // (the same that Import needs); an older one would drop them.
+    const desired = r.config_desired || r.client_config;
+    if (!desired || !r.client_config_file){
+      throw Object.assign(new Error(`${r.name} is too old to take its groups from the dashboard — update its Client first`), { status: 409 });
+    }
+    const revision = r.config_revision + 1,
+      fields = { ...(pendingImport(r) || {}), groups: ids };
+    db.transaction(() => {
+      db.prepare(`UPDATE resources SET config_desired = ?, config_revision = ?, config_error = NULL, config_import = ?
+                  WHERE id = ?`).run(JSON.stringify(desired), revision, JSON.stringify({ revision, fields }), resourceId);
+      setGroups(resourceId, ids);
+    })();
+    events.record('resource', resourceId, 'resource.groups_set', { by, revision, groups: ids });
+    return get(resourceId);
+  }
+
   // Export (resource card): the Client's config file as it last reported it
   // (secrets excluded), with what's saved for it but not applied yet — so
   // exporting right after an edit or import gives what the Client will run.
@@ -796,6 +829,7 @@ function createRegistryService(db, { bus, events }){
     setRebootSchedule,
     pendingRebootSchedule,
     setClientConfig,
+    setClientGroups,
     pendingConfig,
     importClientConfig,
     exportClientConfig,

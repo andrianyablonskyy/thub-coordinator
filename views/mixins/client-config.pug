@@ -88,8 +88,8 @@ mixin capabilitiesStatus(r)
         span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=r.config_error) refused by the Client
 
 //- The Client's config, as tabs of the resource card next to Details:
-//- HW — ST-Link, UART, DUT USB (its hw-devices section); both — Reboot (the
-//- schedule, its own Save). An SW Client has no settings of its own. The
+//- HW — ST-Link, UART, DUT USB (its hw-devices section); both — Groups
+//- (membership, its own Save) and Reboot (the schedule, its own Save). An SW Client has no settings of its own. The
 //- device tabs share one form and one "Save capabilities"; a tab with
 //- unsaved changes shows ⚠ (public/js/client-config.js).
 mixin configTabItems(r)
@@ -97,9 +97,70 @@ mixin configTabItems(r)
   if r.type === 'hw'
     each t in [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB']]
       +configTab(p, t[0], t[1])
+  +configTab(p, 'groups', 'Groups')
   +configTab(p, 'reboot', 'Reboot')
 
-mixin configPanes(r, returnTo)
+//- Groups tab: which resource groups this Client belongs to (thub run
+//- --group). Saved as a config revision the Client writes to its config
+//- file's `groups` (registry.setClientGroups); in effect on the Coordinator
+//- at once.
+mixin groupsPane(r, returnTo, groupsById)
+  - const p = `cfg-${r.id}`
+  - const canEdit = user.role === 'admin'
+  - const pending = r.config_import && r.config_import.revision > r.config_applied_revision && r.config_import.fields && r.config_import.fields.groups
+  - const all = Object.values(groupsById).sort((a, b) => a.name.localeCompare(b.name))
+  - const unknown = r.group_ids.filter((id) => !groupsById[id])
+  +configPane(p, 'groups')
+    if pending || r.config_error
+      .d-flex.justify-content-end.gap-1.mb-2
+        if pending
+          span.badge.text-bg-warning(
+            data-bs-toggle="tooltip"
+            data-bs-title="In effect on the Coordinator; the Client writes it to its config file on its next heartbeat, then restarts once idle"
+          ) not written to the Client yet
+        if r.config_error
+          span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=r.config_error) refused by the Client
+    if !r.client_config_file
+      p.small.text-body-secondary This Client is too old to take its groups from the dashboard — update it, or set #[code groups] in its config file.
+    if !all.length && !unknown.length
+      p.small.text-body-secondary.mb-0
+        | No groups exist yet.
+        if canEdit
+          |  Create one on #[a(href="/groups") Groups].
+    else
+      form(
+        method="post"
+        action=`/resources/${r.id}/groups`
+        data-confirm=`Save the groups of ${r.name}? They apply at once; the Client also writes them to its config file and restarts once it has no job running.`
+        data-confirm-title="Save Client groups?"
+        data-confirm-ok="Save"
+        data-confirm-tone="primary"
+      )
+        input(type="hidden" name="returnTo" value=returnTo)
+        fieldset(disabled=!canEdit || !r.client_config_file)
+          .list-group.mb-2
+            each g in all
+              label.list-group-item.d-flex.gap-2.align-items-start
+                input.form-check-input.flex-shrink-0.mt-1(type="checkbox" name="groups" value=g.id checked=r.group_ids.includes(g.id))
+                span
+                  span.fw-medium= g.name
+                  if g.comment
+                    span.small.text-body-secondary= ` — ${g.comment}`
+                  br
+                  code.small.text-body-secondary= g.id
+            each id in unknown
+              label.list-group-item.d-flex.gap-2.align-items-start
+                input.form-check-input.flex-shrink-0.mt-1(type="checkbox" name="groups" value=id checked)
+                span
+                  span.text-body-secondary (deleted group)
+                  br
+                  code.small.text-body-secondary= id
+          .form-text A job run with #[code thub run --group &lt;id&gt;] is scheduled only on Clients in that group; one that asks for no group can run on any Client.
+          if canEdit && r.client_config_file
+            .d-flex.justify-content-end.mt-3
+              button.btn.btn-sm.btn-primary(type="submit") Save groups
+
+mixin configPanes(r, returnTo, groupsById)
   - const p = `cfg-${r.id}`
   - const current = r.config_desired || r.client_config
   - const canEdit = user.role === 'admin'
@@ -137,6 +198,7 @@ mixin configPanes(r, returnTo)
           +deviceTable('usbs', 'DUT USB devices', current.usbs || [], ['Device', 'udev devpath'])
           .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-usb) or a /dev path. udev devpath: the USB port it's plugged into.
           +saveCapabilities(canEdit)
+  +groupsPane(r, returnTo, groupsById || {})
   +configPane(p, 'reboot')
     dl.row.mb-0
       +rebootScheduleRow(r, returnTo)
