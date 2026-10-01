@@ -34,7 +34,6 @@
       return compact({
         ...extra,
         ...device(text(tr, 'device')),
-        serial: text(tr, 'serial'),
         baudRate: num(tr, 'baudRate'),
         devpath: text(tr, 'devpath')
       });

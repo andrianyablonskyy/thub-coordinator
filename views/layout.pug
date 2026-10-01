@@ -1,3 +1,11 @@
+//- The signed-in user's avatar, or their initials in a circle.
+mixin navAvatar(px)
+  if user.avatarPath
+    img.rounded-circle.me-2(src=user.avatarPath width=px height=px style="object-fit: cover;")
+  else
+    span.rounded-circle.bg-secondary.text-white.d-inline-flex.align-items-center.justify-content-center.me-2.flex-shrink-0(style=`width: ${px}px; height: ${px}px; font-size: ${Math.round(px / 2)}px;`)
+      = ((user.firstName ? user.firstName[0] : user.username[0]) + (user.lastName ? user.lastName[0] : '')).toUpperCase()
+
 doctype html
 html(lang="en" data-bs-theme=(user && user.theme) || "auto")
   head
@@ -30,6 +38,18 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
         button.navbar-toggler(type="button" data-bs-toggle="collapse" data-bs-target="#nav")
           span.navbar-toggler-icon
         #nav.collapse.navbar-collapse.thub-nav
+          //- Phones/tablets: who you are comes first — name, role, profile,
+          //- sign-out (thub.css .thub-nav-me). Desktop keeps it on the right.
+          if user
+            .thub-nav-me.d-lg-none
+              a.d-flex.align-items-center.text-reset.text-decoration-none.flex-grow-1(href="/profile")
+                +navAvatar(36)
+                span.d-flex.flex-column.lh-sm
+                  span.fw-medium= user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.username
+                  span.small.text-body-secondary= `${roleLabel(user.role)} · profile`
+              form(action="/logout" method="post")
+                button.btn.btn-outline-danger(type="submit" aria-label="Log out")
+                  i.bi.bi-box-arrow-right
           //- Below lg the menu drops down over the page (thub.css .thub-nav,
           //- closed by public/js/actions.js): pages as a two-column grid with
           //- icons, then the tools in a row, then the account row.
@@ -112,22 +132,16 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
               )
                 i.bi.bi-circle-half
             if user
-              li.thub-nav-break(aria-hidden="true")
-              li.nav-item.d-flex.align-items-center.me-3.thub-nav-account
+              li.nav-item.d-none.d-lg-flex.align-items-center.me-3
                 a.nav-link.d-flex.align-items-center.p-0(
                   href="/profile"
                   data-bs-toggle="tooltip"
                   data-bs-placement="bottom"
                   data-bs-title=`Profile settings (${roleLabel(user.role)})`
                 )
-                  if user.avatarPath
-                    img.rounded-circle.me-2(src=user.avatarPath width="24" height="24" style="object-fit: cover;")
-                  else
-                    span.rounded-circle.bg-secondary.text-white.d-inline-flex.align-items-center.justify-content-center.me-2(style="width: 24px; height: 24px; font-size: 12px;")
-                      = ((user.firstName ? user.firstName[0] : user.username[0]) + (user.lastName ? user.lastName[0] : '')).toUpperCase()
+                  +navAvatar(24)
                   span= user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.username
-                  span.small.text-body-secondary.ms-2.d-lg-none= `${roleLabel(user.role)} · profile`
-              li.nav-item.d-flex.align-items-center
+              li.nav-item.d-none.d-lg-flex.align-items-center
                 form(action="/logout" method="post")
                   button.btn.btn-sm.btn-outline-danger(
                     type="submit"

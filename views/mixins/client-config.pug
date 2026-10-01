@@ -5,14 +5,13 @@
 //- what the Client reported at registration.
 
 //- One device row: "Device" is a udev index (1-8) or a /dev path; fields the
-//- form doesn't show (vendorId/productId/subsystem) ride along in data-extra.
+//- form doesn't show (vendorId/productId/subsystem, an ST-Link serial set in
+//- the config file) ride along in data-extra.
 mixin deviceRow(kind, d)
-  - const known = ['index', 'path', 'serial', 'baudRate', 'devpath']
+  - const known = ['index', 'path', 'baudRate', 'devpath']
   - const extra = Object.fromEntries(Object.entries(d || {}).filter(([k]) => !known.includes(k)))
   tr(data-row=kind data-extra=JSON.stringify(extra))
     td: input.form-control.form-control-sm.font-monospace(data-f="device" value=d ? (d.path || d.index || '') : '' placeholder="1 or /dev/…" required)
-    if kind === 'stlinks'
-      td: input.form-control.form-control-sm.font-monospace(data-f="serial" value=d && d.serial || '' placeholder="(from udev)")
     if kind === 'uarts'
       td: input.form-control.form-control-sm(data-f="baudRate" type="number" min="50" value=d && d.baudRate || '' placeholder="115200")
     td: input.form-control.form-control-sm.font-monospace(data-f="devpath" value=d && d.devpath || '' placeholder="3.3.4.1")
@@ -162,7 +161,13 @@ mixin groupsPane(r, returnTo, groupsById)
 
 mixin configPanes(r, returnTo, groupsById)
   - const p = `cfg-${r.id}`
-  - const current = r.config_desired || r.client_config
+  //- What the Client runs — its config as it reported it at its last start
+  //- — unless a saved revision is still on its way to it: then that one, so
+  //- it can be checked or changed before it's applied. (Always preferring the
+  //- saved revision showed an old one forever, after the file changed on the
+  //- host or an Import.)
+  - const pendingRevision = r.config_desired && r.config_applied_revision < r.config_revision
+  - const current = pendingRevision ? r.config_desired : (r.client_config || r.config_desired)
   - const canEdit = can.operate
   if r.type !== 'hw'
     //- no device tabs
@@ -185,8 +190,8 @@ mixin configPanes(r, returnTo, groupsById)
       fieldset(disabled=!canEdit)
         +configPane(p, 'stlinks')
           +capabilitiesStatus(r)
-          +deviceTable('stlinks', 'ST-Link probes', current.stlinks || [], ['Device', 'Serial', 'udev devpath'])
-          .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-stlink) or a /dev path. The serial is looked up from the udev symlink when empty.
+          +deviceTable('stlinks', 'ST-Link probes', current.stlinks || [], ['Device', 'udev devpath'])
+          .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-stlink) or a /dev path. Which probe a job uses is up to its #[code --command] (#[code $THUB_DUT_STLINK_&lt;n&gt;]).
           +saveCapabilities(canEdit)
         +configPane(p, 'uarts')
           +capabilitiesStatus(r)

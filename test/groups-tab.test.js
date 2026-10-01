@@ -95,3 +95,48 @@ test('Groups tab: keeps other pending changes; refuses unknown groups and Client
   const old = register(services, 'lab-old', { configFile: null });
   assert.throws(() => services.registry.setClientGroups(old, [g.id], { knownGroupIds: [g.id] }), /too old to take its groups/);
 });
+
+test('device tabs show what the Client runs — not an old saved revision; groups/import/export build on it', async (t) => {
+  const { base, services, admin } = await start(t),
+    reg = services.registry,
+    register = (devpath) => reg.registerAuto({
+      clientId: 'hw1', name: 'lab-hw-01', type: 'hw', labels: [],
+      config: { stlinks: [{ index: 1, devpath }] }, configFile: { name: 'lab-hw-01', type: 'hw' }
+    }).resourceId,
+    id = register('1.1'),
+    devpaths = async () => {
+      const html = await (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text(),
+        table = html.slice(html.indexOf(`id="cfg-${id}-stlinks"`), html.indexOf(`id="cfg-${id}-uarts"`));
+      return [...table.matchAll(/data-f="devpath" value="([^"]*)"/g)].map((m) => m[1]).filter(Boolean); // not the blank add-row template
+    };
+  assert.deepEqual(await devpaths(), ['1.1']); // as the Client reported it
+
+  // Saved on the dashboard, not applied yet: the tab shows the saved one.
+  reg.setClientConfig(id, { stlinks: [{ index: 1, devpath: '2.2' }] }, { by: 'admin' });
+  assert.deepEqual(await devpaths(), ['2.2']);
+
+  // Applied — and later the file was edited on the host; the Client restarts
+  // and reports 3.3. That's what the tab shows now, not the old 2.2.
+  services.db.prepare('UPDATE resources SET config_applied_revision = config_revision WHERE id = ?').run(id);
+  register('3.3');
+  assert.deepEqual(await devpaths(), ['3.3']);
+
+  // …and what a groups save, an export and an Import without a section send.
+  const g = services.groups.create({ name: 'g' });
+  reg.setClientGroups(id, [g.id], { by: 'admin', knownGroupIds: [g.id] });
+  assert.deepEqual(reg.pendingConfig(id).config, { stlinks: [{ index: 1, devpath: '3.3' }] }); // not 2.2 again
+  assert.deepEqual(reg.exportClientConfig(id)['hw-devices'], { stlinks: [{ index: 1, devpath: '3.3' }] });
+});
+
+test('ST-Link tab has no Serial field; a serial set in the config file is kept on Save', async (t) => {
+  const { base, services, admin } = await start(t),
+    id = services.registry.registerAuto({
+      clientId: 'hw2', name: 'lab-hw-02', type: 'hw', labels: [],
+      config: { stlinks: [{ index: 1, serial: '066DFF48', devpath: '1.2' }] }, configFile: { name: 'lab-hw-02', type: 'hw' }
+    }).resourceId,
+    html = await (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text(),
+    table = html.slice(html.indexOf(`id="cfg-${id}-stlinks"`), html.indexOf(`id="cfg-${id}-uarts"`));
+  assert.doesNotMatch(table, /data-f="serial"|>Serial</);
+  // Rides along in data-extra, which public/js/client-config.js spreads back into the row.
+  assert.match(table, /data-extra="\{&quot;serial&quot;:&quot;066DFF48&quot;\}"/);
+});

@@ -655,6 +655,17 @@ function createRegistryService(db, { bus, events }){
     return get(resourceId);
   }
 
+  // The Client's hw/sw section as it stands: what it reported at its last
+  // start, unless a saved revision hasn't reached it yet — then that one.
+  // The base for a revision that only changes something else (groups, an
+  // Import without a section) and for Export: the saved one alone could be
+  // older than the Client's file, and sending it would undo what changed
+  // there since.
+  function currentSection(r){
+    const pending = r.config_desired && r.config_applied_revision < r.config_revision;
+    return pending ? r.config_desired : (r.client_config || r.config_desired);
+  }
+
   // { revision, type, config[, file] } while the Client hasn't applied the
   // saved one; `file`: an import's other fields, until it's applied.
   function pendingConfig(resourceId){
@@ -684,7 +695,7 @@ function createRegistryService(db, { bus, events }){
     if (!valid){
       throw Object.assign(new Error(`Can't import this config into ${r.name}: ${errors.join('; ')}`), { status: 400 });
     }
-    const desired = section || r.config_desired || r.client_config;
+    const desired = section || currentSection(r);
     if (!desired){
       throw Object.assign(new Error(`Can't import this config into ${r.name}: it has no "${HW_DEVICES_SECTION}" section, and the Client hasn't reported one`),
         { status: 400 });
@@ -714,7 +725,7 @@ function createRegistryService(db, { bus, events }){
     }
     // Writing top-level fields needs a Client that reports its config file
     // (the same that Import needs); an older one would drop them.
-    const desired = r.config_desired || r.client_config;
+    const desired = currentSection(r);
     if (!desired || !r.client_config_file){
       throw Object.assign(new Error(`${r.name} is too old to take its groups from the dashboard — update its Client first`), { status: 409 });
     }
@@ -740,7 +751,7 @@ function createRegistryService(db, { bus, events }){
     }
     // Re-shared: a file stored from an older Client may still say hw / sw.
     const base = shareableClientConfigFile(r.client_config_file || { name: r.reported_name || r.name, type: r.type, labels: r.labels }),
-      section = r.type === 'hw' ? r.config_desired || r.client_config : null;
+      section = r.type === 'hw' ? currentSection(r) : null;
     return { ...base, ...(pendingImport(r) || {}), type: r.type, ...(section ? { [HW_DEVICES_SECTION]: section } : {}) };
   }
 
