@@ -16,5 +16,10 @@
 // Delegated (one instance per element, created on first hover/focus), so
 // content swapped in by live updates (public/js/live.js) gets tooltips too.
 (function (){
+  // On touch screens a tap would open a tooltip and leave it stuck there
+  // (no hover to end it) — over the mobile menu, too: no tooltips there.
+  if (!window.matchMedia('(hover: hover)').matches){
+    return;
+  }
   new bootstrap.Tooltip(document.body, { selector: '[data-bs-toggle="tooltip"]' });
 })();

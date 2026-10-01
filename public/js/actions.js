@@ -39,6 +39,29 @@
     }
   });
 
+  // The collapsed (mobile) menu drops down over the page (thub.css
+  // .thub-nav): close it on a tap outside, on Esc, and once a page in it is
+  // chosen — over the content, it shouldn't stay open in the way.
+  const nav = document.getElementById('nav'),
+    closeNav = () => {
+      if (nav?.classList.contains('show')){
+        window.bootstrap?.Collapse.getOrCreateInstance(nav, { toggle: false }).hide();
+      }
+    };
+  document.addEventListener('click', (e) => {
+    if (!nav?.classList.contains('show')){
+      return;
+    }
+    if (!e.target.closest('#nav, .navbar-toggler') || e.target.closest('#nav a[href]')){
+      closeNav();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape'){
+      closeNav();
+    }
+  });
+
   // <form data-submit-busy>: disable its button and show a spinner while
   // the request runs (e.g. the navbar's check for updates).
   document.addEventListener('submit', (e) => {

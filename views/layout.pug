@@ -29,23 +29,18 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
               )= `v${updates.coordinatorUpdate} available`
         button.navbar-toggler(type="button" data-bs-toggle="collapse" data-bs-target="#nav")
           span.navbar-toggler-icon
-        #nav.collapse.navbar-collapse
-          ul.navbar-nav.me-auto
-            if user
+        #nav.collapse.navbar-collapse.thub-nav
+          //- Below lg the menu drops down over the page (thub.css .thub-nav,
+          //- closed by public/js/actions.js): pages as a two-column grid with
+          //- icons, then the tools in a row, then the account row.
+          - const pages = user ? [['/', 'overview', 'Overview', 'speedometer2'], ['/resources', 'resources', 'Resources', 'hdd-rack'], ['/groups', 'groups', 'Groups', 'collection'], ['/jobs', 'jobs', 'Jobs', 'list-task']].concat(user.role === 'admin' ? [['/admin/agents', 'agents', 'Agents', 'person-badge'], ['/admin/settings', 'settings', 'Settings', 'gear']] : []) : []
+          ul.navbar-nav.me-auto.thub-nav-pages
+            each pg in pages
               li.nav-item
-                a.nav-link(href="/" class=active === 'overview' ? 'active' : '') Overview
-              li.nav-item
-                a.nav-link(href="/resources" class=active === 'resources' ? 'active' : '') Resources
-              li.nav-item
-                a.nav-link(href="/groups" class=active === 'groups' ? 'active' : '') Groups
-              li.nav-item
-                a.nav-link(href="/jobs" class=active === 'jobs' ? 'active' : '') Jobs
-              if user.role === 'admin'
-                li.nav-item
-                  a.nav-link(href="/admin/agents" class=active === 'agents' ? 'active' : '') Agents
-                li.nav-item
-                  a.nav-link(href="/admin/settings" class=active === 'settings' ? 'active' : '') Settings
-          ul.navbar-nav
+                a.nav-link(href=pg[0] class=active === pg[1] ? 'active' : '' aria-current=active === pg[1] ? 'page' : false)
+                  i.bi.me-2.d-lg-none(class=`bi-${pg[3]}` aria-hidden="true")
+                  = pg[2]
+          ul.navbar-nav.thub-nav-tools
             if user && liveTopics
               //- Live-update status, driven by public/js/live.js.
               li.nav-item.d-flex.align-items-center.me-3
@@ -117,7 +112,8 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
               )
                 i.bi.bi-circle-half
             if user
-              li.nav-item.d-flex.align-items-center.me-3
+              li.thub-nav-break(aria-hidden="true")
+              li.nav-item.d-flex.align-items-center.me-3.thub-nav-account
                 a.nav-link.d-flex.align-items-center.p-0(
                   href="/profile"
                   data-bs-toggle="tooltip"
@@ -130,6 +126,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                     span.rounded-circle.bg-secondary.text-white.d-inline-flex.align-items-center.justify-content-center.me-2(style="width: 24px; height: 24px; font-size: 12px;")
                       = ((user.firstName ? user.firstName[0] : user.username[0]) + (user.lastName ? user.lastName[0] : '')).toUpperCase()
                   span= user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.username
+                  span.small.text-body-secondary.ms-2.d-lg-none= `${user.role} · profile`
               li.nav-item.d-flex.align-items-center
                 form(action="/logout" method="post")
                   button.btn.btn-sm.btn-outline-danger(
