@@ -13,7 +13,7 @@
   h3.h6 Get a token
   p.small.
     An admin registers an agent on #[a(href="/admin/agents") Agents] (or with #[code thub-admin agent add]) and passes you
-    its token, which is shown only once. The agent's #[strong kind] decides the job id prefix and the default priority:
+    its token, which is shown only once. The agent's #[strong kind] decides the job id prefix, the default priority and which jobs it can see:
   table.table.table-sm.small.w-auto
     thead
       tr
@@ -21,17 +21,20 @@
         th For
         th Job ids
         th Default priority
+        th Can see
     tbody
       tr
         td: code ci
         td Pipelines
         td: code A-00001…
         td 50
+        td every job (details, log)
       tr
         td: code cli
         td Developers
         td: code M-00001…
         td 60 (so a busy pipeline doesn't starve them)
+        td only the jobs it submitted
 
   h3.h6 Configure
   +code('Save the settings once').

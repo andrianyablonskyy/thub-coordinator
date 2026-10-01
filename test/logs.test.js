@@ -113,7 +113,7 @@ test('RAW: the whole log as plain text, for as long as the job exists', async (t
 test('artifacts are gone: old Clients\' uploads are discarded, old Agents get none, the store is removed', async (t) => {
   const { base, services, job } = await setup(t, 3),
     { resourceId, resourceToken } = services.registry.registerAuto({ clientId: 'c9', name: 'lab-hw-09', type: 'hw', labels: [] }),
-    { token: agentToken } = services.agents.create({ name: 'old-agent', kind: 'cli' });
+    { token: agentToken } = services.agents.create({ name: 'old-agent', kind: 'ci' });
   services.db.prepare('UPDATE jobs SET resource_id = ? WHERE id = ?').run(resourceId, job.id);
 
   // An old Client still uploads its results after the job: accepted (so the

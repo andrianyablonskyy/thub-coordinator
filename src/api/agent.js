@@ -24,7 +24,21 @@ function createAgentRouter({ services, config }){
     // the /api/v1 prefix with the resource and admin routers — a blanket
     // router-level middleware would run for their paths too, before route
     // matching even happens, and reject them for lacking an agent token.
-    auth = requireRole('agent');
+    auth = requireRole('agent'),
+
+    // Which jobs an agent may see (README §12): a `ci` token (pipelines) all
+    // of them; a `cli` token (a person's own `thub`) only the jobs it
+    // submitted. Anyone else's job is answered exactly like a job that
+    // doesn't exist (404), so a cli token can't tell which ids are in use.
+    canSee = (agent, job) => agent.kind === 'ci' || job.agent_id === agent.id,
+    visibleJob = (req, res, next) => {
+      const job = services.jobs.get(req.params.id);
+      if (!job || !canSee(req.agent, job)){
+        return res.status(404).json({ error: 'Unknown job' });
+      }
+      req.job = job;
+      next();
+    };
 
   router.post('/jobs', auth, (req, res, next) => {
     try {
@@ -40,12 +54,9 @@ function createAgentRouter({ services, config }){
     }
   });
 
-  router.get('/jobs/:id', auth, (req, res) => {
-    const job = services.jobs.get(req.params.id);
-    if (!job){
-      return res.status(404).json({ error: 'Unknown job' });
-    }
-    const resource = job.resource_id ? services.registry.get(job.resource_id) : null;
+  router.get('/jobs/:id', auth, visibleJob, (req, res) => {
+    const { job } = req,
+      resource = job.resource_id ? services.registry.get(job.resource_id) : null;
     res.json({
       ...services.jobs.publicJob(job),
       resource: resource ? { id: resource.id, name: resource.name } : job.resource_name ? { id: null, name: job.resource_name } : null
@@ -57,13 +68,14 @@ function createAgentRouter({ services, config }){
       state: req.query.state,
       source: req.query.source,
       agentId: req.agent.id,
-      mine: req.query.mine === 'true' || req.query.mine === '1',
+      // A cli token's list is always its own jobs (canSee above).
+      mine: req.agent.kind !== 'ci' || req.query.mine === 'true' || req.query.mine === '1',
       limit: req.query.limit ? Number(req.query.limit) : undefined
     });
     res.json({ jobs: jobs.map(services.jobs.publicJob) });
   });
 
-  router.post('/jobs/:id/cancel', auth, (req, res, next) => {
+  router.post('/jobs/:id/cancel', auth, visibleJob, (req, res, next) => {
     try {
       const job = services.jobs.cancel(req.params.id, { agentId: req.agent.id, isAdmin: false });
       res.json(services.jobs.publicJob(job));
@@ -73,19 +85,19 @@ function createAgentRouter({ services, config }){
     }
   });
 
-  router.get('/jobs/:id/logs', auth, (req, res) => {
+  router.get('/jobs/:id/logs', auth, visibleJob, (req, res) => {
     const after = Number(req.query.after || 0),
       limit = req.query.limit ? Number(req.query.limit) : undefined;
     res.json({ lines: services.logs.listSince(req.params.id, after, limit) });
   });
 
-  router.get('/jobs/:id/logs/stream', auth, (req, res) => {
+  router.get('/jobs/:id/logs/stream', auth, visibleJob, (req, res) => {
     attachJobStream(req, res, { jobId: req.params.id, services });
   });
 
   // No artifacts are stored any more (README §9); an Agent older than that
   // still asks after a finished job's `thub status`, so answer "none".
-  router.get('/jobs/:id/artifacts', auth, (req, res) => {
+  router.get('/jobs/:id/artifacts', auth, visibleJob, (req, res) => {
     res.json({ artifacts: [] });
   });
 
