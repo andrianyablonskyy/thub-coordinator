@@ -16,6 +16,10 @@ Restart=always
 RestartSec=2
 NoNewPrivileges=yes
 ProtectSystem=strict
+# A private, writable /tmp: ProtectSystem=strict makes the shared one
+# read-only, and SQLite needs temp files for big sorts (a migration that
+# rebuilds a table and its index) — without them: SQLITE_IOERR_GETTEMPPATH.
+PrivateTmp=yes
 ReadWritePaths=/var/lib/thub/var/lib/thub
 
 [Install]
