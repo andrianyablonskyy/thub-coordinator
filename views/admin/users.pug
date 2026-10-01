@@ -1,0 +1,249 @@
+extends ../layout
+include ../mixins/list-controls
+
+//- Users (§10.3, admins). Roles: user — the Agent only; maintainer — the
+//- dashboard without its security features; admin — everything.
+//- Role picker: names in the list, the chosen role's description below it
+//- (kept in step by public/js/actions.js, select[data-describe]).
+mixin roleSelect(id, selected)
+  select.form-select(id=id name="role" data-describe=`#${id}-help`)
+    each r in roles
+      option(value=r selected=r === selected data-help=roleHelp[r])= roleLabel(r)
+  .form-text(id=`${id}-help` aria-live="polite")= roleHelp[selected]
+
+block content
+  .d-flex.justify-content-between.align-items-center.mb-3
+    h1.h4.mb-0 Users
+    button.btn.btn-primary.btn-sm(type="button" data-bs-toggle="modal" data-bs-target="#addUserModal")
+      i.bi.bi-person-plus.me-1
+      | New user
+
+  if secret
+    //- Shown once: nothing below keeps it.
+    .alert.alert-warning(role="alert")
+      h2.h6.alert-heading
+        i.bi.bi-shield-lock.me-1
+        = secret.title
+      p.small.mb-2 Shown only now — copy it and hand it to #{secret.username} securely. It can't be shown again (a new one can be issued).
+      if secret.key
+        .input-group.input-group-sm.mb-2
+          span.input-group-text Access key
+          input.form-control.font-monospace(type="text" value=secret.key readonly aria-label="Access key")
+          button.btn.btn-outline-secondary(type="button" data-copy=secret.key aria-label="Copy access key")
+            i.bi.bi-clipboard
+        p.small.mb-2
+          | With the Agent: #[code thub config set key …] (or #[code THUB_KEY], or #[code --key]).
+      if secret.password
+        .input-group.input-group-sm
+          span.input-group-text Temporary password
+          input.form-control.font-monospace(type="text" value=secret.password readonly aria-label="Temporary password")
+          button.btn.btn-outline-secondary(type="button" data-copy=secret.password aria-label="Copy password")
+            i.bi.bi-clipboard
+        p.small.mt-2.mb-0 They sign in with it and must choose their own password right away.
+
+  .d-flex.flex-wrap.align-items-center.gap-2.mb-3
+    +searchForm(q, 'Search users: name, email, role, blocked', list.urlFor({ q: '' }))
+    .ms-auto
+      +pageSizePicker(list)
+
+  //- Quick filter by role (counts within the search).
+  nav.btn-group.btn-group-sm.flex-wrap.mb-3(role="group" aria-label="Filter by role")
+    a.btn(href=list.urlFor({ role: '' }) class=!roleFilter ? 'btn-secondary' : 'btn-outline-secondary' aria-current=!roleFilter ? 'page' : false)
+      | All #[span.badge.text-bg-light.ms-1= total]
+    each r in roleFilters
+      a.btn(href=list.urlFor({ role: r }) class=roleFilter === r ? 'btn-secondary' : 'btn-outline-secondary' aria-current=roleFilter === r ? 'page' : false)
+        = roleLabel(r)
+        span.badge.text-bg-light.ms-1= roleCounts[r]
+
+  +listToolbar(list, roleFilter ? `${roleFilter === 'blocked' ? 'blocked users' : `${roleFilter}s`}` : 'users')
+
+  table.table.table-hover.align-middle
+    thead
+      tr
+        +sortHeader(list, 'username', 'User')
+        +sortHeader(list, 'role', 'Role')
+        +sortHeader(list, 'status', 'Status')
+        +sortHeader(list, 'used', 'Access key', 'desc')
+        th.text-end
+    tbody
+      each u in users
+        tr(class=u.blocked ? 'opacity-50' : '')
+          td
+            .fw-medium
+              = u.username
+              if u.id === me.id
+                span.badge.text-bg-light.border.ms-1 you
+            if u.firstName || u.lastName
+              .small= `${u.firstName || ''} ${u.lastName || ''}`.trim()
+            if u.email
+              .small.text-body-secondary= u.email
+            else
+              span.badge.text-bg-warning(data-bs-toggle="tooltip" data-bs-title="Every user needs an email — add it with Edit") no email
+          td
+            span.badge(class=`text-bg-${roleTone[u.role]}` data-bs-toggle="tooltip" data-bs-title=roleHelp[u.role])= roleLabel(u.role)
+          td
+            if u.blocked
+              span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=`Since ${fmtDate(u.blockedAt)}`) blocked
+            else
+              span.badge.text-bg-success active
+            if u.mustChangePassword
+              span.badge.text-bg-light.border.ms-1(data-bs-toggle="tooltip" data-bs-title="Signs in with a temporary password and must change it") temporary password
+          td.small
+            if u.key
+              code= `…${u.key.hint || '????'}`
+              .text-body-secondary
+                | last used #{fmtDate(u.key.lastUsedAt, 'never')}
+                if u.key.version
+                  = ` · Agent v${u.key.version}`
+            else
+              span.text-body-secondary none
+          td.text-end.text-nowrap
+            button.btn.btn-sm.btn-outline-secondary(type="button" data-bs-toggle="modal" data-bs-target=`#editUser-${u.id}` aria-label=`Edit ${u.username}`) Edit
+            form.d-inline.ms-1(
+              method="post"
+              action=`/admin/users/${u.id}/key`
+              data-confirm=u.key ? `Issue a new access key for ${u.username}? Their current key stops working at once.` : `Create an access key for ${u.username}?`
+              data-confirm-title=u.key ? 'Replace access key?' : 'Create access key?'
+              data-confirm-ok=u.key ? 'Replace key' : 'Create key'
+              data-confirm-tone="primary"
+            )
+              input(type="hidden" name="returnTo" value=list.pageUrl())
+              button.btn.btn-sm.btn-outline-primary(type="submit" aria-label=u.key ? 'New access key' : 'Create access key' data-bs-toggle="tooltip" data-bs-title=u.key ? 'Issue a new access key (the old one stops working)' : 'Create an access key')
+                i.bi.bi-key
+            if u.key
+              form.d-inline.ms-1(
+                method="post"
+                action=`/admin/users/${u.id}/key/revoke`
+                data-confirm=`Revoke ${u.username}'s access key? Their Agent stops working until they get a new one.`
+                data-confirm-title="Revoke access key?"
+                data-confirm-ok="Revoke key"
+              )
+                input(type="hidden" name="returnTo" value=list.pageUrl())
+                button.btn.btn-sm.btn-outline-warning(type="submit" aria-label="Revoke access key" data-bs-toggle="tooltip" data-bs-title="Revoke the access key")
+                  i.bi.bi-key-fill
+            if u.canUseDashboard
+              form.d-inline.ms-1(
+                method="post"
+                action=`/admin/users/${u.id}/reset-password`
+                data-confirm=`Give ${u.username} a new temporary password? Their current one stops working; they must change it at their next sign-in.`
+                data-confirm-title="Reset password?"
+                data-confirm-ok="Reset password"
+                data-confirm-tone="warning"
+              )
+                input(type="hidden" name="returnTo" value=list.pageUrl())
+                button.btn.btn-sm.btn-outline-secondary(type="submit" aria-label="Reset password" data-bs-toggle="tooltip" data-bs-title="New temporary password")
+                  i.bi.bi-asterisk
+            if u.id !== me.id
+              if u.blocked
+                form.d-inline.ms-1(method="post" action=`/admin/users/${u.id}/unblock`)
+                  input(type="hidden" name="returnTo" value=list.pageUrl())
+                  button.btn.btn-sm.btn-outline-success(type="submit" aria-label="Unblock" data-bs-toggle="tooltip" data-bs-title="Unblock: sign-in and access key work again")
+                    i.bi.bi-unlock
+              else
+                form.d-inline.ms-1(
+                  method="post"
+                  action=`/admin/users/${u.id}/block`
+                  data-confirm=`Block ${u.username}? They're signed out at once and their access key stops working. Their jobs keep running.`
+                  data-confirm-title="Block user?"
+                  data-confirm-ok="Block"
+                )
+                  input(type="hidden" name="returnTo" value=list.pageUrl())
+                  button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Block" data-bs-toggle="tooltip" data-bs-title="Block: no sign-in, no access key")
+                    i.bi.bi-lock
+              form.d-inline.ms-1(
+                method="post"
+                action=`/admin/users/${u.id}/delete`
+                data-confirm=`Delete ${u.username}? Their account and access key are gone for good; their jobs stay, listed under their name.`
+                data-confirm-title="Delete user?"
+                data-confirm-ok="Delete user"
+              )
+                input(type="hidden" name="returnTo" value=list.pageUrl())
+                button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Delete" data-bs-toggle="tooltip" data-bs-title="Delete the user")
+                  i.bi.bi-trash
+
+            .modal.text-start(tabindex="-1" id=`editUser-${u.id}` aria-labelledby=`editUserTitle-${u.id}`)
+              .modal-dialog
+                .modal-content
+                  form(method="post" action=`/admin/users/${u.id}`)
+                    input(type="hidden" name="returnTo" value=list.pageUrl())
+                    .modal-header
+                      h5.modal-title(id=`editUserTitle-${u.id}`)= `Edit ${u.username}`
+                      button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+                    .modal-body
+                      .row.g-2
+                        .col-sm-6
+                          label.form-label(for=`u-${u.id}-username`) Username
+                          input.form-control(id=`u-${u.id}-username` name="username" value=u.username required maxlength="64" pattern="[A-Za-z0-9._@+\\-]{1,64}")
+                        .col-sm-6
+                          label.form-label(for=`u-${u.id}-email`) Email
+                          input.form-control(id=`u-${u.id}-email` type="email" name="email" value=u.email required)
+                        .col-sm-6
+                          label.form-label(for=`u-${u.id}-first`) First name
+                          input.form-control(id=`u-${u.id}-first` name="firstName" value=u.firstName || '')
+                        .col-sm-6
+                          label.form-label(for=`u-${u.id}-last`) Last name
+                          input.form-control(id=`u-${u.id}-last` name="lastName" value=u.lastName || '')
+                        .col-12
+                          label.form-label(for=`u-${u.id}-role`) Role
+                          +roleSelect(`u-${u.id}-role`, u.role)
+                          if !u.canUseDashboard
+                            .form-text Making them a maintainer or admin gives them a temporary password for the dashboard.
+                    .modal-footer
+                      button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+                      button.btn.btn-primary(type="submit") Save
+      else
+        tr
+          td.text-body-secondary(colspan="5")= q || roleFilter ? 'No user matches.' : 'No users yet.'
+
+  h2.h6.mt-4 Recent activity
+  if events.length
+    ul.list-group.list-group-flush.small.mb-4
+      each e in events
+        li.list-group-item.px-0
+          span.text-body-secondary.me-2= fmtDate(e.ts)
+          strong= e.type.replace('user.', '').replace(/_/g, ' ')
+          if e.data.username
+            = ` ${e.data.username}`
+          if e.data.role && e.data.role.from
+            = ` — ${roleLabel(e.data.role.from)} → ${roleLabel(e.data.role.to)}`
+          else if e.data.role
+            = ` (${roleLabel(e.data.role)})`
+          if e.data.by
+            span.text-body-secondary= ` by ${e.data.by}`
+  else
+    p.small.text-body-secondary Nothing yet.
+
+  .modal(tabindex="-1" id="addUserModal" aria-labelledby="addUserTitle")
+    .modal-dialog
+      .modal-content
+        form(method="post" action="/admin/users")
+          .modal-header
+            h5.modal-title#addUserTitle New user
+            button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+          .modal-body
+            .row.g-2
+              .col-sm-6
+                label.form-label(for="new-username") Username
+                input.form-control#new-username(name="username" required maxlength="64" pattern="[A-Za-z0-9._@+\\-]{1,64}" placeholder="jane.doe")
+              .col-sm-6
+                label.form-label(for="new-email") Email
+                input.form-control#new-email(type="email" name="email" required placeholder="jane@example.com")
+              .col-sm-6
+                label.form-label(for="new-first") First name
+                input.form-control#new-first(name="firstName")
+              .col-sm-6
+                label.form-label(for="new-last") Last name
+                input.form-control#new-last(name="lastName")
+              .col-12
+                label.form-label(for="new-role") Role
+                +roleSelect('new-role', 'user')
+              .col-12
+                .form-check.mt-1
+                  input.form-check-input#new-key(type="checkbox" name="issueKey" value="1" checked)
+                  label.form-check-label(for="new-key") Create their access key now
+            p.small.text-body-secondary.mt-3.mb-0.
+              Maintainers and admins get a temporary password, to change at their first sign-in. The key and the password are
+              shown once, after Create.
+          .modal-footer
+            button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+            button.btn.btn-primary(type="submit") Create

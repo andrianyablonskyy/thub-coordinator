@@ -37,7 +37,7 @@
 
   h3.h6 How a job flows
   ol.small
-    li #[code thub run …] submits a job spec (type, labels, command, inputs) with an agent token.
+    li #[code thub run …] submits a job spec (type, labels, command, inputs) with your access key (or a pipeline's CI token).
     li The Coordinator queues it (#[code QUEUED]) and the scheduler assigns it to an idle Client whose type, labels and group match.
     li The Client accepts it, clones #[code --git-repo], downloads #[code --download-file] files and prepares the DUT (#[code PREPARING]).
     li It runs #[code --command] with #[code sh -c], and output streams live to the Agent and the dashboard (#[code RUNNING]).

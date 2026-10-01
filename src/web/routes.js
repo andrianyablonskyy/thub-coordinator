@@ -29,7 +29,8 @@ const fs = require('node:fs'),
   listPrefs = require('../services/list-prefs'),
   search = require('../services/search'),
   { createLoginGuard } = require('../login-guard'),
-  { formatBytes } = require('../services/job-artifacts');
+  { formatBytes } = require('../services/job-artifacts'),
+  { roleLabel } = require('../services/admin-users');
 
 // When this process started: the settings page tells a restart happened by it changing.
 const STARTED_AT = new Date().toISOString(),
@@ -157,6 +158,9 @@ function createWebRouter({ services, config }){
   router.use((req, res, next) => {
     const user = req.session?.user || null;
     res.locals.user = user;
+    // What the signed-in user may do (§10.3): `operate` — the dashboard's
+    // actions (maintainer, admin); `admin` — its security features too.
+    res.locals.can = { operate: Boolean(user?.canUseDashboard), admin: user?.role === 'admin' };
     res.locals.messages = req.session?.flash || [];
     // Latest published versions (README §10.2) — navbar, Agents, Resources.
     res.locals.updates = services.updates.status();
@@ -177,6 +181,8 @@ function createWebRouter({ services, config }){
     res.locals.formatDateTime = formatDateTime;
     // 1233 -> "1.2 KB" (job artifacts).
     res.locals.fmtBytes = formatBytes;
+    // user -> "User" (§10.3): how roles are shown.
+    res.locals.roleLabel = roleLabel;
     res.locals.currentPath = req.originalUrl;
     // A live-update re-fetch (server.js, req.thubPassive) renders the page
     // only for its data: flash messages stay for the next real page view.
@@ -268,9 +274,15 @@ function createWebRouter({ services, config }){
       return res.status(401).render('login', { title: 'Sign in', messages: [{ type: 'danger', text: 'Invalid credentials' }] });
     }
     loginGuard.success(req.ip, username);
+    // Right password, but no dashboard for this account (§10.3).
+    if (user.blocked || !user.canUseDashboard){
+      return res.status(403).render('login', { title: 'Sign in', messages: [{ type: 'danger', text: user.blocked
+        ? 'This account is blocked — ask an admin.'
+        : 'This account has no dashboard access — use the Agent with your access key.' }] });
+    }
     req.session.user = user;
     req.session.cookie.maxAge = user.sessionTimeoutMin * 60 * 1000;
-    res.redirect('/');
+    res.redirect(user.mustChangePassword ? '/profile' : '/');
   });
 
   router.post('/logout', (req, res) => {
@@ -278,17 +290,41 @@ function createWebRouter({ services, config }){
   });
 
   router.use(requireAdminSession);
+  router.use((req, res, next) => {
+    const u = req.session.user;
+    res.locals.can = { operate: true, admin: u.role === 'admin' };
+    next();
+  });
 
   // §10.1: every logged-in user (admin or viewer) manages their own
   // profile — display name, avatar, timezone, theme and idle session
   // timeout. Not gated by requireAdminRole: this only ever touches the
   // caller's own account (req.session.user.id), never another user's.
-  router.get('/profile', (req, res) => {
+  function renderProfile(req, res, extra = {}){
+    const key = services.adminUsers.keyOf(req.session.user.id);
     res.render('profile', {
       title: 'Profile',
       timezones: Intl.supportedValuesOf('timeZone'),
-      sessionTimeoutOptions: services.adminUsers.SESSION_TIMEOUT_OPTIONS_MIN
+      sessionTimeoutOptions: services.adminUsers.SESSION_TIMEOUT_OPTIONS_MIN,
+      accessKey: key && !key.revoked_at ? key : null,
+      ...extra
     });
+  }
+
+  router.get('/profile', (req, res) => renderProfile(req, res));
+
+  // Your own access key (§10.3): created or replaced here, shown once.
+  router.post('/profile/key', (req, res) => {
+    const { id, username } = req.session.user,
+      had = services.adminUsers.keyOf(id),
+      key = services.adminUsers.issueKey(id, { by: username });
+    renderProfile(req, res, { secret: { key, title: had && !had.revoked_at ? 'Your new access key — the old one has stopped working' : 'Your access key' } });
+  });
+
+  router.post('/profile/key/revoke', (req, res) => {
+    services.adminUsers.revokeKey(req.session.user.id, { by: req.session.user.username });
+    flash(req, 'warning', 'Your access key is revoked.');
+    res.redirect('/profile');
   });
 
   router.post('/profile', (req, res) => {
@@ -307,6 +343,7 @@ function createWebRouter({ services, config }){
       const userId = req.session.user.id,
         fields = {
           username: req.body.username,
+          ...(req.body.email !== undefined ? { email: req.body.email } : {}),
           firstName: req.body.firstName || null,
           lastName: req.body.lastName || null,
           timezone: req.body.timezone,
@@ -420,7 +457,8 @@ function createWebRouter({ services, config }){
       ping = setInterval(() => res.write(': ping\n\n'), LIVE_PING_MS),
       sessionCheck = setInterval(() => {
         req.sessionStore.get(req.sessionID, (err, sess) => {
-          if (!err && !sess?.user){
+          const fresh = sess?.user && services.adminUsers.getById(sess.user.id);
+          if (!err && (!fresh || fresh.blocked || !fresh.canUseDashboard)){
             write('session-ended', {});
             res.end();
           }
@@ -486,7 +524,7 @@ function createWebRouter({ services, config }){
     });
   });
 
-  router.post('/resources/:id/maintenance', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/maintenance', (req, res) => {
     services.registry.setMaintenance(req.params.id, req.body.enabled === '1');
     res.redirect(returnTo(req, '/resources'));
   });
@@ -494,7 +532,7 @@ function createWebRouter({ services, config }){
   // Cancel whatever the Client is doing (resource card): its job, a manual
   // local lock, or a self-update hold (README §10). The Client applies the
   // lock/update ones via heartbeat commands; a job is canceled right here.
-  router.post('/resources/:id/cancel-activity', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/cancel-activity', (req, res) => {
     const r = services.registry.get(req.params.id),
       job = r && services.jobs.activeForResource(r.id),
       activity = r?.activity?.state;
@@ -534,7 +572,7 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, '/resources'));
   });
 
-  router.post('/resources/:id/remove', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/remove', (req, res) => {
     try {
       const { resource: r, pending, stoppedJob, canceledJobs } = services.jobs.removeResource(req.params.id, {
         by: req.session.user.username,
@@ -556,7 +594,7 @@ function createWebRouter({ services, config }){
 
   // Reboot now (resource card footer): cancels a running job, then the
   // Client reboots its host on its next heartbeat (jobs.requestReboot).
-  router.post('/resources/:id/reboot', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/reboot', (req, res) => {
     try {
       const { resource: r, canceledJob } = services.jobs.requestReboot(req.params.id, { by: req.session.user.username });
       flash(req, 'warning', `Rebooting ${r.name}'s host on its next heartbeat.` + (canceledJob ? `\nCanceled its running job ${canceledJob}.` : ''));
@@ -580,7 +618,7 @@ function createWebRouter({ services, config }){
     };
   }
 
-  router.post('/resources/:id/usb-scan', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/usb-scan', (req, res) => {
     try {
       services.registry.requestUsbScan(req.params.id, { by: req.session.user.username });
       res.json(usbScanView(req, services.registry.get(req.params.id)));
@@ -599,7 +637,7 @@ function createWebRouter({ services, config }){
   });
 
   // Rename (resource card, Name row); empty = back to the Client's own name.
-  router.post('/resources/:id/rename', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/rename', (req, res) => {
     try {
       const before = services.registry.get(req.params.id)?.name,
         r = services.registry.rename(req.params.id, req.body.name, { by: req.session.user.username });
@@ -616,7 +654,7 @@ function createWebRouter({ services, config }){
   // Capabilities (resource card, Config tab): public/js/client-config.js
   // sends the edited hw/sw section as JSON in `config`. Applied by the Client
   // on its next heartbeat, then it restarts once idle.
-  router.post('/resources/:id/config', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/config', (req, res) => {
     try {
       let config;
       try {
@@ -637,7 +675,7 @@ function createWebRouter({ services, config }){
 
   // Groups tab (resource card): the Client's group membership, as a config
   // revision the Client writes to its file (registry.setClientGroups).
-  router.post('/resources/:id/groups', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/groups', (req, res) => {
     try {
       const ids = [].concat(req.body.groups || []).filter((g) => typeof g === 'string' && g),
         r = services.registry.setClientGroups(req.params.id, ids, {
@@ -655,7 +693,7 @@ function createWebRouter({ services, config }){
 
   // Export (resource card, admins — the file holds the join key): the
   // Client's config file as JSON, secrets excluded.
-  router.get('/resources/:id/config/export', requireAdminRole, (req, res) => {
+  router.get('/resources/:id/config/export', (req, res) => {
     try {
       const r = services.registry.get(req.params.id),
         file = services.registry.exportClientConfig(req.params.id);
@@ -669,7 +707,7 @@ function createWebRouter({ services, config }){
 
   // Import (resource card, public/js/config-import.js): a config file, applied
   // by the Client on its next heartbeat like a Config tab Save.
-  router.post('/resources/:id/config/import', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/config/import', (req, res) => {
     try {
       let file;
       try {
@@ -691,7 +729,7 @@ function createWebRouter({ services, config }){
 
   // Scheduled host reboot (resource card): save a cron expression, or clear
   // it; the Client applies it on its next heartbeat.
-  router.post('/resources/:id/reboot-schedule', requireAdminRole, (req, res) => {
+  router.post('/resources/:id/reboot-schedule', (req, res) => {
     try {
       const cron = req.body.clear === '1' ? '' : req.body.cron,
         r = services.registry.setRebootSchedule(req.params.id, cron, { by: req.session.user.username });
@@ -736,7 +774,7 @@ function createWebRouter({ services, config }){
   // Check now (navbar, Agents and Resources pages): fetch the latest
   // versions, then report whether the Coordinator and the connected
   // (heartbeating) Clients are behind — as a warning if anything is.
-  router.post('/updates/check', requireAdminRole, updateAction(async () => {
+  router.post('/updates/check', updateAction(async () => {
     const s = await services.updates.checkNow(),
       parts = [];
     if (!s.fetched.length){
@@ -792,13 +830,13 @@ function createWebRouter({ services, config }){
     });
   });
 
-  router.post('/resources/update-all', requireAdminRole, updateAction(async () => {
+  router.post('/resources/update-all', updateAction(async () => {
     const version = await services.updates.targetVersion('client'),
       n = services.registry.requestUpdateAll(version);
     return `Requested update to client v${version} on ${n} resource(s).`;
   }));
 
-  router.post('/resources/:id/update', requireAdminRole, updateAction(async (req) => {
+  router.post('/resources/:id/update', updateAction(async (req) => {
     // Cancel (next to the version): withdraw the request and, if the host is
     // already holding for the update, abort that too (the Client's next
     // heartbeat) — the one control for canceling a Client update.
@@ -859,17 +897,17 @@ function createWebRouter({ services, config }){
       list: { ...view, pagination, pageUrl, q: filters.q },
       // A row's Cancel comes back to this exact view (filters, sort, page).
       returnTo: pageUrl(),
-      canManage: req.session.user.role === 'admin',
+      canManage: true,
       // For the Reset queue / Clean up database confirmation modals.
-      jobCounts: req.session.user.role === 'admin' ? services.jobs.countActiveAndFinished() : null,
-      cleanupInfo: req.session.user.role === 'admin' ? cleanupInfo(req) : null
+      jobCounts: services.jobs.countActiveAndFinished(),
+      cleanupInfo: cleanupInfo(req)
     });
   });
 
   // "Reset" the queue: cancel everything active. "Clean": delete finished
   // job history. Two distinct, deliberately separate destructive actions
   // (§13.1) — reset stops in-flight work, clean clears past work.
-  router.post('/jobs/reset-queue', requireAdminRole, (req, res) => {
+  router.post('/jobs/reset-queue', (req, res) => {
     const canceled = services.jobs.resetQueue();
     flash(req, 'warning', `Canceled ${canceled} active job(s).`);
     res.redirect('/jobs');
@@ -878,7 +916,7 @@ function createWebRouter({ services, config }){
   // "Clean up database" (§9): everything before the given time — finished
   // jobs with their logs, and older history — then VACUUM. The
   // time is dd/mm/yyyy HH:MM:SS in the user's own time zone.
-  router.post('/jobs/clean-history', requireAdminRole, (req, res) => {
+  router.post('/jobs/clean-history', (req, res) => {
     const tz = req.session.user.timezone || 'UTC',
       text = String(req.body.before || '').trim(),
       before = text ? parseDateTime(text, { timeZone: tz }) : new Date();
@@ -919,12 +957,12 @@ function createWebRouter({ services, config }){
           job.spec.target.client)
         : null,
       jobActive,
-      canCancel: req.session.user.role === 'admin' && jobActive
+      canCancel: jobActive
     });
   });
 
   // From the job page or a row on /jobs (returnTo says which).
-  router.post('/jobs/:id/cancel', requireAdminRole, (req, res) => {
+  router.post('/jobs/:id/cancel', (req, res) => {
     try {
       services.jobs.cancel(req.params.id, { isAdmin: true });
       flash(req, 'warning', `Canceled job ${req.params.id}.`);
@@ -1002,21 +1040,21 @@ function createWebRouter({ services, config }){
       groups,
       q,
       totalCount: all.length,
-      canManage: req.session.user.role === 'admin'
+      canManage: true
     });
   });
 
-  router.post('/groups', requireAdminRole, (req, res) => {
+  router.post('/groups', (req, res) => {
     services.groups.create({ name: req.body.name, comment: req.body.comment });
     res.redirect('/groups');
   });
 
-  router.post('/groups/:id', requireAdminRole, (req, res) => {
+  router.post('/groups/:id', (req, res) => {
     services.groups.update(req.params.id, { name: req.body.name, comment: req.body.comment });
     res.redirect('/groups');
   });
 
-  router.post('/groups/:id/delete', requireAdminRole, (req, res) => {
+  router.post('/groups/:id/delete', (req, res) => {
     services.groups.remove(req.params.id);
     flash(req, 'warning', 'Group deleted; any resource that listed it just stopped matching on it.');
     res.redirect('/groups');
@@ -1030,7 +1068,9 @@ function createWebRouter({ services, config }){
       view = listView(req, res, 'agents', { q }),
       { sort, dir, size } = view.prefs,
       value = AGENT_SORT_VALUE[sort],
+      // CI tokens only: a person's key belongs to their user (Users, §10.3).
       sorted = services.agents.list()
+        .filter((a) => !a.user_id)
         .filter((a) => search.matches([a.id, a.name, a.kind, a.version, a.revoked_at ? 'revoked' : 'active'], terms))
         .sort((a, b) => {
           const va = value(a),
@@ -1043,7 +1083,7 @@ function createWebRouter({ services, config }){
       pagination = listPrefs.paginate(sorted.length, size, req.query.page),
       pageUrl = (changes) => view.urlFor({ page: pagination.page, ...changes });
     res.render('admin/agents', {
-      title: 'Agents',
+      title: 'CI tokens',
       active: 'agents',
       liveTopics: 'agents',
       agents: sorted.slice(pagination.offset, pagination.offset + pagination.limit),
@@ -1144,10 +1184,151 @@ function createWebRouter({ services, config }){
     res.set('Cache-Control', 'no-store').json({ startedAt: STARTED_AT });
   });
 
+  // Users (§10.3, admins): accounts, roles, blocking, passwords and each
+  // user's access key. A new key or temporary password is shown once, on
+  // the page the action returns — never stored anywhere.
+  // Searched (?q=), filtered by role (?role=user|maintainer|admin|blocked),
+  // sorted and paged like the other lists (§10.1).
+  const USER_ROLE_FILTERS = ['user', 'maintainer', 'admin', 'blocked'],
+    ROLE_ORDER = { user: 0, maintainer: 1, admin: 2 },
+    USER_SORT_VALUE = {
+      username: (u) => u.username.toLowerCase(),
+      role: (u) => ROLE_ORDER[u.role],
+      status: (u) => (u.blocked ? 1 : 0),
+      used: (u) => u.key?.lastUsedAt || null
+    };
+
+  function renderUsers(req, res, extra = {}){
+    const q = search.normalizeQuery(req.query.q),
+      terms = search.parseTerms(q),
+      role = USER_ROLE_FILTERS.includes(req.query.role) ? req.query.role : undefined,
+      view = listView(req, res, 'users', { q, role }),
+      { sort, dir, size } = view.prefs,
+      value = USER_SORT_VALUE[sort],
+      searched = services.adminUsers.list()
+        .filter((u) => search.matches([u.username, u.email, u.firstName, u.lastName, u.role, u.blocked ? 'blocked' : 'active'], terms)),
+      // Counts for the filter buttons: within the search, before the role filter.
+      roleCounts = Object.fromEntries(USER_ROLE_FILTERS.map((r) => [r, searched.filter((u) => (r === 'blocked' ? u.blocked : u.role === r)).length])),
+      sorted = searched
+        .filter((u) => !role || (role === 'blocked' ? u.blocked : u.role === role))
+        .sort((a, b) => {
+          const va = value(a),
+            vb = value(b);
+          if (va == null || vb == null){
+            return (va == null) - (vb == null);
+          }
+          // Names naturally (dev2 before dev10); other values as they are.
+          const cmp = typeof va === 'string' ? va.localeCompare(vb, undefined, { numeric: true }) : (va < vb ? -1 : va > vb ? 1 : 0);
+          return (dir === 'asc' ? 1 : -1) * cmp || a.username.localeCompare(b.username, undefined, { numeric: true });
+        }),
+      pagination = listPrefs.paginate(sorted.length, size, req.query.page),
+      pageUrl = (changes) => view.urlFor({ page: pagination.page, ...changes });
+    res.status(extra.status || 200).render('admin/users', {
+      title: 'Users',
+      active: 'users',
+      users: sorted.slice(pagination.offset, pagination.offset + pagination.limit),
+      total: searched.length,
+      roleFilter: role,
+      roleFilters: USER_ROLE_FILTERS,
+      roleCounts,
+      list: { ...view, pagination, pageUrl, q },
+      q,
+      me: req.session.user,
+      roles: services.adminUsers.ROLES,
+      roleHelp: {
+        user: 'Agent only: submits jobs, reads their own results; no dashboard',
+        maintainer: 'Agent + the dashboard, without Users, Settings and CI tokens; sees and cancels every job',
+        admin: 'Everything'
+      },
+      roleTone: { user: 'secondary', maintainer: 'info', admin: 'primary' },
+      events: services.adminUsers.recentEvents(30),
+      ...extra
+    });
+  }
+
+  const userAction = (fn) => (req, res) => {
+    const by = req.session.user.username,
+      actorId = req.session.user.id;
+    try {
+      const result = fn(req, { by, actorId });
+      if (result?.secret){
+        return renderUsers(req, res, { secret: result.secret });
+      }
+      if (result?.message){
+        flash(req, 'success', result.message);
+      }
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/admin/users')); // the same filter, sort and page
+  };
+
+  router.get('/admin/users', requireAdminRole, (req, res) => renderUsers(req, res));
+
+  router.post('/admin/users', requireAdminRole, userAction((req, ctx) => {
+    const { username, email, role, firstName, lastName } = req.body,
+      created = services.adminUsers.create({ username, email, role, firstName, lastName, requireEmail: true }, ctx),
+      key = req.body.issueKey === '1' ? services.adminUsers.issueKey(created.id, ctx) : null;
+    if (!key && !created.tempPassword){
+      return { message: `User ${created.username} created.` };
+    }
+    return { secret: { title: `User ${created.username} created`, key, password: created.tempPassword, username: created.username } };
+  }));
+
+  router.post('/admin/users/:id', requireAdminRole, userAction((req, ctx) => {
+    const { username, email, role, firstName, lastName } = req.body,
+      { user, tempPassword } = services.adminUsers.update(req.params.id, { username, email, role, firstName, lastName }, ctx);
+    return tempPassword
+      ? { secret: { title: `${user.username} can now use the dashboard`, password: tempPassword, username: user.username } }
+      : { message: `Saved ${user.username}.` };
+  }));
+
+  router.post('/admin/users/:id/block', requireAdminRole, userAction((req, ctx) => {
+    const u = services.adminUsers.setBlocked(req.params.id, true, ctx);
+    return { message: `Blocked ${u.username}: no sign-in, and their access key stops working.` };
+  }));
+
+  router.post('/admin/users/:id/unblock', requireAdminRole, userAction((req, ctx) => {
+    const u = services.adminUsers.setBlocked(req.params.id, false, ctx);
+    return { message: `Unblocked ${u.username}.` };
+  }));
+
+  router.post('/admin/users/:id/reset-password', requireAdminRole, userAction((req, ctx) => {
+    const u = services.adminUsers.getById(req.params.id),
+      password = services.adminUsers.adminResetPassword(req.params.id, ctx);
+    return { secret: { title: `New temporary password for ${u.username}`, password, username: u.username } };
+  }));
+
+  router.post('/admin/users/:id/key', requireAdminRole, userAction((req, ctx) => {
+    const u = services.adminUsers.getById(req.params.id);
+    if (!u){
+      throw Object.assign(new Error('Unknown user'), { status: 404 });
+    }
+    const current = services.adminUsers.keyOf(u.id),
+      hadKey = Boolean(current && !current.revoked_at),
+      key = services.adminUsers.issueKey(u.id, ctx),
+      title = hadKey ? `New access key for ${u.username} — the old one has stopped working` : `Access key for ${u.username}`;
+    return { secret: { title, key, username: u.username } };
+  }));
+
+  router.post('/admin/users/:id/key/revoke', requireAdminRole, userAction((req, ctx) => {
+    const u = services.adminUsers.getById(req.params.id);
+    services.adminUsers.revokeKey(req.params.id, ctx);
+    return { message: `Revoked the access key of ${u?.username}.` };
+  }));
+
+  router.post('/admin/users/:id/delete', requireAdminRole, userAction((req, ctx) => {
+    const u = services.adminUsers.getById(req.params.id);
+    services.adminUsers.remove(req.params.id, ctx);
+    return { message: `Deleted ${u?.username}. Their jobs stay, listed under their name.` };
+  }));
+
   router.get('/admin/agents', requireAdminRole, (req, res) => renderAgents(req, res));
 
   router.post('/admin/agents', requireAdminRole, (req, res) => {
-    const { token } = services.agents.create({ name: req.body.name, kind: req.body.kind });
+    // CI tokens only; people get their key from their user (§10.3).
+    const { token } = services.agents.create({ name: req.body.name, kind: 'ci' });
     renderAgents(req, res, { newToken: token });
   });
 

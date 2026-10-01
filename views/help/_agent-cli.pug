@@ -6,11 +6,13 @@
     thub cancel   &lt;jobId>                   Cancel a job
     thub resources [--json]                 Clients and their status
     thub jobs     [--mine] [--state &lt;s>] [--json]   Recent jobs (a cli token: only its own)
-    thub config   set &lt;url|token|group|user> &lt;value>
+    thub config   set &lt;url|key|group|user> &lt;value>
+    thub whoami                             Whose access key this is
+    thub key show|rotate                    Your key's details / replace it (the old one stops at once)
     thub check-update                       Compare with the latest published Agent
     thub self-update [--to &lt;x.y.z>]         Update with npm i -g
     thub --version
-    Global: --url &lt;url>  --token &lt;token>   (override THUB_URL / THUB_TOKEN / config file)
+    Global: --url &lt;url>  --key &lt;key>   (override THUB_URL / THUB_KEY / config file)
 
   h3.h6 #[code thub run] options
   -

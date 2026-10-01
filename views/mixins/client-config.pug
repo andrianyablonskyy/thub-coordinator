@@ -106,7 +106,7 @@ mixin configTabItems(r)
 //- at once.
 mixin groupsPane(r, returnTo, groupsById)
   - const p = `cfg-${r.id}`
-  - const canEdit = user.role === 'admin'
+  - const canEdit = can.operate
   - const pending = r.config_import && r.config_import.revision > r.config_applied_revision && r.config_import.fields && r.config_import.fields.groups
   - const all = Object.values(groupsById).sort((a, b) => a.name.localeCompare(b.name))
   - const unknown = r.group_ids.filter((id) => !groupsById[id])
@@ -163,7 +163,7 @@ mixin groupsPane(r, returnTo, groupsById)
 mixin configPanes(r, returnTo, groupsById)
   - const p = `cfg-${r.id}`
   - const current = r.config_desired || r.client_config
-  - const canEdit = user.role === 'admin'
+  - const canEdit = can.operate
   if r.type !== 'hw'
     //- no device tabs
   else if !current

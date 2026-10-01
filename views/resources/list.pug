@@ -30,7 +30,7 @@ block content
         th Groups
         th Busy source / reason
         +sortHeader(list, 'heartbeat', 'Last heartbeat', 'desc')
-        if user.role === 'admin'
+        if can.operate
           th Actions
     tbody(data-live="rows")
       each r in resources
@@ -50,14 +50,14 @@ block content
               span.text-body-secondary —
           td= r.busy_source ? `${r.busy_source}${r.busy_reason ? ' — ' + r.busy_reason : ''}` : '—'
           td= fmtDate(r.last_heartbeat_at, 'never')
-          if user.role === 'admin'
+          if can.operate
             td
               +resourceActions(r, list.pageUrl())
 
   each r in resources
     +resourceCard(r, groupsById, list.pageUrl())
 
-  if user && user.role === 'admin'
+  if can.operate
     +removeResourceModal()
 
 block scripts

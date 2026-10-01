@@ -39,7 +39,9 @@ test('every view compiles', () => {
 // mixin or a broken include, so render the whole page.
 test('help page renders every section with this Coordinator\'s URL', () => {
   const html = pug.renderFile(path.join(VIEWS, 'help', 'index.pug'), {
-    user: { username: 'viewer', role: 'viewer', theme: 'auto' },
+    user: { username: 'maint', role: 'maintainer', theme: 'auto', canUseDashboard: true },
+    can: { operate: true, admin: false },
+    roleLabel: (r) => r.charAt(0).toUpperCase() + r.slice(1),
     updates: {},
     messages: [],
     currentPath: '/help',

@@ -30,6 +30,16 @@
     }
   });
 
+  // <select data-describe="#hint">: show the chosen option's data-help in
+  // #hint (e.g. what a role allows, under the role picker).
+  document.addEventListener('change', (e) => {
+    const select = e.target.closest?.('select[data-describe]'),
+      hint = select && document.querySelector(select.dataset.describe);
+    if (hint){
+      hint.textContent = select.selectedOptions[0]?.dataset.help || '';
+    }
+  });
+
   // <button data-fill="#field" data-value="…">: put the value into #field.
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-fill]'),

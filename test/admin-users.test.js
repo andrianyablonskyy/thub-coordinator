@@ -37,7 +37,7 @@ test('a newly created user gets profile defaults (UTC, auto theme, 60min timeout
 
 test('updateProfile only touches the fields passed, leaving the rest as-is', () => {
   const adminUsers = buildService(),
-    { id } = adminUsers.create({ username: 'bob', password: 'hunter2', role: 'viewer' });
+    { id } = adminUsers.create({ username: 'bob', password: 'hunter2', role: 'maintainer' });
 
   adminUsers.updateProfile(id, { firstName: 'Bob', lastName: 'Builder', timezone: 'America/New_York' });
   const afterFirst = adminUsers.getById(id);
@@ -54,7 +54,7 @@ test('updateProfile only touches the fields passed, leaving the rest as-is', () 
 test('renaming a user to a username already held by someone else is rejected (409)', () => {
   const adminUsers = buildService();
   adminUsers.create({ username: 'alice', password: 'x', role: 'admin' });
-  const { id: bobId } = adminUsers.create({ username: 'bob', password: 'x', role: 'viewer' });
+  const { id: bobId } = adminUsers.create({ username: 'bob', password: 'x', role: 'maintainer' });
 
   assert.throws(() => adminUsers.updateProfile(bobId, { username: 'alice' }), (err) => err.status === 409);
 });
@@ -91,14 +91,14 @@ test('resetPassword creates the user as admin when the username does not exist y
 
 test('resetPassword on an existing user changes only the password, not the role', async () => {
   const adminUsers = buildService();
-  adminUsers.create({ username: 'carol', password: 'oldpass', role: 'viewer' });
+  adminUsers.create({ username: 'carol', password: 'oldpass', role: 'maintainer' });
 
   adminUsers.resetPassword({ username: 'carol', password: 'newpass' });
 
   assert.equal(await adminUsers.verify('carol', 'oldpass'), null);
   const user = await adminUsers.verify('carol', 'newpass');
   assert.ok(user);
-  assert.equal(user.role, 'viewer'); // not silently promoted to admin
+  assert.equal(user.role, 'maintainer'); // not silently promoted to admin
 });
 
 test('changePassword succeeds with the correct current password', async () => {

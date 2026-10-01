@@ -29,7 +29,7 @@ function createAgentsService(db, { events }){
   }
 
   function list(){
-    return db.prepare('SELECT id, name, kind, version, update_to, created_at, last_used_at, revoked_at FROM agents ORDER BY created_at DESC').all();
+    return db.prepare('SELECT id, name, kind, user_id, version, update_to, created_at, last_used_at, revoked_at FROM agents ORDER BY created_at DESC').all();
   }
 
   function create({ name, kind }){

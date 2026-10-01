@@ -25,7 +25,7 @@ mixin versionCell(current, latest, updateTo)
 //- an update). Agents table, Resources table, resource card.
 mixin versionWithUpdate(current, latest, updateTo, action, returnTo, canUpdate = true, holding = false)
   +versionCell(current, latest, updateTo)
-  if user.role === 'admin' && canUpdate && (updateTo || holding || (current && isNewer(latest, current)))
+  if can.operate && canUpdate && (updateTo || holding || (current && isNewer(latest, current)))
     +updateButton(action, updateTo || (holding ? true : null), returnTo)
 
 //- Latest published version of `app` (agent | client), "check now" and,
@@ -40,7 +40,7 @@ mixin updatesToolbar(app, label, returnTo)
         = ` · checked ${fmtDate(updates.checkedAt)}`
       if updates.error
         i.bi.bi-exclamation-triangle.text-warning.ms-1(data-bs-toggle="tooltip" data-bs-title=updates.error)
-    if user.role === 'admin'
+    if can.operate
       form.d-inline(method="post" action="/updates/check")
         input(type="hidden" name="returnTo" value=returnTo)
         button.btn.btn-sm.btn-outline-secondary(type="submit")

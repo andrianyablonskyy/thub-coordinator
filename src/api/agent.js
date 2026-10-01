@@ -26,14 +26,17 @@ function createAgentRouter({ services, config }){
     // matching even happens, and reject them for lacking an agent token.
     auth = requireRole('agent'),
 
-    // Which jobs an agent may see (README §12): a `ci` token (pipelines) all
-    // of them; a `cli` token (a person's own `thub`) only the jobs it
-    // submitted. Anyone else's job is answered exactly like a job that
-    // doesn't exist (404), so a cli token can't tell which ids are in use.
-    canSee = (agent, job) => agent.kind === 'ci' || job.agent_id === agent.id,
+    // Which jobs a key may see (README §12, §10.3): a CI token all of them;
+    // a user's key all of them for maintainers and admins, only their own
+    // for the `user` role. Anyone else's job is answered exactly like a job
+    // that doesn't exist (404), so a user can't tell which ids are in use.
+    seesAll = (req) => req.agent.kind === 'ci' || ['maintainer', 'admin'].includes(req.user?.role),
+    canSee = (req, job) => seesAll(req) || job.agent_id === req.agent.id,
+    // Cancelling: maintainers and admins any job; anyone else their own.
+    cancelsAll = (req) => ['maintainer', 'admin'].includes(req.user?.role),
     visibleJob = (req, res, next) => {
       const job = services.jobs.get(req.params.id);
-      if (!job || !canSee(req.agent, job)){
+      if (!job || !canSee(req, job)){
         return res.status(404).json({ error: 'Unknown job' });
       }
       req.job = job;
@@ -68,8 +71,8 @@ function createAgentRouter({ services, config }){
       state: req.query.state,
       source: req.query.source,
       agentId: req.agent.id,
-      // A cli token's list is always its own jobs (canSee above).
-      mine: req.agent.kind !== 'ci' || req.query.mine === 'true' || req.query.mine === '1',
+      // A `user`'s list is always their own jobs (canSee above).
+      mine: !seesAll(req) || req.query.mine === 'true' || req.query.mine === '1',
       limit: req.query.limit ? Number(req.query.limit) : undefined
     });
     res.json({ jobs: jobs.map(services.jobs.publicJob) });
@@ -77,7 +80,7 @@ function createAgentRouter({ services, config }){
 
   router.post('/jobs/:id/cancel', auth, visibleJob, (req, res, next) => {
     try {
-      const job = services.jobs.cancel(req.params.id, { agentId: req.agent.id, isAdmin: false });
+      const job = services.jobs.cancel(req.params.id, { agentId: req.agent.id, isAdmin: cancelsAll(req) });
       res.json(services.jobs.publicJob(job));
     }
     catch (err){
@@ -99,6 +102,30 @@ function createAgentRouter({ services, config }){
   // `link` again, for Agents from before, which print `url`.
   router.get('/jobs/:id/artifacts', auth, visibleJob, (req, res) => {
     res.json({ artifacts: req.job.artifacts.map((a) => ({ ...a, url: a.link })) });
+  });
+
+  // `thub whoami` / `thub key show` (§10.3): who this key belongs to.
+  router.get('/me', auth, (req, res) => {
+    if (!req.user){
+      return res.json({ kind: req.agent.kind, name: req.agent.name });
+    }
+    const { username, email, role } = req.user,
+      key = services.adminUsers.keyOf(req.user.id);
+    res.json({
+      kind: req.agent.kind,
+      user: { username, email, role },
+      key: { hint: key.token_hint, createdAt: key.token_created_at || key.created_at, lastUsedAt: key.last_used_at }
+    });
+  });
+
+  // `thub key rotate`: a user replaces their own key — the one sending this
+  // stops working at once, the new one is in the answer (only there).
+  // A CI token is replaced by an admin, on the dashboard.
+  router.post('/me/key/rotate', auth, (req, res) => {
+    if (!req.user){
+      return res.status(403).json({ error: 'A CI token is replaced by an admin on the dashboard (CI tokens)' });
+    }
+    res.json({ key: services.adminUsers.issueKey(req.user.id, { by: req.user.username }), username: req.user.username });
   });
 
   router.get('/resources', auth, (req, res) => {

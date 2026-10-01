@@ -42,7 +42,7 @@ block content
   each r in resources
     +resourceCard(r, groupsById, '/')
 
-  if user && user.role === 'admin'
+  if can.operate
     +removeResourceModal()
 
 block scripts

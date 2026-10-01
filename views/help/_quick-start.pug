@@ -9,7 +9,7 @@
         thub-admin join-key generate          # → put it in clientJoinKey
         nano ~/.config/thub/coordinator.json  # publicUrl, clientJoinKey
         sudo systemctl restart thub-coordinator
-        thub-admin create-admin admin 'a-strong-password'
+        thub-admin user add admin --email you@example.com --role admin --password 'a-strong-password'
     li
       strong Install a Client
       |  on each lab machine, with the same join key (#[a(href="#client-setup") Client setup]):
@@ -20,16 +20,16 @@
         sudo systemctl enable --now thub-client@client
       | It shows up on #[a(href="/resources") Resources] by itself, usually within 10 s.
     li
-      strong Issue an agent token
-      |  on #[a(href="/admin/agents") Agents] (admins), or on the Coordinator host with
-      |  #[code thub-admin agent add &lt;name&gt; --kind ci|cli]. The token is shown once.
+      strong Create users and their access keys
+      |  on #[a(href="/admin/users") Users] (admins), or on the Coordinator host with
+      |  #[code thub-admin user add &lt;name&gt; --email &lt;email&gt; --key]. The key is shown once.
     li
       strong Install and configure the Agent
       |  (#[a(href="#agent-setup") Agent setup]):
       +code('Developer machine').
         npm i -g @andrian.yablonskyy/thub-agent
         thub config set url #{coordinatorUrl}
-        thub config set token agt_…
+        thub config set key thk_…
     li
       strong Run a job
       |  (#[a(href="#agent-cli") Agent CLI reference]):

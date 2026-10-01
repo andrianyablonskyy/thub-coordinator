@@ -3,6 +3,24 @@ extends layout
 block content
   h1.h4.mb-3 Profile settings
 
+  if user.mustChangePassword
+    .alert.alert-warning
+      i.bi.bi-shield-exclamation.me-1
+      | You signed in with a temporary password — choose your own below before using the dashboard.
+
+  if secret
+    //- Shown once (§10.3): nothing keeps it.
+    .alert.alert-warning(role="alert")
+      h2.h6.alert-heading
+        i.bi.bi-shield-lock.me-1
+        = secret.title
+      .input-group.input-group-sm.mb-2
+        span.input-group-text Access key
+        input.form-control.font-monospace(type="text" value=secret.key readonly aria-label="Access key")
+        button.btn.btn-outline-secondary(type="button" data-copy=secret.key aria-label="Copy access key")
+          i.bi.bi-clipboard
+      p.small.mb-0 Shown only now. Save it with #[code thub config set key …] (or use #[code THUB_KEY] / #[code --key]).
+
   .row
     .col-md-6
       form(method="post" action="/profile" enctype="multipart/form-data")
@@ -20,6 +38,12 @@ block content
         .mb-3
           label.form-label(for="username") Username
           input#username.form-control(type="text" name="username" value=user.username required)
+
+        .mb-3
+          label.form-label(for="email") Email
+          input#email.form-control(type="email" name="email" value=user.email required)
+          if !user.email
+            .form-text.text-warning Every user needs an email — please add yours.
 
         .row
           .col-6.mb-3
@@ -57,6 +81,38 @@ block content
                 class=user.theme === t ? 'btn-primary' : 'btn-outline-secondary'
                 data-set-theme=t
               )= t.charAt(0).toUpperCase() + t.slice(1)
+
+      //- Your access key for the Agent (§10.3); also: thub key show|rotate.
+      .card.mb-3
+        .card-body
+          h6.card-subtitle.mb-3.text-body-secondary My access key
+          if accessKey
+            p.small.mb-2
+              | #[code= `…${accessKey.token_hint || '????'}`] · created #{fmtDate(accessKey.token_created_at || accessKey.created_at)} · last used #{fmtDate(accessKey.last_used_at, 'never')}
+          else
+            p.small.text-body-secondary.mb-2 None yet — create one to use the Agent (thub).
+          .d-flex.gap-2
+            form(
+              method="post"
+              action="/profile/key"
+              data-confirm=accessKey ? 'Replace your access key? The current one stops working at once — everywhere you use it.' : 'Create your access key?'
+              data-confirm-title=accessKey ? 'Replace access key?' : 'Create access key?'
+              data-confirm-ok=accessKey ? 'Replace key' : 'Create key'
+              data-confirm-tone="primary"
+            )
+              button.btn.btn-sm.btn-outline-primary(type="submit")
+                i.bi.bi-key.me-1
+                = accessKey ? 'Replace key' : 'Create key'
+            if accessKey
+              form(
+                method="post"
+                action="/profile/key/revoke"
+                data-confirm="Revoke your access key? The Agent stops working for you until you create a new one."
+                data-confirm-title="Revoke access key?"
+                data-confirm-ok="Revoke key"
+              )
+                button.btn.btn-sm.btn-outline-warning(type="submit") Revoke
+          .form-text.mt-2 From the command line: #[code thub key show] and #[code thub key rotate].
 
       .card
         .card-body

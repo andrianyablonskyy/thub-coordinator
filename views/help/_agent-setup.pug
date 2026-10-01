@@ -10,40 +10,42 @@
   p.small.
     In CI you don't need a global install: #[code npx -y @andrian.yablonskyy/thub-agent run …].
 
-  h3.h6 Get a token
+  h3.h6 Get your access key
   p.small.
-    An admin registers an agent on #[a(href="/admin/agents") Agents] (or with #[code thub-admin agent add]) and passes you
-    its token, which is shown only once. The agent's #[strong kind] decides the job id prefix, the default priority and which jobs it can see:
+    Every person has a user with one #[strong access key]. An admin creates you on #[a(href="/admin/users") Users]
+    (or with #[code thub-admin user add]) and hands you the key, which is shown only once. Maintainers and admins can also
+    create or replace their own on their #[a(href="/profile") profile]. Your #[strong role] decides what you can do:
   table.table.table-sm.small.w-auto
     thead
       tr
-        th Kind
-        th For
-        th Job ids
-        th Default priority
-        th Can see
+        th Role
+        th Agent
+        th Dashboard
     tbody
       tr
-        td: code ci
-        td Pipelines
-        td: code A-00001…
-        td 50
-        td every job (details, log)
+        td: strong User
+        td submits jobs, sees and cancels only their own
+        td no
       tr
-        td: code cli
-        td Developers
-        td: code M-00001…
-        td 60 (so a busy pipeline doesn't starve them)
-        td only the jobs it submitted
+        td: strong Maintainer
+        td submits jobs, sees and cancels every job
+        td yes, without Users, Settings and CI tokens
+      tr
+        td: strong Admin
+        td like a Maintainer
+        td everything
+  p.small.
+    Pipelines use a #[strong CI token] instead (#[a(href="/admin/agents") CI tokens], admins): their jobs get A- ids and they
+    read every job. People's jobs get M- ids.
 
   h3.h6 Configure
   +code('Save the settings once').
     thub config set url   #{coordinatorUrl}
-    thub config set token agt_…
+    thub config set key   thk_…
     thub config set user  "Your Name"      # optional: job owner label
     thub config set group &lt;groupId>       # optional: default --group
   p.small.
-    These are saved in #[code ~/.config/thub/agent.json]. Order of precedence: flags (#[code --url], #[code --token]) →
+    These are saved in #[code ~/.config/thub/agent.json]. Order of precedence: flags (#[code --url], #[code --key]) →
     environment → config file.
   table.table.table-sm.small
     thead
@@ -55,8 +57,8 @@
         td: code THUB_URL
         td Coordinator URL, e.g. #[code #{coordinatorUrl}]
       tr
-        td: code THUB_TOKEN
-        td Agent token. Keep it in your CI's secret store.
+        td: code THUB_KEY
+        td Your access key, or a CI token in a pipeline. Keep it in your CI's secret store. (#[code THUB_TOKEN], #[code --token] and a saved #[code token] still work: the old names.)
       tr
         td: code THUB_GROUP
         td Default #[code --group]
@@ -66,7 +68,10 @@
       tr
         td: code THUB_NO_SELF_UPDATE=1
         td Don't install admin-requested Agent updates on this machine
-  +code('Check the connection').
+  +code('Check the connection and your key').
+    thub whoami             # jane (user) <jane@example.com>
+    thub key show           # your key's last characters, created, last used
+    thub key rotate         # replace it — the old one stops at once; saved to the config file if it came from there
     thub resources          # lists the Clients and their status
     thub jobs --mine        # your recent jobs
   p.small.mb-0.

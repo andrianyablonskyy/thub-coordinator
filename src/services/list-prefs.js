@@ -34,6 +34,10 @@ const PAGE_SIZES = [10, 25, 50, 100, 'all'],
     agents: {
       sorts: ['name', 'kind', 'version', 'created', 'used', 'status'],
       defaults: { size: DEFAULT_PAGE_SIZE, sort: 'created', dir: 'desc' }
+    },
+    users: {
+      sorts: ['username', 'role', 'status', 'used'],
+      defaults: { size: DEFAULT_PAGE_SIZE, sort: 'username', dir: 'asc' }
     }
   };
 

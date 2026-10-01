@@ -68,7 +68,7 @@ function buildServices(config){
     registry = createRegistryService(db, { bus, events }),
     agents = createAgentsService(db, { events }),
     groups = createGroupsService(db, { events, registry }),
-    adminUsers = createAdminUsersService(db),
+    adminUsers = createAdminUsersService(db, { events }),
     commands = createCommandsService({ bus }),
     logs = createLogsService(db, { bus }),
     jobs = createJobsService(db, { bus, events, registry, config }),

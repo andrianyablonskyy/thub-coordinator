@@ -1,8 +1,8 @@
 +section('ci', 'CI/CD integration (GitHub Actions)', 'github')
   p.
     The test job only needs the Agent and HTTPS access to the Coordinator, so it runs on an ordinary hosted runner.
-    Create a #[strong ci]-kind agent on #[a(href="/admin/agents") Agents] and store its token as the repository secret
-    #[code THUB_AGENT_TOKEN].
+    Create a #[strong CI token] on #[a(href="/admin/agents") CI tokens] (admins) and store it as the repository secret
+    #[code THUB_CI_TOKEN].
   +code('.github/workflows/firmware.yml').
     name: firmware
     on: [push, pull_request]
@@ -27,7 +27,7 @@
         runs-on: ubuntu-latest
         env:
           THUB_URL: #{coordinatorUrl}
-          THUB_TOKEN: ${{ secrets.THUB_AGENT_TOKEN }}
+          THUB_KEY: ${{ secrets.THUB_CI_TOKEN }}
         steps:
           - run: |
               npx -y @andrian.yablonskyy/thub-agent run \
@@ -41,4 +41,4 @@
     li The step's exit code is the verdict (#[a(href="#agent-cli") exit codes]), so the workflow fails exactly when the tests do.
     li If the workflow is canceled, the Agent (in #[code --wait] mode) cancels the TestHub job, so abandoned runs don't hold hardware.
     li Downloads carry no credentials. Publish the image to a URL the Client can read, or fetch it in #[code --command] with a token passed as #[code --env].
-    li Other CI systems (GitLab CI, Jenkins, Azure Pipelines) work the same way: install Node.js, set #[code THUB_URL]/#[code THUB_TOKEN] and run #[code thub run … --wait].
+    li Other CI systems (GitLab CI, Jenkins, Azure Pipelines) work the same way: install Node.js, set #[code THUB_URL]/#[code THUB_KEY] and run #[code thub run … --wait].

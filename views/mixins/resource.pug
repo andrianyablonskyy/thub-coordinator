@@ -25,22 +25,24 @@ mixin resourceActions(r, returnTo)
         data-bs-title="Take this resource out of rotation for maintenance — the scheduler will skip it"
       )
         i.bi.bi-tools
-  form.d-inline.ms-1(
-    method="post"
-    action=`/resources/${r.id}/rotate-token`
-    data-confirm=`Issue a new token for ${r.name}? Its current token stops working at once, and the Client won't reconnect until it has the new one.`
-    data-confirm-title="Rotate resource token?"
-    data-confirm-ok="Rotate token"
-    data-confirm-tone="warning"
-  )
-    input(type="hidden" name="returnTo" value=returnTo)
-    button.btn.btn-sm.btn-outline-warning(
-      type="submit"
-      aria-label="Rotate token"
-      data-bs-toggle="tooltip"
-      data-bs-title="Invalidate the current resource token and issue a new one — the Client won't reconnect until it has it"
+  //- Credentials: admins only (§10.3).
+  if can.admin
+    form.d-inline.ms-1(
+      method="post"
+      action=`/resources/${r.id}/rotate-token`
+      data-confirm=`Issue a new token for ${r.name}? Its current token stops working at once, and the Client won't reconnect until it has the new one.`
+      data-confirm-title="Rotate resource token?"
+      data-confirm-ok="Rotate token"
+      data-confirm-tone="warning"
     )
-      i.bi.bi-arrow-repeat
+      input(type="hidden" name="returnTo" value=returnTo)
+      button.btn.btn-sm.btn-outline-warning(
+        type="submit"
+        aria-label="Rotate token"
+        data-bs-toggle="tooltip"
+        data-bs-title="Invalidate the current resource token and issue a new one — the Client won't reconnect until it has it"
+      )
+        i.bi.bi-arrow-repeat
   +removeResourceButton(r, returnTo)
 
 //- Remove: a plain confirm when the resource is idle; with a running job,
@@ -188,7 +190,7 @@ mixin uptimeRows(r, returnTo)
         span.text-body-secondary.small.ms-1 (at last heartbeat)
     else
       span.text-body-secondary —
-    if user.role === 'admin'
+    if can.operate
       +cancelActivityButton(r, returnTo)
 
 //- Scheduled host reboot (cron, in the Client host's local time): what's
@@ -226,7 +228,7 @@ mixin rebootScheduleRow(r, returnTo)
         data-bs-toggle="tooltip"
         data-bs-title="This host has no reboot helper (thub-client-reboot.path), so the schedule can't reboot it — reinstall the Client as root: sudo npm i -g @andrian.yablonskyy/thub-client"
       ) can't reboot
-    if user.role === 'admin'
+    if can.operate
       form.d-flex.gap-1.mt-1(
         method="post"
         action=`/resources/${r.id}/reboot-schedule`
@@ -338,7 +340,7 @@ mixin usbScanPane(r)
   - const importWhy = r.type !== 'hw' ? 'Only HW Clients have USB device lists to import into' : !(r.config_desired || r.client_config) ? 'This Client is too old to report its config — update it first' : null
   div(data-usb-scan=`/resources/${r.id}/usb-scan` data-pending=r.usb_scan_request_id ? '1' : null data-requested-at=r.usb_scan_requested_at)
     .d-flex.align-items-center.gap-2.mb-2
-      if user.role === 'admin'
+      if can.operate
         if offline
           span.d-inline-block(tabindex="0" data-bs-toggle="tooltip" data-bs-title="Offline — a Client can only be scanned while it's connected")
             button.btn.btn-sm.btn-outline-primary(type="button" disabled style="pointer-events: none;")
@@ -366,7 +368,7 @@ mixin usbScanPane(r)
         if scan
           = `lsusb -tvv at ${fmtDate(scan.at)}`
         else
-          | Not scanned yet#{user.role === 'admin' ? ' — press Refresh to run lsusb -tvv on the Client' : ''}.
+          | Not scanned yet#{can.operate ? ' — press Refresh to run lsusb -tvv on the Client' : ''}.
     .alert.alert-danger.py-2.small(data-usb-error class=scan && scan.error ? null : 'd-none')= scan && scan.error || ''
     pre.bg-body-tertiary.p-2.rounded.small.mb-0(data-usb-output style="max-height: 360px; overflow: auto;" class=scan && scan.output ? null : 'd-none')= scan && scan.output || ''
 
@@ -453,7 +455,7 @@ mixin resourceDetails(r, groupsById, returnTo, local, external)
           data-bs-toggle="tooltip"
           data-bs-title="Renamed on the dashboard; this is the name the Client itself reports"
         )= `(Client: ${r.reported_name})`
-      if user.role === 'admin'
+      if can.operate
         button.btn.btn-sm.btn-link.p-0.ms-2.align-baseline(
           type="button"
           data-bs-toggle="collapse"
@@ -513,7 +515,7 @@ mixin resourceDetails(r, groupsById, returnTo, local, external)
     dd.col-sm-8= r.busy_source ? `${r.busy_source}${r.busy_reason ? ' — ' + r.busy_reason : ''}` : '—'
     dt.col-sm-4 Last heartbeat
     dd.col-sm-8= fmtDate(r.last_heartbeat_at, 'never')
-    if user.role === 'admin'
+    if can.operate
       dt.col-sm-4 Actions
       dd.col-sm-8.mb-0
         +resourceActions(r, returnTo)

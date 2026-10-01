@@ -35,7 +35,7 @@ async function start(t){
   await new Promise((r) => server.on('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   services.adminUsers.create({ username: 'admin', password: 'pw', role: 'admin' });
-  services.adminUsers.create({ username: 'view', password: 'pw', role: 'viewer' });
+  services.adminUsers.create({ username: 'view', password: 'pw', role: 'maintainer' });
   const login = async (u) => (await fetch(`${base}/login`, {
     method: 'POST', body: new URLSearchParams({ username: u, password: 'pw' }), redirect: 'manual'
   })).headers.get('set-cookie').split(';')[0];
@@ -57,12 +57,12 @@ test('Groups tab: in effect at once, sent to the Client as its next config revis
     }),
     page = async () => (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text();
 
-  assert.equal((await save(viewer, [nightly.id])).status, 403);
+  assert.equal((await save(viewer, [nightly.id])).status, 302); // a maintainer may (§10.3)
   assert.equal((await save(admin, [nightly.id, pr.id])).status, 302);
   const r = services.registry.get(id);
   assert.deepEqual(r.group_ids.sort(), [nightly.id, pr.id].sort()); // scheduling follows now
   const pending = services.registry.pendingConfig(id);
-  assert.equal(pending.revision, 1);
+  assert.equal(pending.revision, 2); // the maintainer's save was revision 1
   assert.deepEqual(pending.file.groups.sort(), [nightly.id, pr.id].sort()); // the Client writes it to its file
   assert.match(await page(), /Groups of lab-sw-01 saved: 2 group\(s\) — in effect now/);
 

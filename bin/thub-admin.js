@@ -34,14 +34,24 @@ const { loadConfig } = require('../src/config'),
   { createCleanupService } = require('../src/services/cleanup'),
   { generateToken } = require('../src/services/tokens'),
   { createSettingsService } = require('../src/services/settings'),
+  { roleLabel, normalizeRole } = require('../src/services/admin-users'),
   { PACKAGES, fetchLatestVersion, isNewer, isValidVersion, npmBin, formatDateTime, parseDateTime } = require('@andrian.yablonskyy/thub-common'),
   { spawnSync } = require('node:child_process'),
   { version: installedVersion } = require('../package.json');
 
 function usage(){
   console.log(`Usage:
-  thub-admin create-admin <username> <password> [--role admin|viewer]
-  thub-admin agent add <name> --kind ci|cli
+  thub-admin user add <username> --email <email> [--role user|maintainer|admin] [--password <p>] [--key]
+                                  New user (§10.3). Maintainers/admins without --password get a
+                                  temporary one (printed once); --key also creates their access key
+  thub-admin user list
+  thub-admin user block|unblock <username>
+  thub-admin user role <username> user|maintainer|admin
+  thub-admin user password <username> <password>    Set a password (no change required)
+  thub-admin user key <username>  New access key for them (printed once; the old one stops)
+  thub-admin user delete <username>
+  thub-admin create-admin <username> <password> [--role admin|maintainer]   (= user add, no email)
+  thub-admin agent add <name>      A CI token (pipelines; people get their key with: user key)
   thub-admin join-key generate
   thub-admin resource maintenance <resourceId> --on|--off
   thub-admin jobs reset --yes     Cancel every queued/assigned/preparing/running job
@@ -138,7 +148,7 @@ function main(){
     events = createEventsService(db),
     registry = createRegistryService(db, { bus, events }),
     agents = createAgentsService(db, { events }),
-    adminUsers = createAdminUsersService(db),
+    adminUsers = createAdminUsersService(db, { events }),
     jobs = createJobsService(db, { bus, events, registry, config }),
     groups = createGroupsService(db, { events, registry });
 
@@ -159,6 +169,83 @@ function main(){
     return;
   }
 
+  // Users (§10.3) — also the way back in when nobody can sign in: unblock or
+  // re-role an admin, set a password. Run as the Coordinator's user.
+  if (cmd === 'user'){
+    const { positional, flags } = parseFlags(rest),
+      [username, arg] = positional,
+      by = 'thub-admin',
+      need = (u) => {
+        const row = adminUsers.getByUsername(u || '');
+        if (!row){
+          console.error(`No user "${u}"`);
+          process.exit(4);
+        }
+        return row;
+      };
+    try {
+      if (sub === 'list'){
+        for (const u of adminUsers.list()){
+          const key = u.key ? `…${u.key.hint || '????'}` : 'none';
+          console.log(`${u.username.padEnd(24)} ${roleLabel(u.role).padEnd(11)} ${u.blocked ? 'blocked' : 'active '}  ${u.email || '(no email)'}  key: ${key}`);
+        }
+        return;
+      }
+      if (sub === 'add'){
+        if (!username || !flags.email){
+          return usage(), process.exit(4);
+        }
+        const created = adminUsers.create({ username, email: flags.email, role: flags.role || 'user', password: flags.password, requireEmail: true }, { by });
+        console.log(`Created ${roleLabel(created.role)} "${created.username}"`);
+        if (created.tempPassword){
+          console.log(`Temporary password (shown once; to change at the first sign-in): ${created.tempPassword}`);
+        }
+        if (rest.includes('--key')){
+          console.log(`Access key (shown once): ${adminUsers.issueKey(created.id, { by })}`);
+        }
+        return;
+      }
+      const target = need(username);
+      if (sub === 'block' || sub === 'unblock'){
+        adminUsers.setBlocked(target.id, sub === 'block', { by });
+        console.log(`${sub === 'block' ? 'Blocked' : 'Unblocked'} "${target.username}"`);
+      }
+      else if (sub === 'role'){
+        const { tempPassword } = adminUsers.update(target.id, { role: arg }, { by });
+        console.log(`"${target.username}" is now ${roleLabel(normalizeRole(arg))}`);
+        if (tempPassword){
+          console.log(`Temporary password (shown once): ${tempPassword}`);
+        }
+      }
+      else if (sub === 'password'){
+        if (!arg){
+          return usage(), process.exit(4);
+        }
+        adminUsers.resetPassword({ username: target.username, password: arg });
+        console.log(`Password of "${target.username}" set`);
+      }
+      else if (sub === 'key'){
+        console.log(`Access key for "${target.username}" (shown once; any previous one has stopped working): ${adminUsers.issueKey(target.id, { by })}`);
+      }
+      else if (sub === 'delete'){
+        if (!flags.yes){
+          console.error(`This deletes "${target.username}" for good (their jobs stay). Re-run with --yes to confirm.`);
+          process.exit(4);
+        }
+        adminUsers.remove(target.id, { by });
+        console.log(`Deleted "${target.username}"`);
+      }
+      else {
+        return usage(), process.exit(4);
+      }
+    }
+    catch (err){
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
   if (cmd === 'create-admin'){
     const { positional, flags } = parseFlags([sub, ...rest].filter(Boolean)),
       [username, password] = positional;
@@ -166,18 +253,22 @@ function main(){
       return usage(), process.exit(4);
     }
     adminUsers.create({ username, password, role: flags.role || 'admin' });
-    console.log(`Created ${flags.role || 'admin'} user "${username}"`);
+    console.log(`Created ${roleLabel(normalizeRole(flags.role || 'admin'))} user "${username}"`);
     return;
   }
 
   if (cmd === 'agent' && sub === 'add'){
     const { positional, flags } = parseFlags(rest),
       [name] = positional;
-    if (!name || !flags.kind){
+    if (!name){
       return usage(), process.exit(4);
     }
-    const { agent, token } = agents.create({ name, kind: flags.kind });
-    console.log(`Agent ${agent.id} created. Token (shown once): ${token}`);
+    if (flags.kind && flags.kind !== 'ci'){
+      console.error('Agent tokens are for CI only now; a person gets their access key with: thub-admin user key <username>');
+      process.exit(4);
+    }
+    const { agent, token } = agents.create({ name, kind: 'ci' });
+    console.log(`CI token ${agent.id} created. Token (shown once): ${token}`);
     return;
   }
 

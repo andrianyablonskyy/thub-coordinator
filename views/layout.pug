@@ -21,7 +21,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
             data-bs-title=`Coordinator v${coordinatorVersion} · thub-common v${commonVersion} (validates job specs)`
           )
             | ver. #{coordinatorVersion}
-            if user && user.role !== 'admin' && updates.coordinatorUpdate
+            if user && !can.admin && updates.coordinatorUpdate
               span.badge.text-bg-warning.ms-1(
                 data-bs-toggle="tooltip"
                 data-bs-placement="bottom"
@@ -33,7 +33,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
           //- Below lg the menu drops down over the page (thub.css .thub-nav,
           //- closed by public/js/actions.js): pages as a two-column grid with
           //- icons, then the tools in a row, then the account row.
-          - const pages = user ? [['/', 'overview', 'Overview', 'speedometer2'], ['/resources', 'resources', 'Resources', 'hdd-rack'], ['/groups', 'groups', 'Groups', 'collection'], ['/jobs', 'jobs', 'Jobs', 'list-task']].concat(user.role === 'admin' ? [['/admin/agents', 'agents', 'Agents', 'person-badge'], ['/admin/settings', 'settings', 'Settings', 'gear']] : []) : []
+          - const pages = user ? [['/', 'overview', 'Overview', 'speedometer2'], ['/resources', 'resources', 'Resources', 'hdd-rack'], ['/groups', 'groups', 'Groups', 'collection'], ['/jobs', 'jobs', 'Jobs', 'list-task']].concat(user.role === 'admin' ? [['/admin/users', 'users', 'Users', 'people'], ['/admin/agents', 'agents', 'CI tokens', 'key'], ['/admin/settings', 'settings', 'Settings', 'gear']] : []) : []
           ul.navbar-nav.me-auto.thub-nav-pages
             each pg in pages
               li.nav-item
@@ -59,7 +59,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                 )
                   i.bi.bi-question-circle.me-1
                   | Help
-            if user && user.role === 'admin'
+            if user && can.operate
               li.nav-item.d-flex.align-items-center.me-2
                 form(method="post" action="/updates/check" data-submit-busy)
                   input(type="hidden" name="returnTo" value=currentPath)
@@ -71,7 +71,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                     data-bs-title=updates.checkedAt ? `Check for updates now — the Coordinator and connected resources (last checked ${fmtDate(updates.checkedAt)})` : 'Check for updates now — the Coordinator and connected resources'
                   )
                     i.bi.bi-arrow-repeat
-            if user && user.role === 'admin' && updates.coordinatorUpdate
+            if user && can.admin && updates.coordinatorUpdate
               li.nav-item.d-flex.align-items-center.me-3
                 if updates.coordinatorPending
                   //- public/js/update-watch.js polls /updates/status and
@@ -118,7 +118,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                   href="/profile"
                   data-bs-toggle="tooltip"
                   data-bs-placement="bottom"
-                  data-bs-title=`Profile settings (${user.role})`
+                  data-bs-title=`Profile settings (${roleLabel(user.role)})`
                 )
                   if user.avatarPath
                     img.rounded-circle.me-2(src=user.avatarPath width="24" height="24" style="object-fit: cover;")
@@ -126,7 +126,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
                     span.rounded-circle.bg-secondary.text-white.d-inline-flex.align-items-center.justify-content-center.me-2(style="width: 24px; height: 24px; font-size: 12px;")
                       = ((user.firstName ? user.firstName[0] : user.username[0]) + (user.lastName ? user.lastName[0] : '')).toUpperCase()
                   span= user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.username
-                  span.small.text-body-secondary.ms-2.d-lg-none= `${user.role} · profile`
+                  span.small.text-body-secondary.ms-2.d-lg-none= `${roleLabel(user.role)} · profile`
               li.nav-item.d-flex.align-items-center
                 form(action="/logout" method="post")
                   button.btn.btn-sm.btn-outline-danger(
@@ -194,6 +194,6 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
     script(src="/js/actions.js")
     if user && liveTopics
       script(src="/js/live.js")
-    if user && user.role === 'admin' && updates.coordinatorPending
+    if user && can.admin && updates.coordinatorPending
       script(src="/js/update-watch.js")
     block scripts

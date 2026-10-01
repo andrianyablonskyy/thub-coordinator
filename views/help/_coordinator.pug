@@ -114,10 +114,11 @@
   p.small.
     #[code thub-admin] works directly on the database. Run it on the Coordinator host as the service user.
   +code('Coordinator host').
-    thub-admin create-admin alice 's3cret' --role admin     # or --role viewer (read-only dashboard)
+    thub-admin user add alice --email alice@example.com --role admin --password 's3cret'
+    thub-admin user add bob --email bob@example.com --key   # role user (Agent only); prints his key once
+    thub-admin user list | block | unblock | role | password | key | delete …
     thub-admin join-key generate                            # → clientJoinKey here, joinKey on every Client
-    thub-admin agent add ci-firmware --kind ci              # CI token: job ids A-00001…
-    thub-admin agent add alice-laptop --kind cli            # developer token: job ids M-00001…
+    thub-admin agent add ci-firmware                        # CI token for a pipeline: job ids A-00001…
     thub-admin group add ci-nightly --comment "nightly pool" # → a group id for thub run --group
     thub-admin resource maintenance &lt;resourceId> --on
     thub-admin jobs reset --yes                             # cancel every active job

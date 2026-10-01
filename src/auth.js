@@ -36,11 +36,20 @@ function requireRole(role){
     const tokenHash = hashToken(token);
 
     if (role === 'agent'){
-      const agent = req.app.locals.services.agents.getByTokenHash(tokenHash);
+      const { agents, adminUsers } = req.app.locals.services,
+        agent = agents.getByTokenHash(tokenHash);
       if (!agent){
-        return res.status(401).json({ error: 'Invalid or revoked agent token' });
+        return res.status(401).json({ error: 'Invalid or revoked access key' });
       }
-      req.app.locals.services.agents.touchLastUsed(agent.id, appVersion(req, 'agent'));
+      // A user's access key (§10.3) works only while its user may use it.
+      if (agent.user_id){
+        const user = adminUsers.getById(agent.user_id);
+        if (!user || user.blocked){
+          return res.status(401).json({ error: user ? `User ${user.username} is blocked — ask an admin` : 'Invalid or revoked access key' });
+        }
+        req.user = user;
+      }
+      agents.touchLastUsed(agent.id, appVersion(req, 'agent'));
       req.agent = agent;
       return next();
     }
@@ -81,19 +90,43 @@ function requireJoinKey(config){
   };
 }
 
+// Dashboard session (§10.3): the user is read again on every request, so
+// blocking, deleting or demoting someone to `user` ends their session at
+// their next click, and a role change applies at once. A temporary password
+// must be changed (on the profile page) before anything else.
+const MUST_CHANGE_ALLOWED = ['/profile', '/profile/password', '/logout', '/live'];
 function requireAdminSession(req, res, next){
-  if (!req.session?.user){
+  const fresh = req.session?.user && req.app.locals.services.adminUsers.getById(req.session.user.id);
+  if (!fresh || fresh.blocked || !fresh.canUseDashboard){
+    const reason = !req.session?.user ? null
+      : !fresh ? 'Your account no longer exists.'
+        : fresh.blocked ? 'Your account is blocked — ask an admin.' : 'Your account has no dashboard access — use the Agent with your access key.';
+    if (req.session?.user){
+      req.session.user = null;
+      if (reason){
+        req.session.flash = [{ type: 'danger', text: reason }];
+      }
+    }
     if (req.accepts('html')){
       return res.redirect('/login');
     }
-    return res.status(401).json({ error: 'Login required' });
+    return res.status(401).json({ error: reason || 'Login required' });
+  }
+  req.session.user = fresh;
+  res.locals.user = fresh;
+  if (fresh.mustChangePassword && !MUST_CHANGE_ALLOWED.includes(req.path) && req.method === 'GET'){
+    return res.redirect('/profile');
   }
   next();
 }
 
+// The dashboard's security features (§10.3): Users, Settings, CI tokens…
 function requireAdminRole(req, res, next){
   if (req.session?.user?.role !== 'admin'){
-    return res.status(403).json({ error: 'Admin role required' });
+    const text = 'Only admins can open this — it\'s one of the Coordinator\'s security features.';
+    return req.originalUrl.startsWith('/api/') || !req.accepts('html')
+      ? res.status(403).json({ error: text })
+      : res.status(403).type('text/plain').send(text);
   }
   next();
 }

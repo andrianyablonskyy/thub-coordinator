@@ -4,8 +4,8 @@ include ../mixins/list-controls
 
 block content
   .d-flex.justify-content-between.align-items-center.mb-3
-    h1.h4.mb-0 Agents (CI / developers)
-    button.btn.btn-primary.btn-sm(type="button" data-bs-toggle="modal" data-bs-target="#addAgentModal") Register agent
+    h1.h4.mb-0 CI tokens
+    button.btn.btn-primary.btn-sm(type="button" data-bs-toggle="modal" data-bs-target="#addAgentModal") New CI token
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
     +updatesToolbar('agent', 'agents', list.pageUrl())
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
@@ -90,16 +90,15 @@ block content
       .modal-content
         form(method="post" action="/admin/agents")
           .modal-header
-            h5.modal-title Register agent
+            h5.modal-title New CI token
             button.btn-close(type="button" data-bs-dismiss="modal")
           .modal-body
             .mb-3
               label.form-label Name
-              input.form-control(type="text" name="name" placeholder="ci-firmware or jane.dev" required)
+              input.form-control(type="text" name="name" placeholder="ci-firmware" required)
             .mb-3
-              label.form-label Kind
-              select.form-select(name="kind")
-                option(value="ci") ci
-                option(value="cli") cli
+              p.small.text-body-secondary.mb-0.
+                For a pipeline: its jobs get A- ids and it can read every job. People use their own access key
+                instead (#[a(href="/admin/users") Users]).
           .modal-footer
             button.btn.btn-primary(type="submit") Create
