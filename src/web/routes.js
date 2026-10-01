@@ -616,7 +616,7 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, '/runners'));
   });
 
-  // "Connected USB devices" tab (public/js/usb-scan.js): Refresh queues a
+  // "USB devices" tab (public/js/usb-scan.js): Refresh queues a
   // scan-usb for the Client's next heartbeat; the tab then polls the GET
   // until the answer is in. JSON both ways — the modal stays open.
   function usbScanView(req, r){

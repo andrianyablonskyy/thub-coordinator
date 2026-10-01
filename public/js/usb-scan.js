@@ -1,6 +1,6 @@
 /**
  * @file        packages/coordinator/public/js/usb-scan.js
- * @description Dashboard: the resource card's "Connected USB devices" tab — Refresh asks the Client for `lsusb`,
+ * @description Dashboard: the resource card's "USB devices" tab — Refresh asks the Client for `lsusb`,
  *              then polls until its answer arrives and shows it in place
  *
  * @author      Andrian Yablonskyy

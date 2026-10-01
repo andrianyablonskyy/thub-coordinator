@@ -80,7 +80,7 @@
 }
 
 /* The client details modal has up to 7 tabs (Details, the config tabs,
-   Connected USB devices) — tighter padding keeps them on one row, ⚠ icons
+   USB devices) — tighter padding keeps them on one row, ⚠ icons
    included, at the modal-lg width. */
 .thub-resource-card .nav-tabs .nav-link {
   padding: 0.45rem 0.65rem;
@@ -126,7 +126,7 @@
   pointer-events: auto;
 }
 
-/* Connected USB devices: the lsusb output takes the rest of the modal's
+/* USB devices: the lsusb output takes the rest of the modal's
    height — what the tallest other tab sets, at least 12rem — and scrolls in
    it. Its 0 basis keeps it from making the modal taller. */
 .thub-resource-card .tab-content .tab-pane.thub-usb-pane {

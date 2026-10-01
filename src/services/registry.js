@@ -625,7 +625,7 @@ function createRegistryService(db, { bus, events }){
     return db.prepare('SELECT * FROM resources WHERE remove_requested_at IS NOT NULL').all().map(rowToResource);
   }
 
-  // "Connected USB devices" tab: Refresh asks the Client to run `lsusb` on
+  // "USB devices" tab: Refresh asks the Client to run `lsusb` on
   // its next heartbeat (a scan-usb command, delivered by the caller's bus
   // via commands). Only while it's connected — it would otherwise run
   // whenever it next reconnects.

@@ -1,6 +1,6 @@
 /**
  * @file        packages/coordinator/public/js/usb-import.js
- * @description Dashboard: "Import to config" on the resource card's Connected USB devices tab — updates the Config
+ * @description Dashboard: "Import to config" on the resource card's USB devices tab — updates the Config
  *              sub-tabs' device lists from the last `lsusb -tvv`, opens the first changed one, and asks to verify
  *
  * @author      Andrian Yablonskyy

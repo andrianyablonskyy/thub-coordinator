@@ -40,7 +40,7 @@
         lsusb -t                                      # USB tree
         udevadm info -a -n /dev/ttyUSB0 | grep -m1 'ATTRS{devpath}'
         st-info --probe                               # ST-Link serials
-      | Or open the runner card → #[strong Connected USB devices] → #[strong Refresh], then #[strong Import to config].
+      | Or open the runner card → #[strong USB devices] → #[strong Refresh], then #[strong Import to config].
     li
       | Put the devpaths into #[code hw-devices] and restart. On every start the Client writes
       | #[code /etc/udev/rules.d/99-thub-&lt;instance&gt;.rules], so the devices appear as #[code /dev/thub/dut&lt;N&gt;-stlink|uart|usb]:

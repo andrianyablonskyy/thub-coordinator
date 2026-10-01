@@ -1,4 +1,4 @@
--- "Connected USB devices" (resource card tab, README §10): the Client runs
+-- "USB devices" (resource card tab, README §10): the Client runs
 -- `lsusb` only when an admin presses Refresh — a scan-usb command with its
 -- next heartbeat — and posts the output back. `usb_scan` is the last result
 -- (JSON {output, error, at}); `usb_scan_requested_at`/`_request_id` the
