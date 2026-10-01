@@ -19,6 +19,10 @@
     "defaultTimeoutSec": 1800,
     "maxTimeoutSec": 14400
   },
+  "rateLimit": {
+    "requestsPerMinute": 500,
+    "loginPerMinute": 10
+  },
   "retention": {
     "jobRetention": "forever"
   }

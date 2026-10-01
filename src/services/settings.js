@@ -114,6 +114,17 @@ const int = (min, max) => (raw) => {
       parse: int(1, 60)
     },
     {
+      key: 'rateLimit.requestsPerMinute', group: 'Rate limits', label: 'Requests per minute', applies: 'now', type: 'number',
+      help: 'Per caller: an agent or resource token, a dashboard user, else the IP address. Short bursts are fine; ' +
+        'past that, requests get 429 with Retry-After. A Client streaming logs makes up to ~240 a minute. 0: no limit.',
+      parse: int(0, 1_000_000)
+    },
+    {
+      key: 'rateLimit.loginPerMinute', group: 'Rate limits', label: 'Sign-in attempts per minute', applies: 'now', type: 'number',
+      help: 'Per IP address, against password guessing. 0: no limit.',
+      parse: int(0, 10_000)
+    },
+    {
       key: 'jobs.defaultTimeoutSec', group: 'Jobs', label: 'Default job timeout (s)', applies: 'now', type: 'number',
       help: 'For a job submitted without --timeout.', parse: int(60, 7 * 86400)
     },

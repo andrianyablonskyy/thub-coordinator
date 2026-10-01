@@ -52,6 +52,13 @@ const DEFAULTS = {
     defaultTimeoutSec: 1800,
     maxTimeoutSec: 14400
   },
+  // Requests per minute per caller (rate-limit.js, README §12): an agent or
+  // resource token or a dashboard user, else the client IP; sign-in attempts
+  // per IP on top. 0 turns a limit off.
+  rateLimit: {
+    requestsPerMinute: 500,
+    loginPerMinute: 10
+  },
   // logRetentionDays, artifactRetentionDays and the `artifacts` section of
   // older configs are no longer read: a job's log lines live as long as the
   // job, and the Coordinator stores no artifacts (README §9).
@@ -125,6 +132,13 @@ function loadConfig(configPath = process.env.THUB_COORDINATOR_CONFIG){
   }
   if (process.env.THUB_CLIENT_JOIN_KEY){
     config.clientJoinKey = process.env.THUB_CLIENT_JOIN_KEY;
+  }
+
+  for (const key of ['requestsPerMinute', 'loginPerMinute']){
+    const v = config.rateLimit[key];
+    if (!Number.isInteger(v) || v < 0){
+      throw new Error(`rateLimit.${key} must be a whole number, 0 or more (0 = no limit; got ${JSON.stringify(v)}) in ${candidate || 'the config'}`);
+    }
   }
 
   if (![true, false, 'auto'].includes(config.session.secureCookie)){

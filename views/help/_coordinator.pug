@@ -30,6 +30,7 @@
       "heartbeat": { "intervalSec": 10, "missedLimit": 3, "sweepIntervalSec": 5 },
       "scheduler": { "assignAckTimeoutSec": 15, "requeueOnLost": true, "maxQueuedPerAgent": 20, "tickIntervalSec": 10 },
       "jobs": { "defaultTimeoutSec": 1800, "maxTimeoutSec": 14400 },
+      "rateLimit": { "requestsPerMinute": 500, "loginPerMinute": 10 },
       "retention": { "jobRetention": "forever" },
       "updates": { "checkIntervalMin": 15, "registry": null }
     }
@@ -64,6 +65,9 @@
         tr
           td: code scheduler.*
           td #[code assignAckTimeoutSec]: how long an assignment waits for the Client to accept. #[code requeueOnLost]: retry a #[code LOST] job once. #[code maxQueuedPerAgent]: queue limit per agent.
+        tr
+          td: code rateLimit.*
+          td Requests per minute per caller (agent/resource token, dashboard user, else IP; default 500), and sign-in attempts per IP (default 10). Past it: #[code 429] with #[code Retry-After]. #[code 0] turns a limit off.
         tr
           td: code jobs.*
           td Default and maximum job timeout, in seconds.

@@ -41,6 +41,7 @@ const fs = require('node:fs'),
   { SqliteSessionStore } = require('./services/session-store'),
   { securityHeaders, sameOriginOnly } = require('./security'),
   { createSettingsService } = require('./services/settings'),
+  { createRateLimiter } = require('./rate-limit'),
 
   { createAgentRouter } = require('./api/agent'),
   { createResourceRouter } = require('./api/resource'),
@@ -183,6 +184,9 @@ function createApp(config, services){
   });
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.use('/avatars', express.static(config.avatarsDir));
+  // Everything below (API, dashboard, sign-in) — static files above aren't
+  // counted. Per credential, else per IP (rate-limit.js, §12).
+  app.use(createRateLimiter(config, services));
 
   app.use('/api/v1', createAgentRouter({ services, config }));
   app.use('/api/v1', createResourceRouter({ services, config }));
