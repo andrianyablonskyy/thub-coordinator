@@ -10,7 +10,7 @@ block content
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
     +updatesToolbar('agent', 'agents', list.pageUrl())
   .d-flex.flex-wrap.align-items-center.gap-2.mb-3
-    +searchForm(q, 'Search agents: name, kind, group, version, status', list.urlFor({ q: '' }))
+    +searchForm(q, 'Search CI tokens: name, group, version, status', list.urlFor({ q: '' }))
     .ms-auto
       +pageSizePicker(list)
 
@@ -30,7 +30,6 @@ block content
     thead
       tr
         +sortHeader(list, 'name', 'Name')
-        +sortHeader(list, 'kind', 'Kind')
         +sortHeader(list, 'group', 'Group')
         +sortHeader(list, 'version', 'Version', 'desc')
         +sortHeader(list, 'created', 'Created', 'desc')
@@ -43,7 +42,6 @@ block content
           //- The name opens Edit (name and group).
           td
             a.fw-medium(href=`#editAgentModal-${a.id}` data-bs-toggle="modal" role="button")= a.name
-          td.text-uppercase= a.kind
           td
             if a.group_id && groupsById[a.group_id]
               span.badge.text-bg-info= groupsById[a.group_id].name
@@ -108,7 +106,7 @@ block content
                       button.btn.btn-primary(type="submit") Save
       else
         tr
-          td.text-body-secondary(colspan="8")
+          td.text-body-secondary(colspan="7")
             if q
               | No agent matches “#{q}”. 
               a(href=list.urlFor({ q: '' })) Show all agents

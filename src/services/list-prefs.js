@@ -32,7 +32,7 @@ const PAGE_SIZES = [10, 25, 50, 100, 'all'],
       defaults: { size: DEFAULT_PAGE_SIZE, sort: 'name', dir: 'asc' }
     },
     agents: {
-      sorts: ['name', 'kind', 'group', 'version', 'created', 'used', 'status'],
+      sorts: ['name', 'group', 'version', 'created', 'used', 'status'],
       defaults: { size: DEFAULT_PAGE_SIZE, sort: 'created', dir: 'desc' }
     },
     users: {

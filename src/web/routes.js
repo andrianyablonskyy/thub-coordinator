@@ -52,7 +52,6 @@ const STARTED_AT = new Date().toISOString(),
   // Agents page (list-prefs `agents`): never-used / never-reported last.
   AGENT_SORT_VALUE = {
     name: (a) => a.name,
-    kind: (a) => a.kind,
     version: (a) => a.version,
     created: (a) => a.created_at,
     used: (a) => a.last_used_at,
@@ -1095,7 +1094,7 @@ function createWebRouter({ services, config }){
       // CI tokens only: a person's key belongs to their user (Users, §10.3).
       sorted = services.agents.list()
         .filter((a) => !a.user_id)
-        .filter((a) => search.matches([a.name, a.kind, a.version, groupName(a), a.revoked_at ? 'revoked' : 'active'], terms))
+        .filter((a) => search.matches([a.name, a.version, groupName(a), a.revoked_at ? 'revoked' : 'active'], terms))
         .sort((a, b) => {
           const va = value(a),
             vb = value(b);
