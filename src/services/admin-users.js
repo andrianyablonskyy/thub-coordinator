@@ -123,7 +123,10 @@ function parseListPrefs(json){
 // access key for the Agent for anyone. `events` (the audit log) is optional
 // so the profile/password functions can be used on their own (tests).
 function createAdminUsersService(db, { events } = {}){
-  const audit = (id, type, data) => events?.record('user', id, type, data);
+  // Every user event names who did it (`by`): a username, `thub-admin
+  // (<os user>)`, or `system` for what no person did (the bootstrap reset,
+  // internal callers that pass none).
+  const audit = (id, type, data) => events?.record('user', id, type, { ...data, by: data.by || 'system' });
 
   function getByUsername(username){
     return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
@@ -228,13 +231,14 @@ function createAdminUsersService(db, { events } = {}){
   // silently promote anyone to admin), or creates one as admin if the
   // named account doesn't exist yet — the original first-run bootstrap
   // case, now handled by the same path.
-  function resetPassword({ username, password, role = 'admin' }){
+  function resetPassword({ username, password, role = 'admin' }, { by } = {}){
     const existing = getByUsername(username);
     if (existing){
       db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(hashPassword(password), existing.id);
+      audit(existing.id, 'user.password_set', { by });
       return { id: existing.id, username, role: existing.role };
     }
-    return create({ username, password, role });
+    return create({ username, password, role }, { by });
   }
 
   // Users page: a new temporary password for someone who lost theirs.
@@ -266,7 +270,7 @@ function createAdminUsersService(db, { events } = {}){
       throw bad('Choose a password different from the current one');
     }
     db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(await hashPasswordAsync(newPassword), id);
-    audit(id, 'user.password_changed', {});
+    audit(id, 'user.password_changed', { by: row.username });
   }
 
   // Async (thread pool); the same work whether or not the user exists, or

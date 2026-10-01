@@ -195,21 +195,22 @@ block content
         tr
           td.text-body-secondary(colspan="5")= q || roleFilter ? 'No user matches.' : 'No users yet.'
 
+  //- The audit log: who did what to which account (web/routes.js auditRows).
   h2.h6.mt-4 Recent activity
-  if events.length
-    ul.list-group.list-group-flush.small.mb-4
-      each e in events
-        li.list-group-item.px-0
-          span.text-body-secondary.me-2= fmtDate(e.ts)
-          strong= e.type.replace('user.', '').replace(/_/g, ' ')
-          if e.data.username
-            = ` ${e.data.username}`
-          if e.data.role && e.data.role.from
-            = ` — ${roleLabel(e.data.role.from)} → ${roleLabel(e.data.role.to)}`
-          else if e.data.role
-            = ` (${roleLabel(e.data.role)})`
-          if e.data.by
-            span.text-body-secondary= ` by ${e.data.by}`
+  if audit.length
+    .table-responsive.mb-4
+      table.table.table-sm.small.align-middle
+        thead
+          tr
+            th.text-nowrap Timestamp
+            th User
+            th Action
+        tbody
+          each e in audit
+            tr
+              td.text-nowrap.text-body-secondary= fmtDate(e.ts)
+              td.text-nowrap= e.by
+              td= e.action
   else
     p.small.text-body-secondary Nothing yet.
 

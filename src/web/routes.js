@@ -1205,7 +1205,58 @@ function createWebRouter({ services, config }){
     // dashboard role.
     isAdmin = (actor) => actor.role === 'admin',
     managesUser = (actor, u) => Boolean(u) && (isAdmin(actor) || u.role === 'user' || u.id === actor.id),
-    userFiltersFor = (actor) => (isAdmin(actor) ? USER_ROLE_FILTERS : ['user', 'blocked']);
+    userFiltersFor = (actor) => (isAdmin(actor) ? USER_ROLE_FILTERS : ['user', 'blocked']),
+    // The audit log's Action column names changed fields like this.
+    FIELD_LABEL = { username: 'username', email: 'email', role: 'role', first_name: 'first name', last_name: 'last name' };
+
+  // The audit log's Action column: what was done, to whom. `nameOf` gives
+  // the account's current username (else the one its events recorded).
+  function describeUserEvent(e, nameOf){
+    const name = nameOf(e.entity_id),
+      whose = e.data.by === name ? 'their own' : `${name}'s`;
+    switch (e.type){
+      case 'user.created': return `Created ${name} (${roleLabel(e.data.role)})`;
+      case 'user.updated': {
+        const parts = [];
+        if (e.data.role?.from){
+          parts.push(`role ${roleLabel(e.data.role.from)} → ${roleLabel(e.data.role.to)}`);
+        }
+        const fields = (e.data.changed || []).filter((f) => f !== 'role').map((f) => FIELD_LABEL[f] || f);
+        if (fields.length){
+          parts.push(fields.join(', '));
+        }
+        return `Edited ${name}${parts.length ? `: ${parts.join('; ')}` : ''}`;
+      }
+      case 'user.blocked': return `Blocked ${name}`;
+      case 'user.unblocked': return `Unblocked ${name}`;
+      case 'user.deleted': return `Deleted ${name}`;
+      case 'user.password_reset': return `Issued a temporary password for ${name}`;
+      case 'user.password_set': return `Set ${whose} password`;
+      case 'user.password_changed': return `Changed ${whose} password`;
+      case 'user.key_created': return `Created ${whose} access key`;
+      case 'user.key_rotated': return `Replaced ${whose} access key`;
+      case 'user.key_revoked': return `Revoked ${whose} access key`;
+      default: return `${e.type.replace('user.', '').replace(/_/g, ' ')} ${name}`;
+    }
+  }
+
+  // Rows for the audit log: Timestamp, User (who did it — always shown;
+  // events from before it was recorded for everything say `system`, or the
+  // account itself for its own password change), Action.
+  function auditRows(events){
+    const names = new Map(services.adminUsers.list().map((u) => [u.id, u.username]));
+    for (const e of services.adminUsers.recentEvents(1000)){
+      if (!names.has(e.entity_id) && e.data.username){
+        names.set(e.entity_id, e.data.username);
+      }
+    }
+    const nameOf = (id) => names.get(id) || id;
+    return events.map((e) => ({
+      ts: e.ts,
+      by: e.data.by || (e.type === 'user.password_changed' ? nameOf(e.entity_id) : 'system'),
+      action: describeUserEvent(e, nameOf)
+    }));
+  }
 
   // A maintainer's Recent activity: about the users they see, and deleted
   // ones that were Agent-only users when created — nothing about admins or
@@ -1266,7 +1317,7 @@ function createWebRouter({ services, config }){
         admin: 'Everything'
       },
       roleTone: { user: 'secondary', maintainer: 'info', admin: 'primary' },
-      events: isAdmin(me) ? services.adminUsers.recentEvents(30) : visibleEvents(me, visibleIds),
+      audit: auditRows(isAdmin(me) ? services.adminUsers.recentEvents(30) : visibleEvents(me, visibleIds)),
       ...extra
     });
   }

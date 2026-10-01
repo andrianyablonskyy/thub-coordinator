@@ -131,6 +131,8 @@
     Maintainers use Users too, for Agent-only users and their own account only. They can create, edit, block
     and delete those users and issue or revoke their keys, but can't create or promote a maintainer or admin.
     They don't see admins or other maintainers. They also manage #[a(href="/admin/agents") CI tokens].
+    #[strong Recent activity] at the bottom of Users is the audit log: #[strong Timestamp | User | Action], where
+    User is who made the change (a username, #[code thub-admin (&lt;OS user&gt;)], or #[code system]).
   +note('warning').
     Forgot the admin password? Start the Coordinator once with #[code THUB_BOOTSTRAP_ADMIN_PASSWORD=…]
     (and optionally #[code THUB_BOOTSTRAP_ADMIN_USER], default #[code admin]). The password is reset on

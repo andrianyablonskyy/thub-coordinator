@@ -247,7 +247,7 @@ function ensureBootstrapAdmin(services){
     return;
   }
   const username = process.env.THUB_BOOTSTRAP_ADMIN_USER || 'admin';
-  services.adminUsers.resetPassword({ username, password });
+  services.adminUsers.resetPassword({ username, password }, { by: 'system (THUB_BOOTSTRAP_ADMIN_PASSWORD)' });
   console.log(`Reset password for admin user "${username}" from THUB_BOOTSTRAP_ADMIN_PASSWORD`);
 }
 

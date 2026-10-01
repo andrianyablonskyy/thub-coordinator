@@ -384,3 +384,57 @@ test('maintainers manage Agent-only users, their own account and CI tokens — n
     assert.match(await r.text(), new RegExp(`<title>${job.id} `));
   }
 });
+
+test('audit log: Timestamp, User (who did it — always), Action — from the dashboard, the profile, the Agent and thub-admin', async (t) => {
+  const { base, services, file } = await start(t),
+    u = services.adminUsers;
+  u.create({ username: 'root', email: 'r@example.com', role: 'admin', password: 'pw' }, { by: 'root' });
+  const login = async (name, pw) => (await fetch(`${base}/login`, {
+      method: 'POST', body: new URLSearchParams({ username: name, password: pw }), redirect: 'manual'
+    })).headers.get('set-cookie').split(';')[0],
+    root = await login('root', 'pw'),
+    post = (cookie, p, body = {}) => fetch(`${base}${p}`, { method: 'POST', headers: { cookie }, body: new URLSearchParams(body), redirect: 'manual' });
+
+  // Dashboard (an admin), then the profile (the user themselves).
+  await post(root, '/admin/users', { username: 'dev', email: 'd@example.com', role: 'user', issueKey: '1' });
+  const dev = u.getByUsername('dev');
+  await post(root, '/admin/users', { username: 'ops', email: 'o@example.com', role: 'maintainer' });
+  const ops = u.getByUsername('ops');
+  await post(root, `/admin/users/${ops.id}`, { username: 'ops', email: 'ops@example.com', role: 'admin', firstName: 'Olga' });
+  const temp = u.adminResetPassword(ops.id, { by: 'root' }),
+    opsCookie = await login('ops', temp);
+  await post(opsCookie, '/profile/password', { currentPassword: temp, newPassword: 'Ops-own-1', confirmPassword: 'Ops-own-1' });
+
+  // The Agent rotating its own key.
+  const devKey = u.issueKey(dev.id, { by: 'root' });
+  assert.equal((await fetch(`${base}/api/v1/me/key/rotate`, { method: 'POST', headers: { authorization: `Bearer ${devKey}` } })).status, 200);
+
+  // thub-admin on the Coordinator host, and an internal call naming no one.
+  const cli = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'thub-admin.js'), 'user', 'block', 'dev'], {
+    env: { ...process.env, THUB_COORDINATOR_CONFIG: file, SUDO_USER: 'alice' }, encoding: 'utf8'
+  });
+  assert.match(cli.stdout, /Blocked "dev"/);
+  u.setBlocked(dev.id, false);
+
+  // Every recorded event names who did it.
+  assert.ok(u.recentEvents(100).every((e) => e.data.by), 'every user event has `by`');
+
+  const html = await (await fetch(`${base}/admin/users`, { headers: { cookie: root } })).text(),
+    log = html.slice(html.indexOf('Recent activity'), html.indexOf('id="addUserModal"')),
+    rows = [...log.matchAll(/<tr><td[^>]*>[^<]*<\/td><td[^>]*>([^<]*)<\/td><td>([^<]*)<\/td><\/tr>/g)]
+      .map((m) => [m[1], m[2].replace(/&#39;/g, '\'').replace(/&gt;/g, '>')]).reverse(); // oldest first
+  assert.match(log, /<th class="text-nowrap">Timestamp<\/th><th>User<\/th><th>Action<\/th>/);
+  assert.deepEqual(rows, [
+    ['root', 'Created root (Admin)'],
+    ['root', 'Created dev (User)'],
+    ['root', 'Created dev\'s access key'],
+    ['root', 'Created ops (Maintainer)'],
+    ['root', 'Edited ops: role Maintainer → Admin; email, first name'],
+    ['root', 'Issued a temporary password for ops'],
+    ['ops', 'Changed their own password'],
+    ['root', 'Replaced dev\'s access key'],
+    ['dev', 'Replaced their own access key'],
+    ['thub-admin (alice)', 'Blocked dev'],
+    ['system', 'Unblocked dev']
+  ]);
+});

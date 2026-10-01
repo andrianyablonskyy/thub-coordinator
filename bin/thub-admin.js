@@ -37,7 +37,20 @@ const { loadConfig } = require('../src/config'),
   { roleLabel, normalizeRole } = require('../src/services/admin-users'),
   { PACKAGES, fetchLatestVersion, isNewer, isValidVersion, npmBin, formatDateTime, parseDateTime } = require('@andrian.yablonskyy/thub-common'),
   { spawnSync } = require('node:child_process'),
+  os = require('node:os'),
   { version: installedVersion } = require('../package.json');
+
+// Who the audit log names for a change made here: the OS user running it.
+function cliActor(){
+  let name = process.env.SUDO_USER || '';
+  try {
+    name ||= os.userInfo().username;
+  }
+  catch {
+    // no passwd entry (a container's random uid)
+  }
+  return name ? `thub-admin (${name})` : 'thub-admin';
+}
 
 function usage(){
   console.log(`Usage:
@@ -174,7 +187,7 @@ function main(){
   if (cmd === 'user'){
     const { positional, flags } = parseFlags(rest),
       [username, arg] = positional,
-      by = 'thub-admin',
+      by = cliActor(),
       need = (u) => {
         const row = adminUsers.getByUsername(u || '');
         if (!row){
@@ -221,7 +234,7 @@ function main(){
         if (!arg){
           return usage(), process.exit(4);
         }
-        adminUsers.resetPassword({ username: target.username, password: arg });
+        adminUsers.resetPassword({ username: target.username, password: arg }, { by });
         console.log(`Password of "${target.username}" set`);
       }
       else if (sub === 'key'){
@@ -252,7 +265,7 @@ function main(){
     if (!username || !password){
       return usage(), process.exit(4);
     }
-    adminUsers.create({ username, password, role: flags.role || 'admin' });
+    adminUsers.create({ username, password, role: flags.role || 'admin' }, { by: cliActor() });
     console.log(`Created ${roleLabel(normalizeRole(flags.role || 'admin'))} user "${username}"`);
     return;
   }
