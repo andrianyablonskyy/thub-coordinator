@@ -298,8 +298,9 @@ mixin resourceCard(r, groupsById, returnTo)
         //- data-config-root: where public/js/client-config.js tracks unsaved
         //- changes (⚠ on the config tabs).
         .modal-body.pt-2(data-config-root)
-          //- Details: what the Client is and reports. Then its config tabs
-          //- (client-config.pug; read-only for viewers), then its USB devices.
+          //- Details: what the Client is and reports; Capabilities: what it can
+          //- drive. Then its config tabs (client-config.pug; read-only for
+          //- viewers), then its USB devices.
           ul.nav.nav-tabs.mb-3(role="tablist")
             li.nav-item(role="presentation")
               button.nav-link.active(
@@ -311,6 +312,16 @@ mixin resourceCard(r, groupsById, returnTo)
                 aria-controls=`rc-${r.id}-details`
                 aria-selected="true"
               ) Details
+            li.nav-item(role="presentation")
+              button.nav-link(
+                id=`rc-${r.id}-caps-tab`
+                type="button"
+                role="tab"
+                data-bs-toggle="tab"
+                data-bs-target=`#rc-${r.id}-caps`
+                aria-controls=`rc-${r.id}-caps`
+                aria-selected="false"
+              ) Capabilities
             +configTabItems(r)
             li.nav-item(role="presentation")
               button.nav-link(
@@ -326,6 +337,11 @@ mixin resourceCard(r, groupsById, returnTo)
           .tab-content
             .tab-pane.fade.show.active(id=`rc-${r.id}-details` role="tabpanel" aria-labelledby=`rc-${r.id}-details-tab` tabindex="0" data-live=`rc-details-${r.id}`)
               +resourceDetails(r, groupsById, returnTo, local, external)
+            //- Live too: a Client that restarts reports them again.
+            .tab-pane.fade(id=`rc-${r.id}-caps` role="tabpanel" aria-labelledby=`rc-${r.id}-caps-tab` tabindex="0" data-live=`rc-caps-${r.id}`)
+              p.small.text-body-secondary.mb-2 What the Client reported it can drive at its last start, checked against its host.
+              .resource-capabilities
+                +capabilitiesList(r.capabilities)
             +configPanes(r, returnTo, groupsById)
             .tab-pane.fade.thub-usb-pane(id=`rc-${r.id}-usb` role="tabpanel" aria-labelledby=`rc-${r.id}-usb-tab` tabindex="0")
               +usbScanPane(r)
@@ -496,9 +512,6 @@ mixin resourceDetails(r, groupsById, returnTo, local, external)
               data-bs-toggle="tooltip"
               data-bs-title="The address the Coordinator last saw this Client connect from"
             ) external
-    dt.col-sm-4 Capabilities
-    dd.col-sm-8.resource-capabilities
-      +capabilitiesList(r.capabilities)
     dt.col-sm-4 Labels
     dd.col-sm-8
       if r.labels.length

@@ -340,3 +340,21 @@ test('Labels tab: in effect at once, sent to the Client as its next config revis
   const old = register(services, 'lab-old-30', { configFile: null });
   assert.throws(() => services.registry.setClientLabels(old, ['x'], { by: 'x' }), /too old/);
 });
+
+test('runner card: capabilities have their own tab, next to Details', async (t) => {
+  const { base, services, admin } = await start(t),
+    { resourceId } = services.registry.registerAuto({
+      clientId: 'hw8', name: 'lab-hw-08', type: 'hw', labels: [],
+      capabilities: { hw: { stlinks: [{ index: 1, path: '/dev/thub/dut1-stlink', present: false }], uarts: [], usbs: [] } }
+    }),
+    html = await (await fetch(`${base}/runners`, { headers: { cookie: admin } })).text(),
+    card = html.slice(html.indexOf(`id="resource-card-${resourceId}"`)),
+    details = card.slice(card.indexOf(`id="rc-${resourceId}-details"`), card.indexOf(`id="rc-${resourceId}-caps"`)),
+    caps = card.slice(card.indexOf(`id="rc-${resourceId}-caps"`)),
+    // The tab right after Details.
+    tabs = [...card.slice(0, card.indexOf('</ul>')).matchAll(/<button class="nav-link[^"]*" id="rc-[^"]*-(\w+)-tab"/g)].map((m) => m[1]);
+  assert.deepEqual(tabs.slice(0, 2), ['details', 'caps']);
+  assert.doesNotMatch(details, />Capabilities</); // no longer a Details row
+  assert.match(caps, new RegExp(`^id="rc-${resourceId}-caps"[^>]*data-live="rc-caps-${resourceId}"`)); // updates live
+  assert.match(caps, /\/dev\/thub\/dut1-stlink<\/code><span class="badge text-bg-danger[^"]*"[^>]*>missing/);
+});

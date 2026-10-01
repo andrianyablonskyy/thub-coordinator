@@ -47,7 +47,7 @@
       +code('HW machine').
         sudo systemctl restart thub-client@client
         ls -l /dev/thub/
-    li Check the runner card's #[strong Capabilities]: each configured device must be present (a missing one is flagged).
+    li Check the runner card's #[strong Capabilities] tab: each configured device must be present (a missing one is flagged).
     li Your job's #[code --command] flashes the board. The Client never flashes by itself; it passes the ST-Link serials and the downloaded files in the environment (#[a(href="#env") Environment variables]).
   +code('A typical HW job').
     thub run --type hw --label board:nucleo-f401re \
