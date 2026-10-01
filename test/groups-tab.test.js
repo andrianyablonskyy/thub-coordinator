@@ -198,3 +198,10 @@ test('Import and Export work for a Client that doesn\'t re-register (no joinKey)
     method: 'POST', headers: { authorization: `Bearer ${other.resourceToken}`, 'content-type': 'application/json' }, body: '{}'
   })).status, 403);
 });
+
+test('resource card CSS: stacked tabs let only the visible one take the mouse (else the device tabs\' form covers Details)', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../public/css/thub.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''),
+    off = css.slice(css.indexOf('.thub-resource-card .tab-content > form,'));
+  assert.match(off, /^[^{]*> form > fieldset,[^{]*\.tab-pane \{\s*pointer-events: none;/);
+  assert.match(css, /\.thub-resource-card \.tab-content \.tab-pane\.active \{[^}]*pointer-events: auto;/);
+});

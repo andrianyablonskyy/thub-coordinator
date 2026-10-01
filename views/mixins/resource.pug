@@ -327,7 +327,7 @@ mixin resourceCard(r, groupsById, returnTo)
             .tab-pane.fade.show.active(id=`rc-${r.id}-details` role="tabpanel" aria-labelledby=`rc-${r.id}-details-tab` tabindex="0" data-live=`rc-details-${r.id}`)
               +resourceDetails(r, groupsById, returnTo, local, external)
             +configPanes(r, returnTo, groupsById)
-            .tab-pane.fade(id=`rc-${r.id}-usb` role="tabpanel" aria-labelledby=`rc-${r.id}-usb-tab` tabindex="0")
+            .tab-pane.fade.thub-usb-pane(id=`rc-${r.id}-usb` role="tabpanel" aria-labelledby=`rc-${r.id}-usb-tab` tabindex="0")
               +usbScanPane(r)
 
 //- "Connected USB devices" (resource card tab): the Client's `lsusb`, run
@@ -364,7 +364,8 @@ mixin usbScanPane(r)
         else
           | Not scanned yet#{can.operate ? ' — press Refresh to run lsusb -tvv on the Client' : ''}.
     .alert.alert-danger.py-2.small(data-usb-error class=scan && scan.error ? null : 'd-none')= scan && scan.error || ''
-    pre.bg-body-tertiary.p-2.rounded.small.mb-0(data-usb-output style="max-height: 360px; overflow: auto;" class=scan && scan.output ? null : 'd-none')= scan && scan.output || ''
+    //- Fills the rest of the tab and scrolls inside (thub.css .thub-usb-pane).
+    pre.bg-body-tertiary.p-2.rounded.small.mb-0(data-usb-output class=scan && scan.output ? null : 'd-none')= scan && scan.output || ''
 
 //- Reboot the Client's host now (card's Actions row, icon only): confirmed first — naming the
 //- job that gets canceled, if one is running — then sent with the Client's

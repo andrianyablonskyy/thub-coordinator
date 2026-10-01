@@ -93,8 +93,9 @@
    keeps their height (and still takes them out of the tab order and of what
    screen readers read). The device tabs sit inside their shared
    <form>/<fieldset> (one Save for all of them), so that fieldset stacks its
-   panes the same way. The USB tab's output scrolls in its own box (360 px),
-   so a long lsusb doesn't make every tab that tall. */
+   panes the same way. The USB tab's output fills that height and scrolls
+   inside it (.thub-usb-pane below), so a long lsusb doesn't make every tab
+   that tall. */
 .thub-resource-card .tab-content,
 .thub-resource-card .tab-content > form > fieldset {
   display: grid;
@@ -111,8 +112,40 @@
   visibility: hidden;
 }
 
+/* Stacked, the device tabs' <form>/<fieldset> (not hidden themselves) lie
+   over the other panes: only the visible pane takes the mouse, or they'd
+   swallow every hover and click on the Details tab's buttons. */
+.thub-resource-card .tab-content > form,
+.thub-resource-card .tab-content > form > fieldset,
+.thub-resource-card .tab-content .tab-pane {
+  pointer-events: none;
+}
+
 .thub-resource-card .tab-content .tab-pane.active {
   visibility: visible;
+  pointer-events: auto;
+}
+
+/* Connected USB devices: the lsusb output takes the rest of the modal's
+   height — what the tallest other tab sets, at least 12rem — and scrolls in
+   it. Its 0 basis keeps it from making the modal taller. */
+.thub-resource-card .tab-content .tab-pane.thub-usb-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+.thub-usb-pane > [data-usb-scan] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.thub-usb-pane [data-usb-output] {
+  flex: 1 1 0;
+  height: 0;
+  min-height: 12rem;
+  overflow: auto;
 }
 
 /* Help page (views/help/): sticky table of contents, code blocks with a
