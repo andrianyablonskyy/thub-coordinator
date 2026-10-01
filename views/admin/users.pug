@@ -1,8 +1,9 @@
 extends ../layout
 include ../mixins/list-controls
 
-//- Users (§10.3, admins). Roles: user — the Agent only; maintainer — the
-//- dashboard without its security features; admin — everything.
+//- Users (§10.3). Roles: user — the Agent only; maintainer — the dashboard
+//- without its security features; admin — everything. A maintainer sees and
+//- manages Agent-only users and their own account (web/routes.js managesUser).
 //- Role picker: names in the list, the chosen role's description below it
 //- (kept in step by public/js/actions.js, select[data-describe]).
 mixin roleSelect(id, selected)
@@ -153,7 +154,8 @@ block content
                 button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Delete" data-bs-toggle="tooltip" data-bs-title="Delete the user")
                   i.bi.bi-trash
 
-            .modal.text-start(tabindex="-1" id=`editUser-${u.id}` aria-labelledby=`editUserTitle-${u.id}`)
+            //- Inside the actions cell (text-nowrap): wrap again in here.
+            .modal.text-start.text-wrap(tabindex="-1" id=`editUser-${u.id}` aria-labelledby=`editUserTitle-${u.id}`)
               .modal-dialog
                 .modal-content
                   form(method="post" action=`/admin/users/${u.id}`)
@@ -177,8 +179,14 @@ block content
                           input.form-control(id=`u-${u.id}-last` name="lastName" value=u.lastName || '')
                         .col-12
                           label.form-label(for=`u-${u.id}-role`) Role
-                          +roleSelect(`u-${u.id}-role`, u.role)
-                          if !u.canUseDashboard
+                          //- A maintainer gives no roles but User; their own
+                          //- row shows theirs without a picker (and posts none).
+                          if roles.includes(u.role)
+                            +roleSelect(`u-${u.id}-role`, u.role)
+                          else
+                            input.form-control(id=`u-${u.id}-role` value=roleLabel(u.role) disabled)
+                            .form-text Only an admin can change a role.
+                          if !u.canUseDashboard && roles.length > 1
                             .form-text Making them a maintainer or admin gives them a temporary password for the dashboard.
                     .modal-footer
                       button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel

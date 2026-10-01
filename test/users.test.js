@@ -186,8 +186,9 @@ test('dashboard: only maintainers and admins sign in; security pages are admins\
 
   const mo = await signIn('mo', 'pw');
   assert.equal((await get(mo.cookie, '/resources')).status, 200);
-  for (const url of ['/admin/users', '/admin/settings', '/admin/agents']){
-    assert.equal((await get(mo.cookie, url)).status, 403, url);
+  assert.equal((await get(mo.cookie, '/admin/settings')).status, 403); // admins' only
+  for (const url of ['/admin/users', '/admin/agents']){
+    assert.equal((await get(mo.cookie, url)).status, 200, url); // within limits — see below
   }
   const root = await signIn('root', 'pw');
   assert.equal((await get(root.cookie, '/admin/users')).status, 200);
@@ -285,4 +286,101 @@ test('Users page: the User column shows first and last name, sorts by it, and op
   assert.deepEqual(cells.map((m) => m[2]), ['Ann', 'root', 'Zed Young']); // no name → the username
   assert.equal(cells[2][1], zed.id);
   assert.match(html, new RegExp(`id="editUser-${zed.id}"`)); // the modal it opens
+});
+
+test('maintainers manage Agent-only users, their own account and CI tokens — never admins or other maintainers', async (t) => {
+  const { base, services } = await start(t),
+    u = services.adminUsers,
+    root = u.create({ username: 'root', email: 'r@example.com', role: 'admin', password: 'pw' }),
+    ops = u.create({ username: 'ops', email: 'o@example.com', role: 'maintainer', password: 'pw' }),
+    ops2 = u.create({ username: 'ops2', email: 'o2@example.com', role: 'maintainer', password: 'pw' }),
+    dev = u.create({ username: 'dev', email: 'd@example.com', role: 'user' }),
+    cookie = (await fetch(`${base}/login`, {
+      method: 'POST', body: new URLSearchParams({ username: 'ops', password: 'pw' }), redirect: 'manual'
+    })).headers.get('set-cookie').split(';')[0],
+    get = (p) => fetch(`${base}${p}`, { headers: { cookie } }).then((r) => r.text()),
+    post = (p, body = {}) => fetch(`${base}${p}`, { method: 'POST', headers: { cookie }, body: new URLSearchParams(body), redirect: 'manual' })
+      .then(async (r) => (r.status === 302 ? get(r.headers.get('location')) : r.text()));
+
+  // The list: Agent-only users and themselves; filters without Admin/Maintainer; only User to give.
+  let page = await get('/admin/users?size=all');
+  assert.match(page, /href="\/admin\/users"[^>]*>(<i [^>]*><\/i>)?Users</); // in the navbar
+  assert.match(page, /href="\/admin\/agents"[^>]*>(<i [^>]*><\/i>)?CI tokens</);
+  assert.doesNotMatch(page, /href="\/admin\/settings"/);
+  const ids = [...page.matchAll(/href="#editUser-([^"]+)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual(ids, [ops.id, dev.id].sort());
+  const filterNav = page.slice(page.indexOf('aria-label="Filter by role"'), page.indexOf('</nav>', page.indexOf('aria-label="Filter by role"')));
+  assert.deepEqual([...filterNav.matchAll(/<a [^>]*>([^<]+)</g)].map((m) => m[1].trim()), ['All', 'User', 'Blocked']);
+  assert.doesNotMatch(page.slice(page.indexOf('id="addUserModal"')), /<option value="(maintainer|admin)"/);
+  assert.match(page, new RegExp(`id="u-${ops.id}-role" value="Maintainer" disabled`)); // their own role, no picker
+
+  // Users: create, edit, key, block, delete.
+  page = await post('/admin/users', { username: 'dev2', email: 'd2@example.com', role: 'user', issueKey: '1' });
+  assert.match(page, /User dev2 created/);
+  assert.match(page, /value="thk_/);
+  const dev2 = u.getByUsername('dev2');
+  assert.match(await post(`/admin/users/${dev2.id}`, { username: 'dev2', email: 'd2@example.com', role: 'user', firstName: 'Dee' }), /Saved dev2/);
+  assert.match(await post(`/admin/users/${dev.id}/key`), /Access key for dev/);
+  assert.match(await post(`/admin/users/${dev.id}/key/revoke`), /Revoked the access key of dev/);
+  assert.match(await post(`/admin/users/${dev.id}/block`), /Blocked dev/);
+  assert.match(await post(`/admin/users/${dev.id}/unblock`), /Unblocked dev/);
+  assert.match(await post(`/admin/users/${dev2.id}/delete`), /Deleted dev2/);
+
+  // …but never a dashboard role.
+  assert.match(await post('/admin/users', { username: 'boss', email: 'b@example.com', role: 'admin' }), /Only an admin can create a maintainer or an admin/);
+  assert.match(await post('/admin/users', { username: 'm2', email: 'm2@example.com', role: 'maintainer' }), /Only an admin can create/);
+  assert.equal(u.getByUsername('boss'), undefined);
+  assert.match(await post(`/admin/users/${dev.id}`, { username: 'dev', email: 'd@example.com', role: 'maintainer' }), /Only an admin can change a role/);
+  assert.equal(u.getById(dev.id).role, 'user');
+
+  // Admins and other maintainers: as if they didn't exist.
+  for (const other of [root, ops2]){
+    for (const action of ['', '/block', '/reset-password', '/key', '/key/revoke', '/delete']){
+      assert.match(await post(`/admin/users/${other.id}${action}`, { username: 'x', email: 'x@example.com' }), /Unknown user/, `${other.username}${action}`);
+    }
+  }
+  assert.equal(u.getById(root.id).blocked, false);
+  assert.equal(u.getById(ops2.id).username, 'ops2');
+
+  // Their own account: edit, key, new temporary password — not block or delete, not a new role.
+  assert.match(await post(`/admin/users/${ops.id}`, { username: 'ops', email: 'o@example.com', firstName: 'Olga' }), /Saved ops/);
+  assert.equal(u.getById(ops.id).role, 'maintainer');
+  assert.match(await post(`/admin/users/${ops.id}`, { username: 'ops', email: 'o@example.com', role: 'admin' }), /Only an admin can change a role/);
+  assert.match(await post(`/admin/users/${ops.id}/key`), /Access key for ops/);
+  assert.match(await post(`/admin/users/${ops.id}/block`), /can&#39;t block your own account|can't block your own account/);
+  assert.match(await post(`/admin/users/${ops.id}/delete`), /can&#39;t delete your own account|can't delete your own account/);
+
+  // Recent activity: nothing about admins or other maintainers.
+  page = await get('/admin/users');
+  const activity = page.slice(page.indexOf('Recent activity'), page.indexOf('id="addUserModal"'));
+  assert.doesNotMatch(activity, /\b(root|ops2)\b/);
+  assert.match(activity, /dev2/);
+
+  // CI tokens: issue, rename, revoke.
+  page = await post('/admin/agents', { name: 'ci-nightly' });
+  assert.match(page, /Token \(shown once\):[\s\S]*?<code>agt_/);
+  const ci = services.agents.list().find((a) => a.name === 'ci-nightly');
+  await post(`/admin/agents/${ci.id}/rename`, { name: 'ci-night' });
+  await post(`/admin/agents/${ci.id}/revoke`);
+  assert.equal(services.agents.get(ci.id).name, 'ci-night');
+  assert.ok(services.agents.get(ci.id).revoked_at);
+
+  // Still admin-only: Settings.
+  assert.equal((await fetch(`${base}/admin/settings`, { headers: { cookie } })).status, 403);
+
+  // Every job and its details, whoever submitted it.
+  services.registry.registerAuto({ clientId: 'c1', name: 'lab-sw-01', type: 'sw', labels: [] });
+  const ciAgent = services.agents.create({ name: 'ci-x', kind: 'ci' }).agent,
+    ciJob = services.jobs.create({ agentId: ciAgent.id, source: 'ci', spec: { target: { type: 'sw' }, command: './ci.sh' } }),
+    devKey = u.issueKey(dev.id, { by: 'root' }),
+    devAgent = services.agents.list().find((a) => a.user_id === dev.id),
+    devJob = services.jobs.create({ agentId: devAgent.id, source: 'cli', spec: { target: { type: 'sw' }, command: './dev.sh' } });
+  assert.ok(devKey);
+  const jobs = await get('/jobs?size=all');
+  assert.ok(jobs.includes(ciJob.id) && jobs.includes(devJob.id));
+  for (const job of [devJob, ciJob]){
+    const r = await fetch(`${base}/jobs/${job.id}`, { headers: { cookie } });
+    assert.equal(r.status, 200);
+    assert.match(await r.text(), new RegExp(`<title>${job.id} `));
+  }
 });

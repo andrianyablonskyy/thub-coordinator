@@ -30,7 +30,7 @@ const fs = require('node:fs'),
   search = require('../services/search'),
   { createLoginGuard } = require('../login-guard'),
   { formatBytes } = require('../services/job-artifacts'),
-  { roleLabel } = require('../services/admin-users');
+  { roleLabel, normalizeRole } = require('../services/admin-users');
 
 // When this process started: the settings page tells a restart happened by it changing.
 const STARTED_AT = new Date().toISOString(),
@@ -858,13 +858,13 @@ function createWebRouter({ services, config }){
     return `Requested update to client v${version} — it starts on the Client's next heartbeat.`;
   }));
 
-  router.post('/admin/agents/update-all', requireAdminRole, updateAction(async () => {
+  router.post('/admin/agents/update-all', updateAction(async () => {
     const version = await services.updates.targetVersion('agent'),
       n = services.agents.requestUpdateAll(version);
     return `Requested update to agent v${version} for ${n} agent(s) — each updates on its next run.`;
   }));
 
-  router.post('/admin/agents/:id/update', requireAdminRole, updateAction(async (req) => {
+  router.post('/admin/agents/:id/update', updateAction(async (req) => {
     if (req.body.cancel === '1'){
       services.agents.setUpdateTo(req.params.id, null);
       return 'Update request canceled.';
@@ -1198,19 +1198,40 @@ function createWebRouter({ services, config }){
       role: (u) => ROLE_ORDER[u.role],
       status: (u) => (u.blocked ? 1 : 0),
       used: (u) => u.key?.lastUsedAt || null
-    };
+    },
+    // Who manages whom on Users (§10.3): an admin everyone; a maintainer
+    // Agent-only users and their own account. Admins and other maintainers
+    // aren't even listed for them, and only an admin gives anyone a
+    // dashboard role.
+    isAdmin = (actor) => actor.role === 'admin',
+    managesUser = (actor, u) => Boolean(u) && (isAdmin(actor) || u.role === 'user' || u.id === actor.id),
+    userFiltersFor = (actor) => (isAdmin(actor) ? USER_ROLE_FILTERS : ['user', 'blocked']);
+
+  // A maintainer's Recent activity: about the users they see, and deleted
+  // ones that were Agent-only users when created — nothing about admins or
+  // other maintainers.
+  function visibleEvents(me, visibleIds){
+    const events = services.adminUsers.recentEvents(500),
+      existing = new Set(services.adminUsers.list().map((u) => u.id)),
+      createdAsUser = new Set(events.filter((e) => e.type === 'user.created' && e.data.role === 'user').map((e) => e.entity_id));
+    return events.filter((e) => visibleIds.has(e.entity_id) || (!existing.has(e.entity_id) && createdAsUser.has(e.entity_id))).slice(0, 30);
+  }
 
   function renderUsers(req, res, extra = {}){
-    const q = search.normalizeQuery(req.query.q),
+    const me = req.session.user,
+      filters = userFiltersFor(me),
+      q = search.normalizeQuery(req.query.q),
       terms = search.parseTerms(q),
-      role = USER_ROLE_FILTERS.includes(req.query.role) ? req.query.role : undefined,
+      role = filters.includes(req.query.role) ? req.query.role : undefined,
       view = listView(req, res, 'users', { q, role }),
       { sort, dir, size } = view.prefs,
       value = USER_SORT_VALUE[sort],
-      searched = services.adminUsers.list()
+      visible = services.adminUsers.list().filter((u) => managesUser(me, u)),
+      visibleIds = new Set(visible.map((u) => u.id)),
+      searched = visible
         .filter((u) => search.matches([u.username, u.email, u.firstName, u.lastName, u.role, u.blocked ? 'blocked' : 'active'], terms)),
       // Counts for the filter buttons: within the search, before the role filter.
-      roleCounts = Object.fromEntries(USER_ROLE_FILTERS.map((r) => [r, searched.filter((u) => (r === 'blocked' ? u.blocked : u.role === r)).length])),
+      roleCounts = Object.fromEntries(filters.map((r) => [r, searched.filter((u) => (r === 'blocked' ? u.blocked : u.role === r)).length])),
       sorted = searched
         .filter((u) => !role || (role === 'blocked' ? u.blocked : u.role === role))
         .sort((a, b) => {
@@ -1231,46 +1252,64 @@ function createWebRouter({ services, config }){
       users: sorted.slice(pagination.offset, pagination.offset + pagination.limit),
       total: searched.length,
       roleFilter: role,
-      roleFilters: USER_ROLE_FILTERS,
+      roleFilters: filters,
       userDisplayName,
       roleCounts,
       list: { ...view, pagination, pageUrl, q },
       q,
-      me: req.session.user,
-      roles: services.adminUsers.ROLES,
+      me,
+      // The roles this admin or maintainer may give.
+      roles: isAdmin(me) ? services.adminUsers.ROLES : ['user'],
       roleHelp: {
         user: 'Agent only: submits jobs, reads their own results; no dashboard',
-        maintainer: 'Agent + the dashboard, without Users, Settings and CI tokens; sees and cancels every job',
+        maintainer: 'Agent + the dashboard without Settings; manages Agent-only users and CI tokens; sees and cancels every job',
         admin: 'Everything'
       },
       roleTone: { user: 'secondary', maintainer: 'info', admin: 'primary' },
-      events: services.adminUsers.recentEvents(30),
+      events: isAdmin(me) ? services.adminUsers.recentEvents(30) : visibleEvents(me, visibleIds),
       ...extra
     });
   }
 
   const userAction = (fn) => (req, res) => {
-    const by = req.session.user.username,
-      actorId = req.session.user.id;
-    try {
-      const result = fn(req, { by, actorId });
-      if (result?.secret){
-        return renderUsers(req, res, { secret: result.secret });
+      const actor = req.session.user,
+        by = actor.username,
+        actorId = actor.id;
+      try {
+      // Someone this admin or maintainer may not manage answers like an
+      // unknown id.
+        if (req.params.id && !managesUser(actor, services.adminUsers.getById(req.params.id))){
+          throw Object.assign(new Error('Unknown user'), { status: 404 });
+        }
+        const result = fn(req, { by, actorId, actor });
+        if (result?.secret){
+          return renderUsers(req, res, { secret: result.secret });
+        }
+        if (result?.message){
+          flash(req, 'success', result.message);
+        }
       }
-      if (result?.message){
-        flash(req, 'success', result.message);
+      catch (err){
+        flash(req, 'danger', err.message);
       }
-    }
-    catch (err){
-      flash(req, 'danger', err.message);
-    }
-    res.redirect(returnTo(req, '/admin/users')); // the same filter, sort and page
-  };
+      res.redirect(returnTo(req, '/admin/users')); // the same filter, sort and page
+    },
+    notOwnAccount = (req, { actorId }, what) => {
+      if (req.params.id === actorId){
+        throw Object.assign(new Error(`You can't ${what} your own account.`), { status: 409 });
+      }
+    };
 
-  router.get('/admin/users', requireAdminRole, (req, res) => renderUsers(req, res));
+  // Users and CI tokens: admins and maintainers (everyone who has a
+  // dashboard session), each within managesUser.
+  router.get('/admin/users', (req, res) => renderUsers(req, res));
 
-  router.post('/admin/users', requireAdminRole, userAction((req, ctx) => {
-    const { username, email, role, firstName, lastName } = req.body,
+  router.post('/admin/users', userAction((req, ctx) => {
+    const { username, email, role, firstName, lastName } = req.body;
+    if (!isAdmin(ctx.actor) && normalizeRole(role) !== 'user'){
+      throw new Error('Only an admin can create a maintainer or an admin.');
+    }
+    const
       created = services.adminUsers.create({ username, email, role, firstName, lastName, requireEmail: true }, ctx),
       key = req.body.issueKey === '1' ? services.adminUsers.issueKey(created.id, ctx) : null;
     if (!key && !created.tempPassword){
@@ -1279,31 +1318,36 @@ function createWebRouter({ services, config }){
     return { secret: { title: `User ${created.username} created`, key, password: created.tempPassword, username: created.username } };
   }));
 
-  router.post('/admin/users/:id', requireAdminRole, userAction((req, ctx) => {
-    const { username, email, role, firstName, lastName } = req.body,
+  router.post('/admin/users/:id', userAction((req, ctx) => {
+    const { username, email, role, firstName, lastName } = req.body;
+    if (!isAdmin(ctx.actor) && role !== undefined && normalizeRole(role) !== services.adminUsers.getById(req.params.id).role){
+      throw new Error('Only an admin can change a role.');
+    }
+    const
       { user, tempPassword } = services.adminUsers.update(req.params.id, { username, email, role, firstName, lastName }, ctx);
     return tempPassword
       ? { secret: { title: `${user.username} can now use the dashboard`, password: tempPassword, username: user.username } }
       : { message: `Saved ${user.username}.` };
   }));
 
-  router.post('/admin/users/:id/block', requireAdminRole, userAction((req, ctx) => {
+  router.post('/admin/users/:id/block', userAction((req, ctx) => {
+    notOwnAccount(req, ctx, 'block');
     const u = services.adminUsers.setBlocked(req.params.id, true, ctx);
     return { message: `Blocked ${u.username}: no sign-in, and their access key stops working.` };
   }));
 
-  router.post('/admin/users/:id/unblock', requireAdminRole, userAction((req, ctx) => {
+  router.post('/admin/users/:id/unblock', userAction((req, ctx) => {
     const u = services.adminUsers.setBlocked(req.params.id, false, ctx);
     return { message: `Unblocked ${u.username}.` };
   }));
 
-  router.post('/admin/users/:id/reset-password', requireAdminRole, userAction((req, ctx) => {
+  router.post('/admin/users/:id/reset-password', userAction((req, ctx) => {
     const u = services.adminUsers.getById(req.params.id),
       password = services.adminUsers.adminResetPassword(req.params.id, ctx);
     return { secret: { title: `New temporary password for ${u.username}`, password, username: u.username } };
   }));
 
-  router.post('/admin/users/:id/key', requireAdminRole, userAction((req, ctx) => {
+  router.post('/admin/users/:id/key', userAction((req, ctx) => {
     const u = services.adminUsers.getById(req.params.id);
     if (!u){
       throw Object.assign(new Error('Unknown user'), { status: 404 });
@@ -1315,27 +1359,28 @@ function createWebRouter({ services, config }){
     return { secret: { title, key, username: u.username } };
   }));
 
-  router.post('/admin/users/:id/key/revoke', requireAdminRole, userAction((req, ctx) => {
+  router.post('/admin/users/:id/key/revoke', userAction((req, ctx) => {
     const u = services.adminUsers.getById(req.params.id);
     services.adminUsers.revokeKey(req.params.id, ctx);
     return { message: `Revoked the access key of ${u?.username}.` };
   }));
 
-  router.post('/admin/users/:id/delete', requireAdminRole, userAction((req, ctx) => {
+  router.post('/admin/users/:id/delete', userAction((req, ctx) => {
+    notOwnAccount(req, ctx, 'delete');
     const u = services.adminUsers.getById(req.params.id);
     services.adminUsers.remove(req.params.id, ctx);
     return { message: `Deleted ${u?.username}. Their jobs stay, listed under their name.` };
   }));
 
-  router.get('/admin/agents', requireAdminRole, (req, res) => renderAgents(req, res));
+  router.get('/admin/agents', (req, res) => renderAgents(req, res));
 
-  router.post('/admin/agents', requireAdminRole, (req, res) => {
+  router.post('/admin/agents', (req, res) => {
     // CI tokens only; people get their key from their user (§10.3).
     const { token } = services.agents.create({ name: req.body.name, kind: 'ci' });
     renderAgents(req, res, { newToken: token });
   });
 
-  router.post('/admin/agents/:id/rename', requireAdminRole, (req, res) => {
+  router.post('/admin/agents/:id/rename', (req, res) => {
     try {
       const before = services.agents.get(req.params.id)?.name,
         agent = services.agents.rename(req.params.id, req.body.name);
@@ -1349,7 +1394,7 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, '/admin/agents'));
   });
 
-  router.post('/admin/agents/:id/revoke', requireAdminRole, (req, res) => {
+  router.post('/admin/agents/:id/revoke', (req, res) => {
     services.agents.revoke(req.params.id);
     res.redirect(returnTo(req, '/admin/agents'));
   });

@@ -120,7 +120,9 @@ function requireAdminSession(req, res, next){
   next();
 }
 
-// The dashboard's security features (§10.3): Users, Settings, CI tokens…
+// The dashboard's security features (§10.3): Settings, restarting and
+// updating the Coordinator, rotating a Client's token. (Users and CI tokens
+// are maintainers' too, within web/routes.js managesUser.)
 function requireAdminRole(req, res, next){
   if (req.session?.user?.role !== 'admin'){
     const text = 'Only admins can open this — it\'s one of the Coordinator\'s security features.';

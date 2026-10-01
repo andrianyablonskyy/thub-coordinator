@@ -1,7 +1,7 @@
 +section('ci', 'CI/CD integration (GitHub Actions)', 'github')
   p.
     The test job only needs the Agent and HTTPS access to the Coordinator, so it runs on an ordinary hosted runner.
-    Create a #[strong CI token] on #[a(href="/admin/agents") CI tokens] (admins) and store it as the repository secret
+    Create a #[strong CI token] on #[a(href="/admin/agents") CI tokens] (admins and maintainers) and store it as the repository secret
     #[code THUB_CI_TOKEN].
   +code('.github/workflows/firmware.yml').
     name: firmware

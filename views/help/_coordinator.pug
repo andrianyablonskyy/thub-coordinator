@@ -126,8 +126,11 @@
     thub-admin jobs reset --yes                             # cancel every active job
     thub-admin jobs clean --yes --before "01/09/2026 00:00:00"
   p.small.
-    On #[a(href="/admin/users") Users] (admins), click a name to edit that user. The quick filter is
+    On #[a(href="/admin/users") Users], click a name to edit that user. The quick filter is
     #[strong All | Admin | Maintainer | User | Blocked]. The search box also matches usernames and emails.
+    Maintainers use Users too, for Agent-only users and their own account only. They can create, edit, block
+    and delete those users and issue or revoke their keys, but can't create or promote a maintainer or admin.
+    They don't see admins or other maintainers. They also manage #[a(href="/admin/agents") CI tokens].
   +note('warning').
     Forgot the admin password? Start the Coordinator once with #[code THUB_BOOTSTRAP_ADMIN_PASSWORD=…]
     (and optionally #[code THUB_BOOTSTRAP_ADMIN_USER], default #[code admin]). The password is reset on

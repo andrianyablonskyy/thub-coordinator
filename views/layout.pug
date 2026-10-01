@@ -53,7 +53,7 @@ html(lang="en" data-bs-theme=(user && user.theme) || "auto")
           //- Below lg the menu drops down over the page (thub.css .thub-nav,
           //- closed by public/js/actions.js): pages as a two-column grid with
           //- icons, then the tools in a row, then the account row.
-          - const pages = user ? [['/', 'overview', 'Overview', 'speedometer2'], ['/resources', 'resources', 'Resources', 'hdd-rack'], ['/groups', 'groups', 'Groups', 'collection'], ['/jobs', 'jobs', 'Jobs', 'list-task']].concat(user.role === 'admin' ? [['/admin/users', 'users', 'Users', 'people'], ['/admin/agents', 'agents', 'CI tokens', 'key'], ['/admin/settings', 'settings', 'Settings', 'gear']] : []) : []
+          - const pages = user ? [['/', 'overview', 'Overview', 'speedometer2'], ['/resources', 'resources', 'Resources', 'hdd-rack'], ['/groups', 'groups', 'Groups', 'collection'], ['/jobs', 'jobs', 'Jobs', 'list-task'], ['/admin/users', 'users', 'Users', 'people'], ['/admin/agents', 'agents', 'CI tokens', 'key']].concat(user.role === 'admin' ? [['/admin/settings', 'settings', 'Settings', 'gear']] : []) : []
           ul.navbar-nav.me-auto.thub-nav-pages
             each pg in pages
               li.nav-item
