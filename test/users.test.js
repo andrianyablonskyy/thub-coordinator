@@ -358,7 +358,7 @@ test('maintainers manage Agent-only users, their own account and CI tokens — n
 
   // CI tokens: issue, rename, revoke.
   page = await post('/admin/agents', { name: 'ci-nightly' });
-  assert.match(page, /Token \(shown once\):[\s\S]*?<code>agt_/);
+  assert.match(page, /Token \(shown once\):[\s\S]*?value="agt_/);
   const ci = services.agents.list().find((a) => a.name === 'ci-nightly');
   await post(`/admin/agents/${ci.id}/rename`, { name: 'ci-night' });
   await post(`/admin/agents/${ci.id}/revoke`);
@@ -423,7 +423,7 @@ test('audit log: Timestamp, User (who did it — always), Action — from the da
     log = html.slice(html.indexOf('Recent activity'), html.indexOf('id="addUserModal"')),
     rows = [...log.matchAll(/<tr><td[^>]*>[^<]*<\/td><td[^>]*>([^<]*)<\/td><td>([^<]*)<\/td><\/tr>/g)]
       .map((m) => [m[1], m[2].replace(/&#39;/g, '\'').replace(/&gt;/g, '>')]).reverse(); // oldest first
-  assert.match(log, /<th class="text-nowrap">Timestamp<\/th><th>User<\/th><th>Action<\/th>/);
+  assert.match(log, /<th[^>]*>Timestamp<\/th><th>User<\/th><th>Action<\/th>/);
   assert.deepEqual(rows, [
     ['root', 'Created root (Admin)'],
     ['root', 'Created dev (User)'],

@@ -1478,6 +1478,29 @@ function createWebRouter({ services, config }){
     res.redirect(returnTo(req, '/admin/agents'));
   });
 
+  router.post('/admin/agents/:id/token', (req, res) => {
+    try {
+      const agent = services.agents.get(req.params.id),
+        token = services.agents.rotateToken(req.params.id);
+      return renderAgents(req, res, { newToken: token, newTokenFor: agent.name });
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/admin/agents'));
+  });
+
+  router.post('/admin/agents/:id/delete', (req, res) => {
+    try {
+      const agent = services.agents.remove(req.params.id);
+      flash(req, 'success', `Deleted CI token "${agent.name}". Its jobs stay, listed under its name.`);
+    }
+    catch (err){
+      flash(req, 'danger', err.message);
+    }
+    res.redirect(returnTo(req, '/admin/agents'));
+  });
+
   router.post('/admin/agents/:id/revoke', (req, res) => {
     services.agents.revoke(req.params.id);
     res.redirect(returnTo(req, '/admin/agents'));

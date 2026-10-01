@@ -212,13 +212,13 @@ block content
       table.table.table-sm.small.align-middle
         thead
           tr
-            th.text-nowrap Timestamp
+            th Timestamp
             th User
             th Action
         tbody
           each e in audit
             tr
-              td.text-nowrap.text-body-secondary= fmtDate(e.ts)
+              td.text-body-secondary= fmtDate(e.ts)
               td.text-nowrap= e.by
               td= e.action
   else

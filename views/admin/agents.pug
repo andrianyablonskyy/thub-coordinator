@@ -15,10 +15,13 @@ block content
       +pageSizePicker(list)
 
   if newToken
-    .alert.alert-warning
-      strong Token (shown once):
-      |
-      code= newToken
+    //- Shown once: nothing below keeps it.
+    .alert.alert-warning(role="alert")
+      strong= newTokenFor ? `New token for ${newTokenFor} (shown once — the old one has stopped working):` : 'Token (shown once):'
+      .input-group.input-group-sm.mt-2
+        input.form-control.font-monospace(type="text" value=newToken readonly aria-label="Token")
+        button.btn.btn-outline-secondary(type="button" data-copy=newToken aria-label="Copy token")
+          i.bi.bi-clipboard
 
   div(data-live="list-toolbar")
     +listToolbar(list, 'agents')
@@ -37,7 +40,9 @@ block content
     tbody(data-live="rows")
       each a in agents
         tr(class=a.revoked_at ? 'opacity-50' : '')
-          td= a.name
+          //- The name opens Edit (name and group).
+          td
+            a.fw-medium(href=`#editAgentModal-${a.id}` data-bs-toggle="modal" role="button")= a.name
           td.text-uppercase= a.kind
           td
             if a.group_id && groupsById[a.group_id]
@@ -50,13 +55,18 @@ block content
           td= fmtDate(a.last_used_at, 'never')
           td= a.revoked_at ? 'revoked' : 'active'
           td
-            .d-flex.justify-content-end
-              button.btn.btn-sm.btn-outline-secondary(
-                type="button"
-                data-bs-toggle="modal"
-                data-bs-target=`#editAgentModal-${a.id}`
-                aria-label=`Edit agent ${a.name}`
-              ) Edit
+            .d-flex.justify-content-end.text-nowrap
+              form(
+                method="post"
+                action=`/admin/agents/${a.id}/token`
+                data-confirm=a.revoked_at ? `Issue a new token for "${a.name}"? It becomes active again with it.` : `Issue a new token for "${a.name}"? Its current token stops working at once — update it wherever it's used (a CI secret).`
+                data-confirm-title="Issue a new token?"
+                data-confirm-ok="Issue token"
+                data-confirm-tone="primary"
+              )
+                input(type="hidden" name="returnTo" value=list.pageUrl())
+                button.btn.btn-sm.btn-outline-primary(type="submit" aria-label=`New token for ${a.name}` data-bs-toggle="tooltip" data-bs-title="Issue a new token (the old one stops working; shown once)")
+                  i.bi.bi-key
               if !a.revoked_at
                 form.ms-1(
                   method="post"
@@ -66,7 +76,18 @@ block content
                   data-confirm-ok="Revoke"
                 )
                   input(type="hidden" name="returnTo" value=list.pageUrl())
-                  button.btn.btn-sm.btn-outline-danger(type="submit") Revoke
+                  button.btn.btn-sm.btn-outline-warning(type="submit" aria-label=`Revoke ${a.name}` data-bs-toggle="tooltip" data-bs-title="Revoke the token (a new one can be issued later)")
+                    i.bi.bi-key-fill
+              form.ms-1(
+                method="post"
+                action=`/admin/agents/${a.id}/delete`
+                data-confirm=`Delete CI token "${a.name}"? Its token stops working and it leaves this list for good; its jobs stay, listed under its name.`
+                data-confirm-title="Delete CI token?"
+                data-confirm-ok="Delete"
+              )
+                input(type="hidden" name="returnTo" value=list.pageUrl())
+                button.btn.btn-sm.btn-outline-danger(type="submit" aria-label=`Delete ${a.name}` data-bs-toggle="tooltip" data-bs-title="Delete the CI token")
+                  i.bi.bi-trash
 
             .modal(tabindex="-1" id=`editAgentModal-${a.id}` aria-labelledby=`editAgentTitle-${a.id}`)
               .modal-dialog

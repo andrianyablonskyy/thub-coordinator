@@ -243,3 +243,35 @@ test('agent groups are set on the dashboard (Users, CI tokens) and shown by name
     assert.ok(!text.includes(g.id), 'a group id shows as text');
   }
 });
+
+test('CI tokens: the name opens Edit; a new token replaces the old one; delete keeps its jobs', async (t) => {
+  const { base, services, admin } = await start(t),
+    form = (p, body = {}) => fetch(`${base}${p}`, { method: 'POST', headers: { cookie: admin }, body: new URLSearchParams(body), redirect: 'manual' }),
+    { agent, token } = services.agents.create({ name: 'ci-fw', kind: 'ci' }),
+    me = (tok) => fetch(`${base}/api/v1/me`, { headers: { authorization: `Bearer ${tok}` } });
+  services.registry.registerAuto({ clientId: 'sw7', name: 'lab-sw-07', type: 'sw', labels: [] });
+  const job = services.jobs.create({ agentId: agent.id, source: 'ci', spec: { target: { type: 'sw', labels: [] }, command: './t.sh' } });
+
+  let html = await (await fetch(`${base}/admin/agents`, { headers: { cookie: admin } })).text();
+  assert.match(html, new RegExp(`<a class="fw-medium" href="#editAgentModal-${agent.id}" data-bs-toggle="modal" role="button">ci-fw</a>`));
+  assert.doesNotMatch(html, />Edit<\/button>/);
+
+  // New token: shown once, the old one stops at once.
+  const res = await form(`/admin/agents/${agent.id}/token`);
+  html = await res.text();
+  const fresh = /value="(agt_[^"]+)" readonly/.exec(html)?.[1];
+  assert.ok(fresh, 'the new token is shown');
+  assert.match(html, /New token for ci-fw \(shown once — the old one has stopped working\)/);
+  assert.equal((await me(token)).status, 401);
+  assert.equal((await me(fresh)).status, 200);
+
+  // Delete: gone from the list and from the API; its job keeps its name.
+  await form(`/admin/agents/${agent.id}/delete`);
+  html = await (await fetch(`${base}/admin/agents`, { headers: { cookie: admin } })).text();
+  assert.match(html, /Deleted CI token &quot;ci-fw&quot;|Deleted CI token "ci-fw"/); // the flash
+  assert.doesNotMatch(html.slice(html.indexOf('<tbody')), /ci-fw/); // the list
+  assert.equal((await me(fresh)).status, 401);
+  assert.ok((await (await fetch(`${base}/jobs?q=ci-fw`, { headers: { cookie: admin } })).text()).includes(job.id)); // still found by its name
+  assert.match(await (await form(`/admin/agents/${agent.id}/token`)).headers.get('location'), /agents/); // can't come back
+  assert.equal(services.agents.get(agent.id).revoked_at !== null, true);
+});

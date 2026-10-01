@@ -29,8 +29,8 @@ function createAgentsService(db, { events }){
   }
 
   function list(){
-    return db.prepare('SELECT id, name, kind, user_id, group_id, version, update_to, created_at, last_used_at, revoked_at FROM agents ORDER BY created_at DESC')
-      .all();
+    return db.prepare(`SELECT id, name, kind, user_id, group_id, version, update_to, created_at, last_used_at, revoked_at, token_created_at
+                       FROM agents WHERE deleted_at IS NULL ORDER BY created_at DESC`).all();
   }
 
   function create({ name, kind }){
@@ -79,6 +79,39 @@ function createAgentsService(db, { events }){
     return get(id);
   }
 
+  // CI tokens page: a new token for the same agent — the old one stops
+  // working at once (a revoked token comes back with it). Returned once;
+  // the row, and so its jobs and name, stay the same.
+  function rotateToken(id){
+    const agent = get(id);
+    if (!agent || agent.deleted_at){
+      throw Object.assign(new Error('Unknown agent'), { status: 404 });
+    }
+    if (agent.user_id){
+      throw Object.assign(new Error('A user\'s key is replaced on Users, not here'), { status: 400 });
+    }
+    const token = generateToken('agt');
+    db.prepare('UPDATE agents SET token_hash = ?, token_created_at = ?, revoked_at = NULL WHERE id = ?').run(hashToken(token), new Date().toISOString(), id);
+    events.record('agent', id, 'agent.token_rotated', { name: agent.name });
+    return token;
+  }
+
+  // CI tokens page: gone from the list, its token revoked; the row stays for
+  // the jobs that reference it (they keep showing its name).
+  function remove(id){
+    const agent = get(id);
+    if (!agent || agent.deleted_at){
+      throw Object.assign(new Error('Unknown agent'), { status: 404 });
+    }
+    if (agent.user_id){
+      throw Object.assign(new Error('A user\'s key is managed on Users, not here'), { status: 400 });
+    }
+    const now = new Date().toISOString();
+    db.prepare('UPDATE agents SET deleted_at = ?, revoked_at = COALESCE(revoked_at, ?), update_to = NULL WHERE id = ?').run(now, now, id);
+    events.record('agent', id, 'agent.deleted', { name: agent.name });
+    return agent;
+  }
+
   function revoke(id){
     db.prepare('UPDATE agents SET revoked_at = ? WHERE id = ?').run(new Date().toISOString(), id);
     events.record('agent', id, 'agent.revoked', {});
@@ -116,7 +149,7 @@ function createAgentsService(db, { events }){
     return ids.length;
   }
 
-  return { get, getByTokenHash, list, create, rename, setGroup, revoke, touchLastUsed, setUpdateTo, requestUpdateAll };
+  return { get, getByTokenHash, list, create, rename, setGroup, rotateToken, remove, revoke, touchLastUsed, setUpdateTo, requestUpdateAll };
 }
 
 module.exports = { createAgentsService };
