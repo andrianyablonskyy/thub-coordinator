@@ -245,7 +245,7 @@ test('Users page: quick filter by role with counts, sorting and pages; role desc
       method: 'POST', body: new URLSearchParams({ username: 'root', password: 'pw' }), redirect: 'manual'
     })).headers.get('set-cookie').split(';')[0],
     page = (q) => fetch(`${base}/admin/users${q}`, { headers: { cookie } }).then((r) => r.text()),
-    names = (html) => [...html.matchAll(/<div class="fw-medium">([^<]+)/g)].map((m) => m[1]),
+    names = (html) => [...html.matchAll(/<a class="fw-medium" href="#editUser-[^"]+"[^>]*>([^<]+)/g)].map((m) => m[1]),
 
     users = await page('?role=user&size=10');
   assert.match(users, /Showing 1–10 of 12 users/); // before the two below are added
@@ -259,6 +259,9 @@ test('Users page: quick filter by role with counts, sorting and pages; role desc
   assert.match(users, /href="\/admin\/users\?role=user&amp;size=10&amp;sort=username&amp;dir=asc&amp;page=2"/); // pages keep the filter
   assert.deepEqual(names(await page('?role=blocked')), ['mo']);
   assert.match(users, />Maintainer<span class="badge/); // filter buttons
+  const filterNav = users.slice(users.indexOf('aria-label="Filter by role"'), users.indexOf('</nav>', users.indexOf('aria-label="Filter by role"')));
+  assert.deepEqual([...filterNav.matchAll(/<a [^>]*>([^<]+)</g)].map((m) => m[1].trim()), ['All', 'Admin', 'Maintainer', 'User', 'Blocked']);
+  assert.doesNotMatch(users, /d1@example\.com<\/div>|>Edit<\/button>/); // the name only; it opens Edit
   assert.match(users, /href="[^"]*role=maintainer/); // …while values stay lowercase
   assert.deepEqual(names(await page('?role=admin&size=all')), ['root']);
   assert.deepEqual(names(await page('?role=&sort=role&dir=desc&size=all')).slice(0, 2), ['root', 'mo']); // admin, maintainer, users…
@@ -266,4 +269,20 @@ test('Users page: quick filter by role with counts, sorting and pages; role desc
   // The role picker: names only, the chosen role's description below it.
   assert.match(users, /<option value="user" selected="selected" data-help="Agent only[^"]*">User<\/option>/);
   assert.match(users, /<div class="form-text" id="new-role-help" aria-live="polite">Agent only/);
+});
+
+test('Users page: the User column shows first and last name, sorts by it, and opens Edit', async (t) => {
+  const { base, services } = await start(t),
+    u = services.adminUsers;
+  u.create({ username: 'root', email: 'r@example.com', role: 'admin', password: 'pw' });
+  const zed = u.create({ username: 'aaa', email: 'a@example.com', role: 'user', firstName: 'Zed', lastName: 'Young' });
+  u.create({ username: 'zzz', email: 'z@example.com', role: 'user', firstName: 'Ann' });
+  const cookie = (await fetch(`${base}/login`, {
+      method: 'POST', body: new URLSearchParams({ username: 'root', password: 'pw' }), redirect: 'manual'
+    })).headers.get('set-cookie').split(';')[0],
+    html = await (await fetch(`${base}/admin/users?sort=username&dir=asc&size=all`, { headers: { cookie } })).text(),
+    cells = [...html.matchAll(/<a class="fw-medium" href="#editUser-([^"]+)"[^>]*>([^<]+)/g)];
+  assert.deepEqual(cells.map((m) => m[2]), ['Ann', 'root', 'Zed Young']); // no name → the username
+  assert.equal(cells[2][1], zed.id);
+  assert.match(html, new RegExp(`id="editUser-${zed.id}"`)); // the modal it opens
 });

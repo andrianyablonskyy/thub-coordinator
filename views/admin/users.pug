@@ -68,17 +68,10 @@ block content
     tbody
       each u in users
         tr(class=u.blocked ? 'opacity-50' : '')
+          //- Just the name (the username until one is set); it opens Edit,
+          //- where the username, email and the rest are.
           td
-            .fw-medium
-              = u.username
-              if u.id === me.id
-                span.badge.text-bg-light.border.ms-1 you
-            if u.firstName || u.lastName
-              .small= `${u.firstName || ''} ${u.lastName || ''}`.trim()
-            if u.email
-              .small.text-body-secondary= u.email
-            else
-              span.badge.text-bg-warning(data-bs-toggle="tooltip" data-bs-title="Every user needs an email — add it with Edit") no email
+            a.fw-medium(href=`#editUser-${u.id}` data-bs-toggle="modal" role="button")= userDisplayName(u)
           td
             span.badge(class=`text-bg-${roleTone[u.role]}` data-bs-toggle="tooltip" data-bs-title=roleHelp[u.role])= roleLabel(u.role)
           td
@@ -98,8 +91,7 @@ block content
             else
               span.text-body-secondary none
           td.text-end.text-nowrap
-            button.btn.btn-sm.btn-outline-secondary(type="button" data-bs-toggle="modal" data-bs-target=`#editUser-${u.id}` aria-label=`Edit ${u.username}`) Edit
-            form.d-inline.ms-1(
+            form.d-inline(
               method="post"
               action=`/admin/users/${u.id}/key`
               data-confirm=u.key ? `Issue a new access key for ${u.username}? Their current key stops working at once.` : `Create an access key for ${u.username}?`

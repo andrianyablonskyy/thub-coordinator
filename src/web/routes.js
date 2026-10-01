@@ -1189,10 +1189,12 @@ function createWebRouter({ services, config }){
   // the page the action returns — never stored anywhere.
   // Searched (?q=), filtered by role (?role=user|maintainer|admin|blocked),
   // sorted and paged like the other lists (§10.1).
-  const USER_ROLE_FILTERS = ['user', 'maintainer', 'admin', 'blocked'],
+  const USER_ROLE_FILTERS = ['admin', 'maintainer', 'user', 'blocked'],
     ROLE_ORDER = { user: 0, maintainer: 1, admin: 2 },
+    // What the User column shows: first and last name, else the username.
+    userDisplayName = (u) => `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username,
     USER_SORT_VALUE = {
-      username: (u) => u.username.toLowerCase(),
+      username: (u) => userDisplayName(u).toLowerCase(),
       role: (u) => ROLE_ORDER[u.role],
       status: (u) => (u.blocked ? 1 : 0),
       used: (u) => u.key?.lastUsedAt || null
@@ -1230,6 +1232,7 @@ function createWebRouter({ services, config }){
       total: searched.length,
       roleFilter: role,
       roleFilters: USER_ROLE_FILTERS,
+      userDisplayName,
       roleCounts,
       list: { ...view, pagination, pageUrl, q },
       q,
