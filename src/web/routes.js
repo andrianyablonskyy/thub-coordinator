@@ -27,7 +27,8 @@ const fs = require('node:fs'),
   } = require('@andrian.yablonskyy/thub-common'),
   { retentionCutoff, JOB_RETENTION } = require('../services/cleanup'),
   listPrefs = require('../services/list-prefs'),
-  search = require('../services/search');
+  search = require('../services/search'),
+  { createLoginGuard } = require('../login-guard');
 
 // When this process started: the settings page tells a restart happened by it changing.
 const STARTED_AT = new Date().toISOString(),
@@ -72,7 +73,8 @@ const STARTED_AT = new Date().toISOString(),
 // views hitting the same kind of SSE stream the Agent uses (§6.4), just
 // authenticated by session cookie instead of a bearer token.
 function createWebRouter({ services, config }){
-  const router = express.Router();
+  const router = express.Router(),
+    loginGuard = createLoginGuard();
 
   // Shown as a toast (layout.pug): `danger` stays until closed, `warning`
   // closes after 30 s, `info`/`success` after 10 s — unless `sticky`.
@@ -234,16 +236,35 @@ function createWebRouter({ services, config }){
     res.render('login', { title: 'Sign in', ...(problem ? { messages: [problem] } : {}) });
   });
 
-  router.post('/login', (req, res) => {
+  // Backoff after failed attempts, per IP and per username, checked before
+  // any hashing; a cap on password checks running at once (login-guard.js).
+  // The answer to a wrong password and to an unknown user is the same, and
+  // takes as long (admin-users.js).
+  function throttled(res, { reason, retryAfterSec }, what){
+    res.set('Retry-After', String(retryAfterSec));
+    const text = reason === 'busy'
+      ? 'The Coordinator is busy checking other sign-ins — try again in a moment.'
+      : `Too many failed ${what} — try again in ${retryAfterSec} s.`;
+    return { status: reason === 'busy' ? 503 : 429, text };
+  }
+
+  router.post('/login', async (req, res) => {
     const problem = httpsProblem(req);
     if (problem){
       return res.status(400).render('login', { title: 'Sign in', messages: [problem] });
     }
     const { username, password } = req.body,
-      user = services.adminUsers.verify(username, password);
+      allowed = loginGuard.check(req.ip, username);
+    if (!allowed.ok){
+      const { status, text } = throttled(res, allowed, 'sign-ins');
+      return res.status(status).render('login', { title: 'Sign in', messages: [{ type: 'danger', text }] });
+    }
+    const user = await loginGuard.run(() => services.adminUsers.verify(username, password));
     if (!user){
+      loginGuard.failure(req.ip, username);
       return res.status(401).render('login', { title: 'Sign in', messages: [{ type: 'danger', text: 'Invalid credentials' }] });
     }
+    loginGuard.success(req.ip, username);
     req.session.user = user;
     req.session.cookie.maxAge = user.sessionTimeoutMin * 60 * 1000;
     res.redirect('/');
@@ -335,17 +356,29 @@ function createWebRouter({ services, config }){
   // profile form since it needs the *current* password re-entered, and a
   // mismatch between newPassword/confirmPassword is a form-level check
   // that has nothing to do with the other fields.
-  router.post('/profile/password', (req, res) => {
-    const { currentPassword, newPassword, confirmPassword } = req.body;
+  // The current password is checked like a sign-in: the same backoff, so a
+  // stolen session can't be used to guess it.
+  router.post('/profile/password', async (req, res) => {
+    const { currentPassword, newPassword, confirmPassword } = req.body,
+      { username } = req.session.user;
     if (newPassword !== confirmPassword){
       flash(req, 'danger', 'New password and confirmation do not match.');
       return res.redirect('/profile');
     }
+    const allowed = loginGuard.check(req.ip, username);
+    if (!allowed.ok){
+      flash(req, 'danger', throttled(res, allowed, 'password checks').text);
+      return res.redirect('/profile');
+    }
     try {
-      services.adminUsers.changePassword(req.session.user.id, currentPassword, newPassword);
+      await loginGuard.run(() => services.adminUsers.changePassword(req.session.user.id, currentPassword, newPassword));
+      loginGuard.success(req.ip, username);
       flash(req, 'success', 'Password changed.');
     }
     catch (err){
+      if (err.status === 401){
+        loginGuard.failure(req.ip, username);
+      }
       flash(req, 'danger', err.message);
     }
     res.redirect('/profile');

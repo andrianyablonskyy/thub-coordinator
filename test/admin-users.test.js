@@ -23,11 +23,11 @@ function buildService(){
   return createAdminUsersService(db);
 }
 
-test('a newly created user gets profile defaults (UTC, auto theme, 60min timeout)', () => {
+test('a newly created user gets profile defaults (UTC, auto theme, 60min timeout)', async () => {
   const adminUsers = buildService();
   adminUsers.create({ username: 'alice', password: 'hunter2', role: 'admin' });
 
-  const user = adminUsers.verify('alice', 'hunter2');
+  const user = await adminUsers.verify('alice', 'hunter2');
   assert.equal(user.timezone, 'UTC');
   assert.equal(user.theme, 'auto');
   assert.equal(user.sessionTimeoutMin, 60);
@@ -80,48 +80,48 @@ test('a session timeout outside the offered presets is rejected (400)', () => {
   assert.throws(() => adminUsers.updateProfile(id, { sessionTimeoutMin: 7 }), (err) => err.status === 400);
 });
 
-test('resetPassword creates the user as admin when the username does not exist yet', () => {
+test('resetPassword creates the user as admin when the username does not exist yet', async () => {
   const adminUsers = buildService();
 
   adminUsers.resetPassword({ username: 'admin', password: 'newpass' });
-  const user = adminUsers.verify('admin', 'newpass');
+  const user = await adminUsers.verify('admin', 'newpass');
   assert.ok(user);
   assert.equal(user.role, 'admin');
 });
 
-test('resetPassword on an existing user changes only the password, not the role', () => {
+test('resetPassword on an existing user changes only the password, not the role', async () => {
   const adminUsers = buildService();
   adminUsers.create({ username: 'carol', password: 'oldpass', role: 'viewer' });
 
   adminUsers.resetPassword({ username: 'carol', password: 'newpass' });
 
-  assert.equal(adminUsers.verify('carol', 'oldpass'), null);
-  const user = adminUsers.verify('carol', 'newpass');
+  assert.equal(await adminUsers.verify('carol', 'oldpass'), null);
+  const user = await adminUsers.verify('carol', 'newpass');
   assert.ok(user);
   assert.equal(user.role, 'viewer'); // not silently promoted to admin
 });
 
-test('changePassword succeeds with the correct current password', () => {
+test('changePassword succeeds with the correct current password', async () => {
   const adminUsers = buildService(),
     { id } = adminUsers.create({ username: 'dave', password: 'oldpass', role: 'admin' });
 
-  adminUsers.changePassword(id, 'oldpass', 'newpass');
+  await adminUsers.changePassword(id, 'oldpass', 'newpass');
 
-  assert.equal(adminUsers.verify('dave', 'oldpass'), null);
-  assert.ok(adminUsers.verify('dave', 'newpass'));
+  assert.equal(await adminUsers.verify('dave', 'oldpass'), null);
+  assert.ok(await adminUsers.verify('dave', 'newpass'));
 });
 
-test('changePassword is rejected (401) with the wrong current password, leaving it unchanged', () => {
+test('changePassword is rejected (401) with the wrong current password, leaving it unchanged', async () => {
   const adminUsers = buildService(),
     { id } = adminUsers.create({ username: 'dave', password: 'oldpass', role: 'admin' });
 
-  assert.throws(() => adminUsers.changePassword(id, 'wrongpass', 'newpass'), (err) => err.status === 401);
-  assert.ok(adminUsers.verify('dave', 'oldpass'));
+  await assert.rejects(adminUsers.changePassword(id, 'wrongpass', 'newpass'), (err) => err.status === 401);
+  assert.ok(await adminUsers.verify('dave', 'oldpass'));
 });
 
-test('changePassword rejects an empty new password (400)', () => {
+test('changePassword rejects an empty new password (400)', async () => {
   const adminUsers = buildService(),
     { id } = adminUsers.create({ username: 'dave', password: 'oldpass', role: 'admin' });
 
-  assert.throws(() => adminUsers.changePassword(id, 'oldpass', ''), (err) => err.status === 400);
+  await assert.rejects(adminUsers.changePassword(id, 'oldpass', ''), (err) => err.status === 400);
 });

@@ -14,8 +14,15 @@
 'use strict';
 
 const crypto = require('node:crypto'),
+  { promisify } = require('node:util'),
   { v4: uuid } = require('uuid'),
   { normalize: normalizeListPrefs } = require('./list-prefs');
+
+// Stored as "<salt hex>:<scrypt hex>". The synchronous one is only for the
+// CLI and startup (thub-admin create-admin, the bootstrap password); every
+// request uses the async versions, which run scrypt on libuv's thread pool —
+// scryptSync would stall every request for each sign-in attempt.
+const scrypt = promisify(crypto.scrypt);
 
 function hashPassword(password){
   const salt = crypto.randomBytes(16).toString('hex'),
@@ -23,16 +30,26 @@ function hashPassword(password){
   return `${salt}:${derived}`;
 }
 
-function verifyPassword(password, stored){
-  const [salt, derived] = stored.split(':'),
-    check = crypto.scryptSync(password, salt, 64).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(check, 'hex'), Buffer.from(derived, 'hex'));
+async function hashPasswordAsync(password){
+  const salt = crypto.randomBytes(16).toString('hex');
+  return `${salt}:${(await scrypt(password, salt, 64)).toString('hex')}`;
 }
 
-// Presets offered on the profile page (§10.1) — a fixed list rather than a
-// free-text field, so a user can't accidentally set a 3-second or 10-year
-// idle timeout.
-const SESSION_TIMEOUT_OPTIONS_MIN = [15, 30, 60, 120, 240, 480, 1440],
+async function verifyPassword(password, stored){
+  const [salt, derived] = stored.split(':'),
+    check = await scrypt(String(password ?? ''), salt, 64);
+  return crypto.timingSafeEqual(check, Buffer.from(derived, 'hex'));
+}
+
+// Checked instead of a real hash when the username doesn't exist, so that
+// answer takes as long as a wrong password and doesn't reveal which
+// usernames exist.
+const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString('hex')),
+
+  // Presets offered on the profile page (§10.1) — a fixed list rather than a
+  // free-text field, so a user can't accidentally set a 3-second or 10-year
+  // idle timeout.
+  SESSION_TIMEOUT_OPTIONS_MIN = [15, 30, 60, 120, 240, 480, 1440],
   THEMES = ['auto', 'light', 'dark'];
 
 function toProfile(row){
@@ -105,26 +122,22 @@ function createAdminUsersService(db){
   // Self-service password change (§10.1) — requires knowing the *current*
   // password, unlike resetPassword() above (that's the admin/operator
   // break-glass path, which deliberately doesn't need it).
-  function changePassword(id, currentPassword, newPassword){
+  async function changePassword(id, currentPassword, newPassword){
     const row = db.prepare('SELECT * FROM admin_users WHERE id = ?').get(id);
-    if (!row || !verifyPassword(currentPassword, row.password_hash)){
+    if (!row || !(await verifyPassword(currentPassword, row.password_hash))){
       throw Object.assign(new Error('Current password is incorrect'), { status: 401 });
     }
     if (!newPassword){
       throw Object.assign(new Error('New password must not be empty'), { status: 400 });
     }
-    db.prepare('UPDATE admin_users SET password_hash = ? WHERE id = ?').run(hashPassword(newPassword), id);
+    db.prepare('UPDATE admin_users SET password_hash = ? WHERE id = ?').run(await hashPasswordAsync(newPassword), id);
   }
 
-  function verify(username, password){
-    const user = getByUsername(username);
-    if (!user){
-      return null;
-    }
-    if (!verifyPassword(password, user.password_hash)){
-      return null;
-    }
-    return toProfile(user);
+  // Async (thread pool); the same work whether or not the user exists.
+  async function verify(username, password){
+    const user = getByUsername(String(username ?? '')),
+      ok = await verifyPassword(password, user ? user.password_hash : DUMMY_HASH);
+    return user && ok ? toProfile(user) : null;
   }
 
   // Partial update — only the fields present in `fields` are touched, so a
