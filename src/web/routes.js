@@ -395,6 +395,14 @@ function createWebRouter({ services, config }){
   const LIVE_PING_MS = 25_000,
     LIVE_SESSION_CHECK_MS = 15_000;
   router.get('/live', (req, res) => {
+    // HEAD (live.js asks it whether the session is still alive): answer and
+    // finish. Express sends HEAD to this GET handler, and a stream opened
+    // for it would never end: the browser — or a proxy — reuses the
+    // connection once the headers are in, and every later request on it
+    // would queue behind that response forever (stuck page loads).
+    if (req.method === 'HEAD'){
+      return res.status(204).end();
+    }
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',

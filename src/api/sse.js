@@ -28,6 +28,12 @@ function attachJobStream(req, res, { jobId, services }){
     res.status(404).json({ error: 'Unknown job' });
     return;
   }
+  // HEAD (a monitoring check, a proxy): no stream — one opened for it would
+  // never end, and block every later request on the same connection.
+  if (req.method === 'HEAD'){
+    res.status(204).end();
+    return;
+  }
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
