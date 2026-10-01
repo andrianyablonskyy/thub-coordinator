@@ -52,6 +52,7 @@ test('security headers on pages, the API and static files; HSTS only over HTTPS'
     assert.match(csp, /default-src 'self'/);
     assert.match(csp, /script-src 'self' https:\/\/cdn\.jsdelivr\.net(;|$)/); // no 'unsafe-inline' for scripts
     assert.match(csp, /frame-ancestors 'none'/);
+    assert.match(csp, /connect-src 'self' https:\/\/cdn\.jsdelivr\.net(;|$)/); // DevTools: Bootstrap's source maps
     assert.match(csp, /object-src 'none'/);
   }
   // Behind the (loopback, trusted) TLS proxy.

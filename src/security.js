@@ -26,7 +26,9 @@ const CDN = 'https://cdn.jsdelivr.net',
     // data: — Bootstrap's CSS draws some icons (select arrow, close button)
     // as inline SVG images.
     'img-src \'self\' data:',
-    'connect-src \'self\'',
+    // The CDN too: browser DevTools fetch Bootstrap's source maps (*.map)
+    // from it — a connection, not a script or style.
+    `connect-src 'self' ${CDN}`,
     'object-src \'none\'',
     'base-uri \'self\'',
     'form-action \'self\'',
