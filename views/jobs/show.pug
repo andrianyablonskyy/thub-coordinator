@@ -49,5 +49,41 @@ block content
       dt.col-sm-2 Message
       dd.col-sm-10= job.message
 
+  //- What the job published elsewhere and listed in $THUB_ARTIFACTS_FILE
+  //- (README §7.3): metadata only; the links go to wherever the files are.
+  h2.h6.mt-4#artifacts Artifacts
+  if job.artifacts.length
+    .table-responsive
+      table.table.table-sm.align-middle.mb-0
+        thead
+          tr
+            th Name
+            th.text-end Size
+            th Time
+            th
+        tbody
+          each a in job.artifacts
+            tr
+              td
+                a(href=a.link target="_blank" rel="noopener noreferrer")= a.name
+              td.text-end.text-nowrap(title=a.size != null ? `${a.size} bytes` : null)= a.size != null ? fmtBytes(a.size) : '—'
+              td.text-nowrap= a.timestamp ? fmtDate(a.timestamp) : '—'
+              td.text-end
+                a.btn.btn-sm.btn-outline-secondary(
+                  href=a.link
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label=`Download ${a.name}`
+                  data-bs-toggle="tooltip"
+                  data-bs-title=a.link
+                )
+                  i.bi.bi-download
+  else if jobActive
+    p.small.text-body-secondary.mb-0 Listed here when the job finishes, if it reports any.
+  else
+    p.small.text-body-secondary.mb-0.
+      None reported. A job lists the files it published (to Artifactory, S3, a file server…) in
+      #[code $THUB_ARTIFACTS_FILE] as #[code [{"name", "size", "link", "timestamp"}]].
+
   h2.h6.mt-4 Log
   +logViewer(job.id, jobActive)

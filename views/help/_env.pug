@@ -9,6 +9,7 @@
   -
     const thubVars = [
       ['THUB_JOB_ID', 'The job id, e.g. M-00125'],
+      ['THUB_ARTIFACTS_FILE', 'Where the command may list the artifacts it published elsewhere: a JSON array of {"name", "size", "link", "timestamp"}, shown on the job page'],
       ['THUB_WORK_DIR', 'The directory the command runs in: the --git-repo checkout, else empty. JUnit XML in results/ or artifacts/ gives the test counts; deleted when the job ends'],
       ['THUB_SUITE', '--suite (default: default)'],
       ['THUB_GIT_COMMIT', 'The exact commit checked out for --git-repo'],

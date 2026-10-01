@@ -220,8 +220,8 @@ function createResourceRouter({ services, config }){
 
   router.post('/jobs/:id/result', auth, requireOwnJob(services), (req, res, next) => {
     try {
-      const { state, exitCode, summary } = req.body,
-        job = services.jobs.applyResult(req.params.id, req.resource.id, { state, exitCode, summary });
+      const { state, exitCode, summary, artifacts } = req.body,
+        job = services.jobs.applyResult(req.params.id, req.resource.id, { state, exitCode, summary, artifacts });
       res.json(job);
     }
     catch (err){

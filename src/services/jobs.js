@@ -16,6 +16,7 @@
 const { validateJobSpec, maskEnv, JOB_STATES, ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, RESOURCE_STATES } = require('@andrian.yablonskyy/thub-common'),
   { paginate } = require('./list-prefs'),
   { parseTerms, likeClause } = require('./search'),
+  { sanitizeArtifacts } = require('./job-artifacts'),
   // Named in spec errors: a field the Agent sends but this thub-common
   // doesn't know means the Coordinator needs an update.
   VERSIONS = `Coordinator v${require('../../package.json').version}, ` +
@@ -28,7 +29,8 @@ function rowToJob(row){
   return {
     ...row,
     spec: JSON.parse(row.spec),
-    summary: row.summary ? JSON.parse(row.summary) : null
+    summary: row.summary ? JSON.parse(row.summary) : null,
+    artifacts: row.artifacts ? JSON.parse(row.artifacts) : []
   };
 }
 
@@ -365,13 +367,22 @@ function createJobsService(db, { bus, events, registry, config }){
   }
 
   // Resource: POST /jobs/:id/result — final verdict from the test runner.
-  function applyResult(id, resourceId, { state, exitCode, summary }){
+  // `artifacts`: what the job published elsewhere (job-artifacts.js) — kept
+  // as metadata, stored before the job turns final so its page shows them.
+  function applyResult(id, resourceId, { state, exitCode, summary, artifacts }){
     const job = get(id);
     if (!job || job.resource_id !== resourceId){
       throw Object.assign(new Error('Job not assigned to this resource'), { status: 403 });
     }
     if (![JOB_STATES.PASSED, JOB_STATES.FAILED, JOB_STATES.ERROR].includes(state)){
       throw Object.assign(new Error('Invalid result state'), { status: 400 });
+    }
+    if (artifacts !== undefined){
+      const { artifacts: list, dropped } = sanitizeArtifacts(artifacts);
+      db.prepare('UPDATE jobs SET artifacts = ? WHERE id = ?').run(list.length ? JSON.stringify(list) : null, id);
+      if (dropped){
+        events.record('job', id, 'job.artifacts_dropped', { dropped });
+      }
     }
     return setState(id, state, { exitCode, summary });
   }

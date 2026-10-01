@@ -95,10 +95,10 @@ function createAgentRouter({ services, config }){
     attachJobStream(req, res, { jobId: req.params.id, services });
   });
 
-  // No artifacts are stored any more (README §9); an Agent older than that
-  // still asks after a finished job's `thub status`, so answer "none".
+  // What the job reported (README §7.3): metadata and links only. `url` is
+  // `link` again, for Agents from before, which print `url`.
   router.get('/jobs/:id/artifacts', auth, visibleJob, (req, res) => {
-    res.json({ artifacts: [] });
+    res.json({ artifacts: req.job.artifacts.map((a) => ({ ...a, url: a.link })) });
   });
 
   router.get('/resources', auth, (req, res) => {

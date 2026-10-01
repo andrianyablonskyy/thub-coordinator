@@ -28,7 +28,8 @@ const fs = require('node:fs'),
   { retentionCutoff, JOB_RETENTION } = require('../services/cleanup'),
   listPrefs = require('../services/list-prefs'),
   search = require('../services/search'),
-  { createLoginGuard } = require('../login-guard');
+  { createLoginGuard } = require('../login-guard'),
+  { formatBytes } = require('../services/job-artifacts');
 
 // When this process started: the settings page tells a restart happened by it changing.
 const STARTED_AT = new Date().toISOString(),
@@ -174,6 +175,8 @@ function createWebRouter({ services, config }){
     res.locals.isNewer = isNewer;
     res.locals.nextCronRun = nextCronRun;
     res.locals.formatDateTime = formatDateTime;
+    // 1233 -> "1.2 KB" (job artifacts).
+    res.locals.fmtBytes = formatBytes;
     res.locals.currentPath = req.originalUrl;
     // A live-update re-fetch (server.js, req.thubPassive) renders the page
     // only for its data: flash messages stay for the next real page view.
