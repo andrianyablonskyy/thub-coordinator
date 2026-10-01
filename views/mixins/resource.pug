@@ -246,12 +246,12 @@ mixin rebootScheduleRow(r, returnTo)
           aria-label=`Reboot schedule for ${r.name} (cron)`
           required
         )
-        button.btn.btn-sm.btn-outline-primary(type="submit") Save
+        button.btn.btn-sm.btn-outline-primary(type="submit" data-bs-toggle="tooltip" data-bs-title="Save this schedule — the Client applies it on its next heartbeat") Save
       if r.reboot_schedule
         form.d-inline(method="post" action=`/resources/${r.id}/reboot-schedule`)
           input(type="hidden" name="returnTo" value=returnTo)
           input(type="hidden" name="clear" value="1")
-          button.btn.btn-sm.btn-link.p-0.small(type="submit") Clear schedule
+          button.btn.btn-sm.btn-link.p-0.small(type="submit" data-bs-toggle="tooltip" data-bs-title="Remove the schedule — the host isn't rebooted on a schedule any more") Clear schedule
       .form-text
         | cron: minute hour day month weekday, in the host's local time#{tz ? ` (${tz})` : ''} — e.g.
         |
@@ -337,33 +337,27 @@ mixin usbScanPane(r)
   - const scan = r.usb_scan
   //- Import to config (public/js/usb-import.js): HW Clients that report
   //- their config only; enabled once there's a scan to import from.
-  - const importWhy = r.type !== 'hw' ? 'Only HW Clients have USB device lists to import into' : !(r.config_desired || r.client_config) ? 'This Client is too old to report its config — update it first' : null
+  - const importWhy = r.type !== 'hw' ? 'Only HW Clients have USB device lists to import into' : !(r.config_desired || r.client_config) ? noConfigReport[0].toUpperCase() + noConfigReport.slice(1) : null
   div(data-usb-scan=`/resources/${r.id}/usb-scan` data-pending=r.usb_scan_request_id ? '1' : null data-requested-at=r.usb_scan_requested_at)
     .d-flex.align-items-center.gap-2.mb-2
       if can.operate
-        if offline
-          span.d-inline-block(tabindex="0" data-bs-toggle="tooltip" data-bs-title="Offline — a Client can only be scanned while it's connected")
-            button.btn.btn-sm.btn-outline-primary(type="button" disabled style="pointer-events: none;")
-              i.bi.bi-arrow-clockwise.me-1
+        //- Live (public/js/live.js): a Client that comes back online gets its
+        //- Refresh back without a reload. Each button sits in a tooltip
+        //- wrapper, so a disabled one still says why (usb-scan.js and
+        //- usb-import.js handle clicks at the document, as these get replaced).
+        - const pending = Boolean(r.usb_scan_request_id)
+        - const refreshWhy = pending ? 'Waiting for the Client to run lsusb -tvv (its next heartbeat)' : offline ? 'Offline — a Client can only be scanned while it\'s connected' : null
+        - const importTip = 'Fill the ST-Link, UART and DUT USB tabs from this scan, for you to review and save'
+        - const importOff = importWhy || (!(scan && scan.output) ? 'Nothing to import yet — press Refresh to scan the Client first' : null)
+        span.d-inline-flex.gap-2(data-live=`rc-usb-actions-${r.id}`)
+          span.d-inline-block(tabindex=refreshWhy ? '0' : null data-bs-toggle="tooltip" data-bs-title=refreshWhy || 'Run lsusb -tvv on the Client now — it answers on its next heartbeat' data-usb-refresh-wrap)
+            button.btn.btn-sm.btn-outline-primary(type="button" data-usb-refresh=offline ? null : '' disabled=Boolean(refreshWhy) style=refreshWhy ? 'pointer-events: none;' : null)
+              i.me-1(class=pending ? 'spinner-border spinner-border-sm' : 'bi bi-arrow-clockwise')
               | Refresh
-        else
-          button.btn.btn-sm.btn-outline-primary(type="button" data-usb-refresh)
-            i.bi.bi-arrow-clockwise.me-1
-            | Refresh
-        if importWhy
-          span.d-inline-block(tabindex="0" data-bs-toggle="tooltip" data-bs-title=importWhy)
-            button.btn.btn-sm.btn-outline-secondary(type="button" disabled style="pointer-events: none;")
+          span.d-inline-block(tabindex=importOff ? '0' : null data-bs-toggle="tooltip" data-bs-title=importOff || importTip data-usb-import-wrap data-tip-enabled=importWhy ? null : importTip)
+            button.btn.btn-sm.btn-outline-secondary(type="button" data-usb-import=importWhy ? null : '' disabled=Boolean(importOff) style=importOff ? 'pointer-events: none;' : null)
               i.bi.bi-box-arrow-in-down.me-1
               | Import to config
-        else
-          button.btn.btn-sm.btn-outline-secondary(
-            type="button"
-            data-usb-import
-            disabled=!(scan && scan.output)
-            title="Fill the ST-Link, UART and DUT USB tabs from this scan, for you to review and save"
-          )
-            i.bi.bi-box-arrow-in-down.me-1
-            | Import to config
       span.small.text-body-secondary(data-usb-status)
         if scan
           = `lsusb -tvv at ${fmtDate(scan.at)}`
@@ -406,8 +400,8 @@ mixin rebootButton(r, returnTo)
 //- Export / Import the Client's config file as JSON (card's Actions row,
 //- icons only). Import: public/js/config-import.js reads the chosen file
 //- into the form and submits it (confirmed first); the Client applies it on
-//- its next heartbeat. A Client that doesn't report its config file is too
-//- old to apply more than the hw/sw section — Import is off for it.
+//- its next heartbeat. What it can apply: r.config_support (registry.js) —
+//- a whole file, or an older HW Client's devices only.
 mixin configTransferButtons(r, returnTo)
   a.btn.btn-sm.btn-outline-secondary.ms-1(
     href=`/resources/${r.id}/config/export`
@@ -417,8 +411,8 @@ mixin configTransferButtons(r, returnTo)
     data-bs-title="Export the Client's config file (JSON; its secrets left out)"
   )
     i.bi.bi-download
-  if !r.client_config_file
-    span.d-inline-block.ms-1(tabindex="0" data-bs-toggle="tooltip" data-bs-title="Import unavailable: this Client is too old to report its config file — update it")
+  if !r.config_support
+    span.d-inline-block.ms-1(tabindex="0" data-bs-toggle="tooltip" data-bs-title="Import unavailable: this Client is too old to apply a config from the dashboard — update it")
       button.btn.btn-sm.btn-outline-secondary(type="button" disabled style="pointer-events: none;" aria-label="Import config")
         i.bi.bi-upload
   else
@@ -440,7 +434,7 @@ mixin configTransferButtons(r, returnTo)
         aria-label=`Import a config into ${r.name}`
         data-config-import-pick
         data-bs-toggle="tooltip"
-        data-bs-title="Import a config file (JSON) — joinKey, coordinatorUrl and name in it are ignored"
+        data-bs-title=r.config_support === 'file' ? 'Import a config file (JSON) — joinKey, coordinatorUrl and name in it are ignored' : 'Import a config file (JSON) — this Client is older: only its hw-devices are applied (update it for the rest)'
       )
         i.bi.bi-upload
 
@@ -476,7 +470,7 @@ mixin resourceDetails(r, groupsById, returnTo, local, external)
               placeholder=r.reported_name || ''
               aria-label=`New name for ${r.name}`
             )
-            button.btn.btn-sm.btn-primary(type="submit") Rename
+            button.btn.btn-sm.btn-primary(type="submit" data-bs-toggle="tooltip" data-bs-title="Save the new name — kept across the Client's restarts") Rename
           .form-text Kept across the Client's restarts. Empty = back to the Client's own name#{r.reported_name ? ` (${r.reported_name})` : ''}.
     dt.col-sm-4 Type
     dd.col-sm-8.text-uppercase= r.type

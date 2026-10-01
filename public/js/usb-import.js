@@ -144,8 +144,10 @@
     close.focus();
   }
 
-  document.querySelectorAll('[data-usb-import]').forEach((button) => {
-    button.addEventListener('click', () => {
+  // At the document: the button is swapped by live updates (public/js/live.js).
+  document.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-usb-import]');
+    if (button && !button.disabled){
       const pane = button.closest('[data-usb-scan]'),
         modal = button.closest('.modal'),
         form = modal.querySelector('form[data-client-config="hw"]');
@@ -164,6 +166,6 @@
         bootstrap.Tab.getOrCreateInstance(root.querySelector(`[data-config-tab="${changed}"]`)).show();
       }
       overlay(modal, { total, skipped, changes });
-    });
+    }
   });
 })();

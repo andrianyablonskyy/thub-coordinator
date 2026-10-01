@@ -205,6 +205,9 @@ function createWebRouter({ services, config }){
     // dd/mm/yyyy HH:MM:SS, 24-hour (thub-common formatDateTime) — the one
     // format for every date/time label.
     res.locals.fmtDate = (iso, fallback = '—') => formatDateTime(iso, { timeZone: tz, fallback });
+    // Why a Client's config can't be edited or imported on its card
+    // (registry.js configSupport, README §10).
+    res.locals.noConfigReport = 'this Client is too old to report or apply its config from the dashboard — update it.';
     res.locals.userTimeZone = tz;
 
     // Idle timeout (§10.1): re-applied on every request (not just login)

@@ -87,6 +87,18 @@ function createResourceRouter({ services, config }){
     res.status(stored ? 204 : 409).end();
   });
 
+  // A Client that doesn't re-register on start (no joinKey) reports its
+  // config here instead, so Export, Import and the config tabs work for it.
+  router.post('/resources/:id/config-report', auth, requireOwnResource, (req, res, next) => {
+    try {
+      services.registry.reportClientConfig(req.params.id, { config: req.body?.config, configFile: req.body?.configFile });
+      res.status(204).end();
+    }
+    catch (err){
+      next(err);
+    }
+  });
+
   router.post('/resources/:id/heartbeat', auth, requireOwnResource, (req, res, next) => {
     try {
       const { state, activeJobId, localLock, metrics, addresses, hostUptimeSec, activity, rebootSchedule, configRevision, configError } = req.body;

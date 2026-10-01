@@ -18,11 +18,36 @@ const { v4: uuid } = require('uuid'),
     shareableClientConfigFile, HW_DEVICES_SECTION } = require('@andrian.yablonskyy/thub-common'),
   { generateToken, hashToken } = require('./tokens');
 
+// Never kept from or put in a Client's config file: its credentials.
+const CONFIG_FILE_SECRETS = ['joinKey'],
+  // The first Client that applies a whole config file (an Import's other
+  // fields, the Groups tab), not only its hw-devices section.
+  CONFIG_FILE_CLIENT = '1.0.30';
+
+function withoutSecrets(file){
+  const out = shareableClientConfigFile(file);
+  for (const key of CONFIG_FILE_SECRETS){
+    delete out[key];
+  }
+  return out;
+}
+
+// What a Client can take from the dashboard's Import: 'file' — a whole
+// config file (it reports its file, or is new enough to apply one even if
+// it never has, e.g. without a joinKey it doesn't re-register on start);
+// 'section' — an older HW Client's devices only; null — nothing.
+function configSupport(r){
+  if (r.client_config_file || (r.client_version && compareVersions(r.client_version, CONFIG_FILE_CLIENT) >= 0)){
+    return 'file';
+  }
+  return r.type === 'hw' && (r.client_config || r.config_desired) ? 'section' : null;
+}
+
 function rowToResource(row){
   if (!row){
     return row;
   }
-  return {
+  const r = {
     ...row,
     labels: JSON.parse(row.labels || '[]'),
     group_ids: JSON.parse(row.group_ids || '[]'),
@@ -35,6 +60,8 @@ function rowToResource(row){
     usb_scan: row.usb_scan ? JSON.parse(row.usb_scan) : null,
     activity: row.activity ? JSON.parse(row.activity) : null
   };
+  r.config_support = configSupport(r);
+  return r;
 }
 
 // host_info.addresses comes straight from the Client, so keep only
@@ -198,19 +225,36 @@ function createRegistryService(db, { bus, events }){
     const known = registration.clientId ? getByClientId(registration.clientId) : null,
       result = registerAutoInner({ ...registration, name: known?.name_override || registration.name });
     db.prepare('UPDATE resources SET reported_name = ? WHERE id = ?').run(registration.name, result.resourceId);
-    if (config && typeof config === 'object' && !Array.isArray(config)){
+    storeConfigReport(result.resourceId, { config, configFile });
+    return result;
+  }
+
+  // The Client's config as it runs it: its hw-devices section (`config`)
+  // and its whole file (`configFile`, credentials dropped). Sent with every
+  // registration, and on start by a Client that doesn't re-register (no
+  // joinKey) — POST /resources/:id/config-report.
+  function storeConfigReport(resourceId, { config, configFile }){
+    const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
+    if (isObject(config)){
       const json = JSON.stringify(config);
       if (json.length <= 64 * 1024){
-        db.prepare('UPDATE resources SET client_config = ? WHERE id = ?').run(json, result.resourceId);
+        db.prepare('UPDATE resources SET client_config = ? WHERE id = ?').run(json, resourceId);
       }
     }
-    if (configFile && typeof configFile === 'object' && !Array.isArray(configFile)){
-      const json = JSON.stringify(shareableClientConfigFile(configFile));
+    if (isObject(configFile)){
+      const json = JSON.stringify(withoutSecrets(configFile));
       if (json.length <= 64 * 1024){
-        db.prepare('UPDATE resources SET client_config_file = ? WHERE id = ?').run(json, result.resourceId);
+        db.prepare('UPDATE resources SET client_config_file = ? WHERE id = ?').run(json, resourceId);
       }
     }
-    return result;
+  }
+
+  function reportClientConfig(resourceId, report){
+    if (!get(resourceId)){
+      throw Object.assign(new Error('Unknown resource'), { status: 404 });
+    }
+    storeConfigReport(resourceId, report || {});
+    return get(resourceId);
   }
 
   function registerAutoInner({ clientId, name, type, labels = [], groups = [], hostInfo, capabilities, remoteAddr, clientVersion = null }){
@@ -691,18 +735,30 @@ function createRegistryService(db, { bus, events }){
     if (!r){
       throw Object.assign(new Error('Unknown resource'), { status: 404 });
     }
-    const { valid, errors, section, fields, ignored } = importClientConfigFile(r.type, file);
+    if (!r.config_support){
+      throw Object.assign(new Error(`Can't import a config into ${r.name}: its Client is too old to apply one — update it first`), { status: 409 });
+    }
+    const { valid, errors, section, fields: fileFields, ignored } = importClientConfigFile(r.type, file);
     if (!valid){
       throw Object.assign(new Error(`Can't import this config into ${r.name}: ${errors.join('; ')}`), { status: 400 });
+    }
+    // An older HW Client applies its devices only: the rest is listed as
+    // ignored rather than sent to be dropped.
+    let fields = fileFields;
+    if (r.config_support === 'section'){
+      ignored.push(...Object.keys(fileFields).map((k) => `${k} (this Client applies only its devices — update it for the rest)`));
+      fields = {};
     }
     const desired = section || currentSection(r);
     if (!desired){
       throw Object.assign(new Error(`Can't import this config into ${r.name}: it has no "${HW_DEVICES_SECTION}" section, and the Client hasn't reported one`),
         { status: 400 });
     }
-    const revision = r.config_revision + 1;
+    const revision = r.config_revision + 1,
+      // An older Client gets no `file` at all: it wouldn't apply one.
+      importJson = r.config_support === 'file' ? JSON.stringify({ revision, fields }) : null;
     db.prepare(`UPDATE resources SET config_desired = ?, config_revision = ?, config_error = NULL, config_import = ?
-                WHERE id = ?`).run(JSON.stringify(desired), revision, JSON.stringify({ revision, fields }), resourceId);
+                WHERE id = ?`).run(JSON.stringify(desired), revision, importJson, resourceId);
     events.record('resource', resourceId, 'resource.config_imported', { by, revision, fields: Object.keys(fields), ignored });
     return { resource: get(resourceId), ignored };
   }
@@ -726,7 +782,7 @@ function createRegistryService(db, { bus, events }){
     // Writing top-level fields needs a Client that reports its config file
     // (the same that Import needs); an older one would drop them.
     const desired = currentSection(r);
-    if (!desired || !r.client_config_file){
+    if (!desired || r.config_support !== 'file'){
       throw Object.assign(new Error(`${r.name} is too old to take its groups from the dashboard — update its Client first`), { status: 409 });
     }
     const revision = r.config_revision + 1,
@@ -750,7 +806,7 @@ function createRegistryService(db, { bus, events }){
       throw Object.assign(new Error('Unknown resource'), { status: 404 });
     }
     // Re-shared: a file stored from an older Client may still say hw / sw.
-    const base = shareableClientConfigFile(r.client_config_file || { name: r.reported_name || r.name, type: r.type, labels: r.labels }),
+    const base = withoutSecrets(r.client_config_file || { name: r.reported_name || r.name, type: r.type, labels: r.labels, groups: r.group_ids }),
       section = r.type === 'hw' ? currentSection(r) : null;
     return { ...base, ...(pendingImport(r) || {}), type: r.type, ...(section ? { [HW_DEVICES_SECTION]: section } : {}) };
   }
@@ -821,6 +877,7 @@ function createRegistryService(db, { bus, events }){
 
   return {
     get,
+    reportClientConfig,
     getByName,
     getByClientId,
     getByTokenHash,

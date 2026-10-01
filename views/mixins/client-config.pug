@@ -16,13 +16,13 @@ mixin deviceRow(kind, d)
       td: input.form-control.form-control-sm(data-f="baudRate" type="number" min="50" value=d && d.baudRate || '' placeholder="115200")
     td: input.form-control.form-control-sm.font-monospace(data-f="devpath" value=d && d.devpath || '' placeholder="3.3.4.1")
     td.text-end
-      button.btn.btn-sm.btn-outline-secondary(type="button" data-remove-row aria-label="Remove row")
+      button.btn.btn-sm.btn-outline-secondary(type="button" data-remove-row aria-label="Remove row" data-bs-toggle="tooltip" data-bs-title="Remove this device (saved with Save capabilities)")
         i.bi.bi-x-lg
 
 mixin deviceTable(kind, title, rows, columns)
   .d-flex.justify-content-between.align-items-center.mb-1
     strong.small= title
-    button.btn.btn-sm.btn-outline-primary(type="button" data-add-row=kind)
+    button.btn.btn-sm.btn-outline-primary(type="button" data-add-row=kind data-bs-toggle="tooltip" data-bs-title="Add a device row (saved with Save capabilities)")
       i.bi.bi-plus-lg.me-1
       | Add
   table.table.table-sm.align-middle.mb-0(data-table=kind)
@@ -69,7 +69,7 @@ mixin configPane(p, key)
 mixin saveCapabilities(canEdit)
   if canEdit
     .d-flex.justify-content-end.mt-3
-      button.btn.btn-sm.btn-primary(type="submit") Save capabilities
+      button.btn.btn-sm.btn-primary(type="submit" data-bs-toggle="tooltip" data-bs-title="Save the ST-Link, UART and DUT USB tabs — the Client applies them on its next heartbeat and restarts once idle") Save capabilities
 
 //- Where the saved capabilities stand, at the top of each capability tab.
 mixin capabilitiesStatus(r)
@@ -119,8 +119,8 @@ mixin groupsPane(r, returnTo, groupsById)
           ) not written to the Client yet
         if r.config_error
           span.badge.text-bg-danger(data-bs-toggle="tooltip" data-bs-title=r.config_error) refused by the Client
-    if !r.client_config_file
-      p.small.text-body-secondary This Client is too old to take its groups from the dashboard — update it, or set #[code groups] in its config file.
+    if r.config_support !== 'file'
+      p.small.text-body-secondary Groups can't be set here: #{noConfigReport} Or set #[code groups] in its config file.
     if !all.length && !unknown.length
       p.small.text-body-secondary.mb-0
         | No groups exist yet.
@@ -136,7 +136,7 @@ mixin groupsPane(r, returnTo, groupsById)
         data-confirm-tone="primary"
       )
         input(type="hidden" name="returnTo" value=returnTo)
-        fieldset(disabled=!canEdit || !r.client_config_file)
+        fieldset(disabled=!canEdit || r.config_support !== 'file')
           .list-group.mb-2
             each g in all
               label.list-group-item.d-flex.gap-2.align-items-start
@@ -155,9 +155,9 @@ mixin groupsPane(r, returnTo, groupsById)
                   br
                   code.small.text-body-secondary= id
           .form-text A job run with #[code thub run --group &lt;id&gt;] is scheduled only on Clients in that group; one that asks for no group can run on any Client.
-          if canEdit && r.client_config_file
+          if canEdit && r.config_support === 'file'
             .d-flex.justify-content-end.mt-3
-              button.btn.btn-sm.btn-primary(type="submit") Save groups
+              button.btn.btn-sm.btn-primary(type="submit" data-bs-toggle="tooltip" data-bs-title="Save the groups — in effect at once; the Client writes them to its config file") Save groups
 
 mixin configPanes(r, returnTo, groupsById)
   - const p = `cfg-${r.id}`
@@ -174,7 +174,7 @@ mixin configPanes(r, returnTo, groupsById)
   else if !current
     each t in [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'DUT USB']]
       +configPane(p, t[0])
-        p.small.text-body-secondary.mb-0 This Client is too old to report its config — update it to edit its devices here.
+        p.small.text-body-secondary.mb-0 Devices can't be edited here: #{noConfigReport}
   else
     form(
       method="post"

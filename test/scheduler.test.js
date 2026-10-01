@@ -680,8 +680,8 @@ test('config export/import: exported from the reported file (+ what\'s pending);
       configFile: { coordinatorUrl: 'https://c', name: 'dut1', joinKey: 'k', type: 'hw', labels: [], hw: { uarts: [{ index: 1 }] },
         sw: { image: 'emu:1', registryAuth: { password: 'x' } }, artifactory: { token: 'secret', allowedArtifactPrefixes: [] } }
     });
-  assert.deepEqual(registry.exportClientConfig(resourceId), {
-    coordinatorUrl: 'https://c', name: 'dut1', joinKey: 'k', type: 'hw', labels: [], 'hw-devices': { uarts: [{ index: 1 }] }
+  assert.deepEqual(registry.exportClientConfig(resourceId), { // never the joinKey
+    coordinatorUrl: 'https://c', name: 'dut1', type: 'hw', labels: [], 'hw-devices': { uarts: [{ index: 1 }] }
   });
 
   const { resource, ignored } = registry.importClientConfig(resourceId, {
@@ -796,4 +796,42 @@ test('deleting a group strips it from every resource that listed it, without tou
   assert.deepEqual(after.labels, ['x']); // untouched
   assert.equal(groups.get(g1.id), undefined);
   assert.ok(groups.get(g2.id));
+});
+
+test('config import: what each Client can take — a whole file, an older HW Client\'s devices only, or nothing', () => {
+  const { registry } = buildTestServices(),
+    reg = (clientId, type, clientVersion, extra = {}) =>
+      registry.registerAuto({ clientId, name: clientId, type, labels: [], clientVersion, ...extra }).resourceId,
+    // Never reported its file (no joinKey: it doesn't re-register), but new enough to apply one.
+    fresh = reg('fresh', 'hw', '1.1.1', { config: { uarts: [{ index: 1 }] } }),
+    oldHw = reg('old-hw', 'hw', '1.0.20', { config: { uarts: [{ index: 1 }] } }),
+    oldSw = reg('old-sw', 'sw', '1.0.20');
+  assert.deepEqual([fresh, oldHw, oldSw].map((id) => registry.get(id).config_support), ['file', 'section', null]);
+
+  const file = { type: 'hw', labels: ['board:b'], heartbeatIntervalSec: 20, 'hw-devices': { usbs: [{ index: 2 }] } };
+  assert.deepEqual(registry.importClientConfig(fresh, file, { by: 'a' }).ignored, []);
+  assert.deepEqual(registry.pendingConfig(fresh).file, { labels: ['board:b'], heartbeatIntervalSec: 20 });
+
+  const { ignored } = registry.importClientConfig(oldHw, file, { by: 'a' }),
+    why = '(this Client applies only its devices — update it for the rest)';
+  assert.deepEqual(ignored, [`labels ${why}`, `heartbeatIntervalSec ${why}`]);
+  assert.deepEqual(registry.pendingConfig(oldHw), { revision: 1, type: 'hw', config: { usbs: [{ index: 2 }] } }); // no `file` for it
+  assert.throws(() => registry.importClientConfig(oldSw, { type: 'sw' }, { by: 'a' }), /too old to apply one/);
+
+  // Reported later (POST /resources/:id/config-report): kept without the joinKey.
+  registry.reportClientConfig(oldSw, { configFile: { coordinatorUrl: 'https://c', name: 'old-sw', type: 'sw', joinKey: 'secret', labels: [] } });
+  assert.equal(registry.get(oldSw).client_config_file.joinKey, undefined);
+  assert.equal(registry.get(oldSw).config_support, 'file');
+  assert.equal(registry.exportClientConfig(oldSw).joinKey, undefined);
+});
+
+test('migration 027 drops joinKey copies from stored config files', () => {
+  const Database = require('better-sqlite3'),
+    db = new Database(':memory:');
+  db.exec('CREATE TABLE resources (id TEXT, client_config_file TEXT)');
+  db.prepare('INSERT INTO resources VALUES (?, ?)').run('a', JSON.stringify({ name: 'a', joinKey: 'k', labels: [] }));
+  db.prepare('INSERT INTO resources VALUES (?, ?)').run('b', null);
+  db.exec(require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/db/migrations/027_scrub_config_file_secrets.sql'), 'utf8'));
+  assert.deepEqual(JSON.parse(db.prepare('SELECT client_config_file FROM resources WHERE id = ?').get('a').client_config_file), { name: 'a', labels: [] });
+  assert.equal(db.prepare('SELECT client_config_file FROM resources WHERE id = ?').get('b').client_config_file, null);
 });

@@ -140,3 +140,61 @@ test('ST-Link tab has no Serial field; a serial set in the config file is kept o
   // Rides along in data-extra, which public/js/client-config.js spreads back into the row.
   assert.match(table, /data-extra="\{&quot;serial&quot;:&quot;066DFF48&quot;\}"/);
 });
+
+test('resource card: USB actions update live and every disabled button says why', async (t) => {
+  const { base, services, admin } = await start(t),
+    reg = services.registry.registerAuto({
+      clientId: 'hw3', name: 'lab-hw-03', type: 'hw', labels: [], config: { stlinks: [{ index: 1 }] }, configFile: { name: 'lab-hw-03', type: 'hw' }
+    }),
+    card = async () => {
+      const html = await (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text();
+      return html.slice(html.indexOf(`id="resource-card-${reg.resourceId}"`));
+    };
+  let html = await card();
+  // A live region, so a Client coming back online gets Refresh back without a reload.
+  assert.match(html, new RegExp(`data-live="rc-usb-actions-${reg.resourceId}"`));
+  assert.match(html, /"Offline — a Client can only be scanned while it(&#39;|.)s connected" data-usb-refresh-wrap(="[^"]*")?><button[^>]*disabled/);
+  assert.match(html, /data-bs-title="Nothing to import yet — press Refresh to scan the Client first"[^>]*><button[^>]*disabled/);
+
+  services.registry.heartbeat(reg.resourceId, { state: 'IDLE' });
+  html = await card();
+  assert.match(html, /data-bs-title="Run lsusb -tvv on the Client now[^"]*" data-usb-refresh-wrap(="[^"]*")?><button [^>]*data-usb-refresh="">/);
+  assert.doesNotMatch(html, /data-usb-refresh-wrap(="[^"]*")?><button[^>]*disabled/);
+  // Every disabled button in the card sits in a tooltip wrapper that says why.
+  const disabled = [...html.matchAll(/(<span[^>]*data-bs-title="([^"]*)"[^>]*>)?<button[^>]*\sdisabled[^>]*>/g)];
+  assert.ok(disabled.every((m) => m[2]), disabled.filter((m) => !m[2]).map((m) => m[0]).join('\n'));
+});
+
+test('Import and Export work for a Client that doesn\'t re-register (no joinKey): it reports its config on start', async (t) => {
+  const { base, services, admin } = await start(t),
+    { resourceId, resourceToken } = services.registry.registerAuto({ clientId: 'hw4', name: 'lab-hw-04', type: 'hw', labels: [] }),
+    card = async () => {
+      const html = await (await fetch(`${base}/resources`, { headers: { cookie: admin } })).text();
+      return html.slice(html.indexOf(`id="resource-card-${resourceId}"`));
+    };
+  assert.match(await card(), /Import unavailable: this Client is too old/); // nothing reported, no version known
+
+  const res = await fetch(`${base}/api/v1/resources/${resourceId}/config-report`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${resourceToken}`, 'content-type': 'application/json', 'x-thub-client-version': '1.1.1' },
+    body: JSON.stringify({
+      config: { stlinks: [{ index: 1, devpath: '1.1' }] },
+      configFile: {
+        coordinatorUrl: 'https://c', name: 'lab-hw-04', type: 'hw', joinKey: 'secret', labels: [], 'hw-devices': { stlinks: [{ index: 1, devpath: '1.1' }] }
+      }
+    })
+  });
+  assert.equal(res.status, 204);
+  const html = await card();
+  assert.match(html, /data-config-import-pick/); // Import enabled
+  assert.doesNotMatch(html, /Import unavailable/);
+  const exported = await (await fetch(`${base}/resources/${resourceId}/config/export`, { headers: { cookie: admin } })).json();
+  assert.equal(exported.joinKey, undefined);
+  assert.deepEqual(exported['hw-devices'], { stlinks: [{ index: 1, devpath: '1.1' }] });
+
+  // Another resource's token can't report for it.
+  const other = services.registry.registerAuto({ clientId: 'hw5', name: 'lab-hw-05', type: 'hw', labels: [] });
+  assert.equal((await fetch(`${base}/api/v1/resources/${resourceId}/config-report`, {
+    method: 'POST', headers: { authorization: `Bearer ${other.resourceToken}`, 'content-type': 'application/json' }, body: '{}'
+  })).status, 403);
+});
