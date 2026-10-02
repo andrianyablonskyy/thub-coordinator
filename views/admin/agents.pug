@@ -87,23 +87,6 @@ block content
                 button.btn.btn-sm.btn-outline-danger(type="submit" aria-label=`Delete ${a.name}` data-bs-toggle="tooltip" data-bs-title="Delete the CI token")
                   i.bi.bi-trash
 
-            .modal(tabindex="-1" id=`editAgentModal-${a.id}` aria-labelledby=`editAgentTitle-${a.id}`)
-              .modal-dialog
-                .modal-content
-                  form(method="post" action=`/admin/agents/${a.id}/rename`)
-                    input(type="hidden" name="returnTo" value=list.pageUrl())
-                    .modal-header
-                      h5.modal-title(id=`editAgentTitle-${a.id}`) Edit agent
-                      button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
-                    .modal-body
-                      label.form-label(for=`agentName-${a.id}`) Name
-                      input.form-control(id=`agentName-${a.id}` type="text" name="name" value=a.name required maxlength="100")
-                      .form-text Only a label — the agent's token, and everything using it, keep working.
-                      label.form-label.mt-3(for=`agentGroup-${a.id}`) Group
-                      +groupSelect(`agentGroup-${a.id}`, a.group_id, groups)
-                    .modal-footer
-                      button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
-                      button.btn.btn-primary(type="submit") Save
       else
         tr
           td.text-body-secondary(colspan="7")
@@ -112,6 +95,27 @@ block content
               a(href=list.urlFor({ q: '' })) Show all agents
             else
               | No agents yet.
+
+  //- Edit windows: outside the table, which scrolls sideways in its own
+  //- box on phones and would trap them under what follows.
+  each a in agents
+    .modal(tabindex="-1" id=`editAgentModal-${a.id}` aria-labelledby=`editAgentTitle-${a.id}`)
+      .modal-dialog
+        .modal-content
+          form(method="post" action=`/admin/agents/${a.id}/rename`)
+            input(type="hidden" name="returnTo" value=list.pageUrl())
+            .modal-header
+              h5.modal-title(id=`editAgentTitle-${a.id}`) Edit agent
+              button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+            .modal-body
+              label.form-label(for=`agentName-${a.id}`) Name
+              input.form-control(id=`agentName-${a.id}` type="text" name="name" value=a.name required maxlength="100")
+              .form-text Only a label — the agent's token, and everything using it, keep working.
+              label.form-label.mt-3(for=`agentGroup-${a.id}`) Group
+              +groupSelect(`agentGroup-${a.id}`, a.group_id, groups)
+            .modal-footer
+              button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+              button.btn.btn-primary(type="submit") Save
 
   .modal(tabindex="-1" id="addAgentModal")
     .modal-dialog

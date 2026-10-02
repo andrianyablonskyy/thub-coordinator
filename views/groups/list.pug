@@ -50,22 +50,26 @@ block content
                 )
                   button.btn.btn-sm.btn-outline-danger(type="submit") Delete
 
-              .modal(tabindex="-1" id=`editGroupModal-${g.id}`)
-                .modal-dialog
-                  .modal-content
-                    form(method="post" action=`/groups/${g.id}`)
-                      .modal-header
-                        h5.modal-title Edit group
-                        button.btn-close(type="button" data-bs-dismiss="modal")
-                      .modal-body
-                        .mb-3
-                          label.form-label Name
-                          input.form-control(type="text" name="name" value=g.name required)
-                        .mb-3
-                          label.form-label Comment
-                          textarea.form-control(name="comment" rows="2")= g.comment || ''
-                      .modal-footer
-                        button.btn.btn-primary(type="submit") Save
+    //- Edit windows: outside the table, which scrolls sideways in its own
+    //- box on phones and would trap them under what follows.
+    if canManage
+      each g in groups
+        .modal(tabindex="-1" id=`editGroupModal-${g.id}`)
+          .modal-dialog
+            .modal-content
+              form(method="post" action=`/groups/${g.id}`)
+                .modal-header
+                  h5.modal-title Edit group
+                  button.btn-close(type="button" data-bs-dismiss="modal")
+                .modal-body
+                  .mb-3
+                    label.form-label Name
+                    input.form-control(type="text" name="name" value=g.name required)
+                  .mb-3
+                    label.form-label Comment
+                    textarea.form-control(name="comment" rows="2")= g.comment || ''
+                .modal-footer
+                  button.btn.btn-primary(type="submit") Save
   else if q
     p.text-body-secondary
       | No group matches “#{q}”. 

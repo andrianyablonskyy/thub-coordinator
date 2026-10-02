@@ -161,49 +161,52 @@ block content
                 button.btn.btn-sm.btn-outline-danger(type="submit" aria-label="Delete" data-bs-toggle="tooltip" data-bs-title="Delete the user")
                   i.bi.bi-trash
 
-            //- Inside the actions cell (text-nowrap): wrap again in here.
-            .modal.text-start.text-wrap(tabindex="-1" id=`editUser-${u.id}` aria-labelledby=`editUserTitle-${u.id}`)
-              .modal-dialog
-                .modal-content
-                  form(method="post" action=`/admin/users/${u.id}`)
-                    input(type="hidden" name="returnTo" value=list.pageUrl())
-                    .modal-header
-                      h5.modal-title(id=`editUserTitle-${u.id}`)= `Edit ${u.username}`
-                      button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
-                    .modal-body
-                      .row.g-2
-                        .col-sm-6
-                          label.form-label(for=`u-${u.id}-username`) Username
-                          input.form-control(id=`u-${u.id}-username` name="username" value=u.username required maxlength="64" pattern="[A-Za-z0-9._@+\\-]{1,64}")
-                        .col-sm-6
-                          label.form-label(for=`u-${u.id}-email`) Email
-                          input.form-control(id=`u-${u.id}-email` type="email" name="email" value=u.email required)
-                        .col-sm-6
-                          label.form-label(for=`u-${u.id}-first`) First name
-                          input.form-control(id=`u-${u.id}-first` name="firstName" value=u.firstName || '')
-                        .col-sm-6
-                          label.form-label(for=`u-${u.id}-last`) Last name
-                          input.form-control(id=`u-${u.id}-last` name="lastName" value=u.lastName || '')
-                        .col-12
-                          label.form-label(for=`u-${u.id}-role`) Role
-                          //- A maintainer gives no roles but User; their own
-                          //- row shows theirs without a picker (and posts none).
-                          if roles.includes(u.role)
-                            +roleSelect(`u-${u.id}-role`, u.role)
-                          else
-                            input.form-control(id=`u-${u.id}-role` value=roleLabel(u.role) disabled)
-                            .form-text Only an admin can change a role.
-                          if !u.canUseDashboard && roles.length > 1
-                            .form-text Making them a maintainer or admin gives them a temporary password for the dashboard.
-                        .col-12
-                          label.form-label(for=`u-${u.id}-group`) Group
-                          +groupSelect(`u-${u.id}-group`, u.groupId, groups)
-                    .modal-footer
-                      button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
-                      button.btn.btn-primary(type="submit") Save
       else
         tr
           td.text-body-secondary(colspan="6")= q || roleFilter ? 'No user matches.' : 'No users yet.'
+
+  //- Edit windows: outside the table, which scrolls sideways in its own
+  //- box on phones and would trap them under what follows.
+  each u in users
+    .modal.text-start.text-wrap(tabindex="-1" id=`editUser-${u.id}` aria-labelledby=`editUserTitle-${u.id}`)
+      .modal-dialog
+        .modal-content
+          form(method="post" action=`/admin/users/${u.id}`)
+            input(type="hidden" name="returnTo" value=list.pageUrl())
+            .modal-header
+              h5.modal-title(id=`editUserTitle-${u.id}`)= `Edit ${u.username}`
+              button.btn-close(type="button" data-bs-dismiss="modal" aria-label="Close")
+            .modal-body
+              .row.g-2
+                .col-sm-6
+                  label.form-label(for=`u-${u.id}-username`) Username
+                  input.form-control(id=`u-${u.id}-username` name="username" value=u.username required maxlength="64" pattern="[A-Za-z0-9._@+\\-]{1,64}")
+                .col-sm-6
+                  label.form-label(for=`u-${u.id}-email`) Email
+                  input.form-control(id=`u-${u.id}-email` type="email" name="email" value=u.email required)
+                .col-sm-6
+                  label.form-label(for=`u-${u.id}-first`) First name
+                  input.form-control(id=`u-${u.id}-first` name="firstName" value=u.firstName || '')
+                .col-sm-6
+                  label.form-label(for=`u-${u.id}-last`) Last name
+                  input.form-control(id=`u-${u.id}-last` name="lastName" value=u.lastName || '')
+                .col-12
+                  label.form-label(for=`u-${u.id}-role`) Role
+                  //- A maintainer gives no roles but User; their own
+                  //- row shows theirs without a picker (and posts none).
+                  if roles.includes(u.role)
+                    +roleSelect(`u-${u.id}-role`, u.role)
+                  else
+                    input.form-control(id=`u-${u.id}-role` value=roleLabel(u.role) disabled)
+                    .form-text Only an admin can change a role.
+                  if !u.canUseDashboard && roles.length > 1
+                    .form-text Making them a maintainer or admin gives them a temporary password for the dashboard.
+                .col-12
+                  label.form-label(for=`u-${u.id}-group`) Group
+                  +groupSelect(`u-${u.id}-group`, u.groupId, groups)
+            .modal-footer
+              button.btn.btn-secondary(type="button" data-bs-dismiss="modal") Cancel
+              button.btn.btn-primary(type="submit") Save
 
   //- The audit log: who did what to which account (web/routes.js auditRows).
   h2.h6.mt-4 Recent activity

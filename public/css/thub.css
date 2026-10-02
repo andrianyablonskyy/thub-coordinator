@@ -126,6 +126,78 @@
   pointer-events: auto;
 }
 
+/* Chip picker (runner card → Groups; public/js/tag-picker.js): chips and
+   a search box in one field, the matches in a dropdown under it. */
+.thub-tags {
+  position: relative;
+}
+
+.thub-tags-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: calc(1.5em + 0.75rem + 2px);
+  height: auto;
+  cursor: text;
+}
+
+fieldset:disabled .thub-tags-box {
+  cursor: default;
+  background-color: var(--bs-secondary-bg);
+}
+
+.thub-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  max-width: 100%;
+  padding: 0.125rem 0.25rem 0.125rem 0.5rem;
+  border-radius: var(--bs-border-radius-sm);
+  background-color: var(--bs-secondary-bg);
+  border: 1px solid var(--bs-border-color);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.thub-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--bs-border-radius-sm);
+  background: none;
+  color: var(--bs-secondary-color);
+}
+
+.thub-tag-remove:hover,
+.thub-tag-remove:focus-visible {
+  background-color: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+}
+
+.thub-tags-input {
+  flex: 1 1 8rem;
+  min-width: 8rem;
+  border: 0;
+  outline: 0;
+  padding: 0.125rem 0;
+  background: transparent;
+  color: inherit;
+}
+
+.thub-tags-menu {
+  width: 100%;
+  max-height: 15rem;
+  overflow-y: auto;
+  top: 100%;
+  left: 0;
+}
+
 /* USB devices: the lsusb output takes the rest of the modal's
    height — what the tallest other tab sets, at least 12rem — and scrolls in
    it. Its 0 basis keeps it from making the modal taller. */

@@ -183,19 +183,35 @@ mixin groupsPane(r, returnTo, groupsById)
         data-confirm-tone="primary"
       )
         input(type="hidden" name="returnTo" value=returnTo)
-        fieldset(disabled=!canEdit || r.config_support !== 'file')
-          .list-group.mb-2
-            each g in all
-              label.list-group-item.d-flex.gap-2.align-items-start
-                input.form-check-input.flex-shrink-0.mt-1(type="checkbox" name="groups" value=g.id checked=r.group_ids.includes(g.id))
-                span
-                  span.fw-medium= g.name
-                  if g.comment
-                    span.small.text-body-secondary= ` — ${g.comment}`
-            each id in unknown
-              label.list-group-item.d-flex.gap-2.align-items-start
-                input.form-check-input.flex-shrink-0.mt-1(type="checkbox" name="groups" value=id checked)
-                span.text-body-secondary (a deleted group)
+        - const editable = canEdit && r.config_support === 'file'
+        fieldset(disabled=!editable)
+          //- Chips for its groups, a search box to add more (public/js/tag-picker.js):
+          //- each chip carries its hidden `groups` input; ✕ removes it.
+          .thub-tags.mb-2(data-tag-picker data-tag-name="groups" data-options=JSON.stringify(all.map((g) => ({ value: g.id, label: g.name, hint: g.comment || '' }))))
+            .thub-tags-box.form-control(data-tag-box)
+              each id in r.group_ids
+                span.thub-tag(data-tag=id)
+                  span= groupsById[id] ? groupsById[id].name : '(a deleted group)'
+                  input(type="hidden" name="groups" value=id)
+                  if editable
+                    button.thub-tag-remove(type="button" data-tag-remove aria-label=`Remove ${groupsById[id] ? groupsById[id].name : 'deleted group'}`)
+                      i.bi.bi-x
+              if editable
+                input.thub-tags-input(
+                  type="text"
+                  data-tag-input
+                  placeholder="Add a group…"
+                  aria-label=`Add a group to ${r.name}`
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded="false"
+                  aria-controls=`${p}-groups-menu`
+                  autocomplete="off"
+                  spellcheck="false"
+                )
+            ul.dropdown-menu.thub-tags-menu(id=`${p}-groups-menu` role="listbox" data-tag-menu)
+            if !r.group_ids.length && !editable
+              span.small.text-body-secondary none
           .form-text An agent given a group (on Users or CI tokens) runs its jobs only on Clients in it; an agent without one, on any Client.
           if canEdit && r.config_support === 'file'
             .d-flex.justify-content-end.mt-3

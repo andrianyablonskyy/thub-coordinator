@@ -66,9 +66,11 @@ test('Groups tab: in effect at once, sent to the Client as its next config revis
   assert.deepEqual(pending.file.groups.sort(), [nightly.id, pr.id].sort()); // the Client writes it to its file
   assert.match(await page(), /Groups of lab-sw-01 saved: 2 group\(s\) — in effect now/);
 
-  // The tab, with every group as a checkbox; no Groups line on Details any more.
+  // The tab: its groups as chips (each with its hidden input and ✕), the rest searchable; no Groups line on Details any more.
   const html = await page();
-  assert.match(html, new RegExp(`name="groups" value="${pr.id}" checked`));
+  assert.match(html, new RegExp(`<span class="thub-tag" data-tag="${pr.id}"><span>pr-pool</span><input type="hidden" name="groups" value="${pr.id}"`));
+  assert.match(html, /data-tag-input[^>]*placeholder="Add a group…"/);
+  assert.match(html, /data-options="[^"]*pull requests/); // searchable by name or comment
   assert.match(html, /data-config-tab="groups"/);
   assert.match(html, /not written to the Client yet/);
   assert.doesNotMatch(html, /<dt class="col-sm-4">Groups<\/dt>/);
