@@ -1,130 +1,43 @@
-+section('git', 'Git repository integration', 'git')
++section('git', 'Using git in a job', 'git')
   p.
-    #[code --git-repo] makes the Client clone a repository before the job runs. #[code --command] then runs inside the checkout
-    (#[code $THUB_WORK_DIR]). Typically the repository holds the test scripts. The firmware comes as a #[code --download-file]
-    or is built by the command.
+    The Client doesn't clone anything itself and doesn't need git installed for its own sake. A job that needs a repository
+    clones it in #[code --command], into its work directory (#[code $THUB_WORK_DIR], where the command starts), with the
+    credentials passed as #[code --env]. #[code --env] values are masked everywhere and dropped when the job ends. Anything
+    else (the URL, the command, #[code --meta]) is stored with the job and visible to anyone who can read it, so never put a
+    token there.
 
-  h3.h6 1. Create a test repository
-  +code('Your machine').
-    mkdir firmware-tests && cd firmware-tests && git init -b main
-    mkdir -p ci
-    cat > ci/test.sh &lt;&lt;'EOF'
-    #!/bin/sh
-    set -eu
-    echo "job $THUB_JOB_ID, suite $THUB_SUITE, commit $THUB_GIT_COMMIT"
-    mkdir -p results
-    pytest --junitxml=results/junit.xml tests/     # results/*.xml is uploaded and summarized
-    EOF
-    chmod +x ci/test.sh
-    git add . && git commit -m "TestHub entry point"
-    git remote add origin git@github.com:yourorg/firmware-tests.git
-    git push -u origin main
-  p.small.
-    The exit code of #[code --command] is the verdict. JUnit files under #[code results/] or #[code artifacts/] are summed into
-    the job's test counts. Nothing is uploaded: the workspace is deleted when the job ends, so publish anything you need to keep
-    from the command itself (e.g. #[code curl -T report.html "$ARTIFACTORY/…"] with a token passed as #[code --env]).
-
-  h3.h6 2. Give Clients read access: SSH deploy key (recommended)
-  p.small.
-    git never prompts on a Client (#[code GIT_TERMINAL_PROMPT=0]), so credentials must already be on the Client host,
-    owned by the #[strong Client's service user]. Create a key on each Client host (or one shared key per lab):
-  +code('Client host, as the Client\'s user').
-    ssh-keygen -t ed25519 -N "" -C "thub-client@$(hostname)" -f ~/.ssh/thub_deploy
-    cat ~/.ssh/thub_deploy.pub          # → add as a read-only deploy key (below)
-    # trust the git server's host key now: the service can't answer prompts
-    # (and can't write ~/.ssh under systemd)
-    ssh-keyscan github.com bitbucket.org gitlab.com >> ~/.ssh/known_hosts
-    # use the key for that server
-    cat >> ~/.ssh/config &lt;&lt;'EOF'
-    Host github.com
-      IdentityFile ~/.ssh/thub_deploy
-      IdentitiesOnly yes
-    EOF
-    chmod 600 ~/.ssh/config
-    ssh -T git@github.com                # "…successfully authenticated…"
-  table.table.table-sm.small
-    thead
-      tr
-        th Git server
-        th Where to add the public key
-    tbody
-      tr
-        td GitHub
-        td Repository → Settings → Deploy keys → Add deploy key (leave “Allow write access” off). For many repositories, use a machine user's SSH key instead.
-      tr
-        td GitLab
-        td Project → Settings → Repository → Deploy keys.
-      tr
-        td Bitbucket
-        td Repository settings → Security → Access keys.
-      tr
-        td Gitea / self-hosted
-        td Repository → Settings → Deploy Keys, or the machine user's SSH keys.
-  p.small.
-    Without #[code ~/.ssh/config], pick the key per job with #[code --git-options] (stored with the job, so reference a key
-    #[em file], never inline a secret):
-  +code('Per-job SSH key / port').
+  h3.h6 HTTPS with a token (recommended)
+  +code('Token from your CI secret store').
+    export GH_TOKEN=…      # GitHub: a fine-grained PAT with read access; GitLab: oauth2 token; Bitbucket: x-token-auth
     thub run --type sw \
-      --git-repo ssh://git@git.lab.local:2222/qa/tests.git main \
-      --git-options '-c core.sshCommand="ssh -i ~/.ssh/thub_deploy -o IdentitiesOnly=yes"' \
-      --command ./ci/test.sh --wait
-
-  h3.h6 HTTPS with a token
-  p.small.
-    For #[code https://] repositories, either store a credential helper for the Client's user on the host
-    (#[code git config --global credential.helper store]), or pass the token #[strong per job] as a secret. #[code --env]
-    variables reach the Client's own git commands, and git reads config from #[code GIT_CONFIG_COUNT]/#[code _KEY_n]/#[code _VALUE_n]:
-  +code('Token per job, never stored').
-    # GitHub: user x-access-token; GitLab: oauth2; Bitbucket: x-token-auth
-    export GIT_CONFIG_VALUE_0="Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
-    thub run --type sw \
-      --git-repo https://github.com/yourorg/private-tests.git main \
-      --env GIT_CONFIG_COUNT=1,GIT_CONFIG_KEY_0=http.extraHeader --env GIT_CONFIG_VALUE_0 \
-      --command ./ci/test.sh --wait
-  p.small.
-    Don't put a token in the URL, #[code --git-options], #[code --command] or #[code --meta]: those are stored with the job
-    and visible to anyone who can read it. Only #[code --env] values are masked.
-
-  h3.h6 3. Clone options: ref, branch, tag, commit, depth
-  +code('--git-repo <url> [<branch>|<tag>|<commit>] [--depth <n>]').
-    --git-repo git@github.com:yourorg/tests.git                   # default branch, depth 1
-    --git-repo git@github.com:yourorg/tests.git develop           # a branch
-    --git-repo git@github.com:yourorg/tests.git v1.4.0            # a tag
-    --git-repo git@github.com:yourorg/tests.git a1b2c3d           # a commit (may be abbreviated)
-    --git-repo git@github.com:yourorg/tests.git main --depth 50   # last 50 commits
-    --git-repo git@github.com:yourorg/tests.git main --depth 0    # full history (git describe, changelogs)
-  table.table.table-sm.small
-    tbody
-      tr
-        th Transports
-        td #[code https://], #[code http://], #[code ssh://], #[code git://], #[code user@host:path]. #[code file://] and #[code ext::] are refused.
-      tr
-        th Default ref
-        td The repository's default branch.
-      tr
-        th Depth
-        td Default #[code 1]. #[code 0] = full history. If the server can't do shallow fetches (or the commit is abbreviated), the Client falls back to a full fetch.
-      tr
-        th Exact commit
-        td Logged, and passed to the command as #[code $THUB_GIT_COMMIT]. The requested ref is #[code $JOB_GIT_BRANCH].
-      tr
-        th Extra git options
-        td #[code --git-options] is inserted between #[code git] and its subcommand on every git call, e.g. #[code '-c http.sslVerify=false'] or #[code '-c core.sshCommand="…"'].
-  +code('What the Client runs (see it with --dry-run)').
-    git -C &lt;work> init -q
-    git -C &lt;work> remote add origin &lt;url>
-    git -C &lt;work> fetch -q --depth 1 origin &lt;ref>
-    git -C &lt;work> checkout -q --detach FETCH_HEAD
-    git -C &lt;work> rev-parse HEAD
-
-  h3.h6 Submodules, LFS and cloning inside a container
-  p.small.
-    The Client checks out only the repository itself. Do anything more in the command, which runs in the checkout with the same #[code --env] variables:
-  +code('Submodules / LFS').
-    thub run --type sw --git-repo git@github.com:yourorg/tests.git main \
-      --command 'git submodule update --init --recursive --depth 1 && git lfs pull && ./ci/test.sh' --wait
-  +code('Clone yourself, e.g. inside a container (JOB_GIT_* carry the --git-repo values)').
-    thub run --type sw --git-repo git@github.com:yourorg/tests.git main --depth 1 \
-      --command 'docker run --rm -v "$HOME/.ssh:/root/.ssh:ro" -e JOB_GIT_REPO_URL -e JOB_GIT_BRANCH -e JOB_GIT_DEPTH \
-                   --entrypoint sh alpine/git -c "git clone --depth \$JOB_GIT_DEPTH --branch \$JOB_GIT_BRANCH \$JOB_GIT_REPO_URL /src && ls /src"' \
+      --env GH_TOKEN \
+      --command 'git clone --depth 1 --branch main "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" . &&
+                 ./ci/test.sh' \
       --wait
+  p.small.
+    The token appears only inside the command's environment. To keep it out of #[code .git/config] as well, pass it as a header:
+    #[code git -c http.extraHeader="Authorization: Bearer $GH_TOKEN" clone …].
+
+  h3.h6 SSH with a key from the job
+  +code('Private key as --env (base64), used for this job only').
+    export DEPLOY_KEY_B64="$(base64 &lt; ~/.ssh/thub_deploy | tr -d '\n')"
+    thub run --type hw --label board:nucleo-f401re \
+      --env DEPLOY_KEY_B64 \
+      --command 'umask 077 && echo "$DEPLOY_KEY_B64" | base64 -d > "$THUB_WORK_DIR/../key" &&
+                 GIT_SSH_COMMAND="ssh -i $THUB_WORK_DIR/../key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+                   git clone --depth 1 git@github.com:yourorg/firmware-tests.git . &&
+                 ./ci/test.sh' \
+      --wait
+  p.small.
+    The job directory, key included, is deleted when the job ends. Add the public key as a read-only deploy key: GitHub,
+    Repository → Settings → Deploy keys; GitLab, Settings → Repository → Deploy keys; Bitbucket, Repository settings → Access keys.
+
+  h3.h6 Branch, tag, commit, submodules, LFS
+  +code('All in the command').
+    git clone --depth 1 --branch v1.4.0 "$REPO" .                            # a branch or tag
+    git init -q . && git remote add origin "$REPO" && git fetch -q --depth 1 origin a1b2c3d && git checkout -q FETCH_HEAD   # a commit
+    git submodule update --init --recursive --depth 1 && git lfs pull        # submodules / LFS
+  p.small.
+    Pass the repository and ref as #[code --env REPO=…,REF=…] (or #[code --meta]) so the same command works for every branch.
+    The exit code of #[code --command] is the verdict; JUnit files under #[code results/] or #[code artifacts/] are summed into
+    the job's test counts. Nothing is uploaded: publish what you need to keep from the command (#[code curl -T …] with a token in #[code --env]).

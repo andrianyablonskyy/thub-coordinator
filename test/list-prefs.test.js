@@ -65,19 +65,22 @@ test('jobs.page sorts and pages in SQL, with empty values last', () => {
     bus = new EventEmitter(),
     events = createEventsService(db),
     registry = createRegistryService(db, { bus, events }),
-    { agent } = createAgentsService(db, { events }).create({ name: 'ci', kind: 'ci' }),
+    agents = createAgentsService(db, { events }),
     config = { scheduler: { maxQueuedPerAgent: 100 }, jobs: { defaultTimeoutSec: 60, maxTimeoutSec: 60 } },
     jobs = createJobsService(db, { bus, events, registry, artifacts: {}, config });
   registry.registerAuto({ clientId: 'c', name: 'lab', type: 'sw', labels: [] });
 
-  const ids = ['carol', 'alice', null, 'bob'].map((user) =>
+  // A job's user is its key's (here: the CI token's name); 'old' stands for
+  // a job from before that, which has none.
+  const ids = ['carol', 'alice', 'old', 'bob'].map((name) =>
       jobs.create({
-        agentId: agent.id,
+        agentId: agents.create({ name, kind: 'ci' }).agent.id,
         source: 'cli',
-        spec: { target: { type: 'sw' }, command: './run.sh', ...(user ? { user } : {}) }
+        spec: { target: { type: 'sw' }, command: './run.sh' }
       }).id),
 
     byUser = (dir) => jobs.page({ sort: 'user', dir, size: 'all' }).rows.map((j) => j.spec.user ?? null);
+  db.prepare('UPDATE jobs SET spec = json_remove(spec, \'$.user\') WHERE id = ?').run(ids[2]);
   assert.deepEqual(byUser('asc'), ['alice', 'bob', 'carol', null]);
   assert.deepEqual(byUser('desc'), ['carol', 'bob', 'alice', null]);
 

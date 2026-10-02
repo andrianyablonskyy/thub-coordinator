@@ -39,7 +39,7 @@
   ol.small
     li #[code thub run …] submits a job spec (type, labels, command, inputs) with your access key (or a pipeline's CI token).
     li The Coordinator queues it (#[code QUEUED]) and the scheduler assigns it to an idle Client whose type, labels and group match.
-    li The Client accepts it, clones #[code --git-repo], downloads #[code --download-file] files and prepares the DUT (#[code PREPARING]).
+    li The Client accepts it, downloads #[code --download-file] files and prepares the DUT (#[code PREPARING]).
     li It runs #[code --command] with #[code sh -c], and output streams live to the Agent and the dashboard (#[code RUNNING]).
     li The exit code is the verdict: #[code 0] = #[code PASSED], anything else = #[code FAILED]. The Client reports the JUnit test counts; the job's files stay on the Client and are deleted with its workspace.
     li The Agent exits with the verdict code, so a CI step passes or fails with it.
@@ -102,7 +102,7 @@
   -
     const useCases = [
       { icon: 'cpu', title: 'Hardware-in-the-loop CI', text: 'Every push builds firmware in the cloud, then a GitHub Actions test job runs `thub run --type hw --wait`: a lab Client flashes a real board through ST-Link, captures its UART, runs the tests and fails the pipeline on a non-zero exit.' },
-      { icon: 'pc-display', title: 'Emulator (SW) test farms', text: 'SW Clients on real or virtual Linux machines run each job’s DUT image (QEMU, Renode, a simulator) in a sandboxed Docker container. The tests talk to it at $THUB_DUT_HOST. Scale out by adding VMs.' },
+      { icon: 'pc-display', title: 'Emulator (SW) test farms', text: 'SW Clients on real or virtual Linux machines run each job’s command, which starts its emulator (QEMU, Renode, a simulator) — in Docker if it likes — and tests it. Scale out by adding VMs.' },
       { icon: 'person-workspace', title: 'Remote access for developers', text: 'Developers reproduce a CI failure on the exact bench it happened on (`--client lab-hw-01`) from home, with the same command CI ran, and stream the board’s console live.' },
       { icon: 'lock', title: 'Shared benches without collisions', text: 'The scheduler hands out one job per bench. An engineer who needs a board by hand runs `thub-client lock` so nothing is scheduled there until `unlock`.' },
       { icon: 'collection', title: 'Dedicated pools', text: 'Groups and labels (`board:nucleo-f401re`, `uart`) route jobs to the right hardware, e.g. a nightly pool separate from the PR pool.' },

@@ -100,8 +100,6 @@ const DEV_AGENT_NAME = 'virtual-agent',
     target: { type, labels: ['virtual'] },
     command: './ci/run.sh',
     downloads: [{ url: 'https://artifactory.example.com/fw-local/app/1.4.0-dev/app.bin' }],
-    ...(type === 'sw' ? { image: 'alpine:3.20' } : {}),
-    git: { url: 'https://github.com/yourorg/firmware-tests.git', ref: 'main', depth: 1 },
     ...(user ? { user } : {}),
     meta: { repo: 'yourorg/firmware', branch: 'main', virtual: true },
     ...extra
@@ -313,7 +311,7 @@ function startDevMode(services, config, env = process.env){
     '*** DEV MODE (DEV_MODE=1): virtual Clients virtual-sw-01 / virtual-hw-01 are running in-process' +
       `${seeded ? `, and ${seeded} past jobs + 3 live ones were seeded` : ''}.\n` +
       `*** Virtual agent token: ${DEV_AGENT_TOKEN}\n` +
-      `***   e.g. thub --url ${config.publicUrl} --token ${DEV_AGENT_TOKEN} run --type sw --docker-image alpine --command 'uname -a'`
+      `***   e.g. thub --url ${config.publicUrl} --token ${DEV_AGENT_TOKEN} run --type sw --command 'uname -a'`
   );
   return virtual;
 }

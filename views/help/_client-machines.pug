@@ -26,8 +26,8 @@
         .card-body.small
           ul.mb-0
             li Any Linux host: bare metal, a VM (Proxmox, VMware, Hyper-V, KVM) or a cloud instance.
-            li Docker Engine (#[code docker.io]), with the Client's service user in the #[code docker] group (the installer arranges this).
-            li Each job's DUT container is limited to 2 CPUs and 2 GB RAM. Size the VM for one job plus your test tools: 4 vCPU, 8 GB RAM and 40 GB+ disk for images and workspaces is a good start.
+            li Whatever your jobs' commands use: git, Docker Engine (#[code docker.io]; install it before the Client so its service user gets the #[code docker] group), an emulator. The Client itself needs none of them.
+            li Size the VM for one job plus your test tools: 4 vCPU, 8 GB RAM and 40 GB+ disk for images and workspaces is a good start.
             li For KVM-accelerated emulators (QEMU) inside a VM, turn on #[strong nested virtualization].
             li No USB or udev setup.
 
@@ -52,8 +52,9 @@
   +code('A typical HW job').
     thub run --type hw --label board:nucleo-f401re \
       --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
-      --git-repo https://github.com/yourorg/firmware-tests.git v1.4.0 \
-      --command 'st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh' \
+      --env GH_TOKEN \
+      --command 'git clone --depth 1 --branch v1.4.0 "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" . &&
+                 st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh' \
       --wait
 
   +note('warning').
@@ -62,26 +63,26 @@
 
   h3.h6 Preparing an SW machine (real or virtual)
   +code('SW machine / VM').
-    sudo apt install -y nodejs npm docker.io
+    sudo apt install -y nodejs npm         # + git, docker.io, … if your jobs' commands use them
     sudo npm i -g @andrian.yablonskyy/thub-client
     nano ~/.config/thub/client.json        # "type": "sw", coordinatorUrl, joinKey
     sudo systemctl enable --now thub-client@client
-    # a private registry for DUT images? log in once, as the Client's user:
-    docker login registry.lab.local:5000
   p.small.
     To scale out, clone the VM template. In the clone, #[strong before its first start], run
     #[code rm -f ~/var/lib/thub/client/*/.client-id ~/var/lib/thub/client/*.token] and give it its own #[code name].
     Otherwise both VMs register as the same runner.
   +code('A typical SW job').
     thub run --type sw \
-      --docker-image registry.lab.local:5000/dut-emulator:2026.08 \
-      --git-repo git@github.com:yourorg/firmware-tests.git main \
-      --command 'make test DUT="$THUB_DUT_HOST"' --wait
+      --env GH_TOKEN --env DOCKER_PASSWORD \
+      --command 'git clone --depth 1 "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" . &&
+                 export DOCKER_CONFIG="$THUB_WORK_DIR/.docker" &&
+                 echo "$DOCKER_PASSWORD" | docker login registry.lab.local:5000 -u ci --password-stdin &&
+                 docker run --rm -v "$PWD:/work" -w /work registry.lab.local:5000/dut-emulator:2026.08 make test' --wait
 
   h3.h6 Checklist for any Client machine
   ul.small.mb-0
     li Correct time (NTP). Timestamps are anchored to the Coordinator's clock, but TLS needs a sane clock.
     li Outbound HTTPS to the Coordinator; test it with #[code curl -sI #{coordinatorUrl}/login].
-    li The Client's service user has SSH keys and git credentials for private repos (#[a(href="#git") Git repositories]) and Docker logins for private registries (#[a(href="#docker") Docker registry]).
+    li Whatever tools your jobs' commands use (git, docker, a flasher) are installed. Their credentials come with each job as #[code --env] (#[a(href="#git") Using git], #[a(href="#docker") Using Docker]), not from the host.
     li Under systemd, the service can only write to its state directory. Jobs write to #[code $THUB_WORK_DIR], not to #[code ~].
     li Optional: a nightly reboot from the runner card's #[strong Reboot] tab (cron, host-local time). It waits for running jobs.

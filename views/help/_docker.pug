@@ -1,99 +1,24 @@
-+section('docker', 'Docker registry integration', 'box-seam')
++section('docker', 'Using Docker in a job', 'box-seam')
   p.
-    A job can use Docker in two different ways. Keep them apart, because they log in and run differently:
-  .row.g-3.mb-3
-    .col-md-6
-      .card.h-100
-        .card-body.small
-          h3.h6 #[code --docker-image]: the DUT
-          p.mb-0.
-            SW jobs only. The Client pulls the image and runs it as the job's #[strong DUT container]
-            (an emulator the tests talk to), sandboxed, next to your command. The pull uses the
-            #[strong Client host's] Docker login, made once by the service user.
-    .col-md-6
-      .card.h-100
-        .card-body.small
-          h3.h6 #[code docker …] inside #[code --command]
-          p.mb-0.
-            Any job type, on a host with Docker. Your command logs in, pulls and runs containers
-            itself, e.g. to run the tests #[em inside] an image. Credentials come from the job
-            (#[code --env]) and are scoped to the job.
+    The Client doesn't pull images or start containers itself and doesn't need Docker. A job that needs a container runs
+    #[code docker] in its #[code --command], on a Client host that has Docker (the runner card's #[strong Capabilities] tab says
+    whether it does). Registry credentials come from the job as #[code --env]: masked everywhere, dropped when the job ends.
 
-  h3.h6 Log in to a registry on the Client host (for --docker-image)
+  h3.h6 Log in, pull and run, credentials scoped to the job
   p.small.
-    #[code --docker-image] is pulled with #[code docker pull] as the Client's service user, from the registry the reference names
-    (Docker Hub for a short name such as #[code python:3.14]). Log in once per host, as that user:
-  +code('Client host').
-    # the user that runs thub-client (the one who ran sudo npm i -g), e.g. thub:
-    sudo -u thub docker login registry.lab.local:5000
-    sudo -u thub docker login ghcr.io -u &lt;github-user>        # password: a PAT with read:packages
-    sudo -u thub docker pull registry.lab.local:5000/dut-emulator:2026.08   # check it works
-  p.small.
-    A plain-HTTP registry must be listed in the Docker daemon's #[code insecure-registries]:
-  +code('/etc/docker/daemon.json').
-    { "insecure-registries": ["registry.lab.local:5000"] }
-  p.small.
-    Then run #[code sudo systemctl restart docker]. An image that can't be pulled ends the job as #[code ERROR]
-    during #[em prepare], naming the registry and Docker's reason. An image already on the host isn't pulled again.
-
-  h3.h6 How the Client starts the DUT container
-  p.small.
-    You don't pass #[code docker run] parameters for the DUT. The Client always starts it like this (image default command,
-    sandboxed), and removes it and its network when the job ends:
-  +code('What the Client runs (equivalent)').
-    docker pull registry.lab.local:5000/dut-emulator:2026.08
-    docker network create --driver bridge thub-job-&lt;jobId>
-    docker run -d --name thub-&lt;jobId> --network thub-job-&lt;jobId> \
-      --memory 2g --cpus 2 --read-only \
-      -v &lt;workDir>/&lt;jobId>/downloads:/downloads:ro \
-      -p 127.0.0.1::5555 registry.lab.local:5000/dut-emulator:2026.08
-  ul.small
-    li The image must #[strong start the DUT by itself] (its #[code CMD]/#[code ENTRYPOINT]) and should listen on port #[strong 5555].
-    li The job's #[code --download-file] files are mounted read-only at #[code /downloads] (e.g. the firmware to emulate).
-    li The command reaches it at #[code $THUB_DUT_HOST] (#[code 127.0.0.1:&lt;port&gt;]) and by name as #[code $THUB_DUT_CONTAINER].
-    li Its output is shipped as the #[code emulator] log stream. Its root filesystem is read-only: don't install or clone into it.
-    li #[code thub run --dry-run] prints the exact docker commands a job would run, without running anything.
-
-  h3.h6 Execute commands in the DUT container
-  +code('SW job: talk to the DUT').
-    thub run --type sw \
-      --docker-image registry.lab.local:5000/dut-emulator:2026.08 \
-      --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.elf \
-      --command 'docker exec "$THUB_DUT_CONTAINER" /opt/emu/status &&
-                 docker logs "$THUB_DUT_CONTAINER" | tail -n 20 &&
-                 ./ci/test.sh --dut "$THUB_DUT_HOST"' \
-      --wait
-
-  h3.h6 Log in and pull inside a job (credentials scoped to the job)
-  p.small.
-    Pass the credentials as #[code --env] (masked everywhere, dropped when the job ends). Set #[code DOCKER_CONFIG] to the
-    job's work directory so the login is deleted with the workspace instead of staying in the service user's
-    #[code ~/.docker] for every later job:
+    Point #[code DOCKER_CONFIG] at the job's directory so the login is deleted with the job instead of staying in the
+    service user's #[code ~/.docker] for every later job:
   +code('Any job type').
     export DOCKER_PASSWORD=…        # from your CI secret store, never on the command line
-    thub run --type hw \
-      --env DOCKER_REGISTRY=registry.lab.local:5000,DOCKER_USER=ci --env DOCKER_PASSWORD \
-      --command 'export DOCKER_CONFIG="$THUB_WORK_DIR/.docker" &&
-                 echo "$DOCKER_PASSWORD" | docker login "$DOCKER_REGISTRY" -u "$DOCKER_USER" --password-stdin &&
-                 docker pull "$DOCKER_REGISTRY/team/test-runner:1.4"' \
-      --wait
-
-  h3.h6 Run the tests inside a container (docker run parameters)
-  p.small.
-    The command always starts on the Client host, in #[code $THUB_WORK_DIR] (the #[code --git-repo] checkout). Mount it,
-    hand over the variables the tests need with #[code -e NAME], and use #[code --rm]:
-  +code('Tests in an image').
     thub run --type sw \
       --env DOCKER_REGISTRY=registry.lab.local:5000,DOCKER_USER=ci --env DOCKER_PASSWORD \
       --env TARGET=staging \
-      --git-repo git@github.com:yourorg/web-ui-tests.git main \
       --command 'export DOCKER_CONFIG="$THUB_WORK_DIR/.docker" &&
                  echo "$DOCKER_PASSWORD" | docker login "$DOCKER_REGISTRY" -u "$DOCKER_USER" --password-stdin &&
                  docker run --rm \
-                   -v "$THUB_WORK_DIR:/work" -w /work \
+                   -v "$THUB_WORK_DIR:/work" -w /work --user "$(id -u):$(id -g)" \
                    -e TARGET -e THUB_SUITE -e THUB_JOB_ID \
-                   --network host \
-                   "$DOCKER_REGISTRY/python:3.14" ./run-tests.sh --junit results/junit.xml' \
+                   "$DOCKER_REGISTRY/team/test-runner:1.4" ./run-tests.sh --junit results/junit.xml' \
       --wait
   table.table.table-sm.small
     thead
@@ -106,19 +31,31 @@
         td Removes the container when the tests end.
       tr
         td: code -v "$THUB_WORK_DIR:/work" -w /work
-        td The checkout and downloads, and the #[code results/] and #[code artifacts/] folders, where the Client reads JUnit XML for the test counts.
+        td The work directory, where the Client reads JUnit XML under #[code results/] and #[code artifacts/] for the test counts.
       tr
         td: code -e NAME
         td Passes a job variable (#[code --env], #[code THUB_*], #[code JOB_*]) into the container.
       tr
-        td: code --network host
-        td Lets the container reach the DUT at #[code $THUB_DUT_HOST] (#[code 127.0.0.1:&lt;port&gt;]).
+        td: code --user "$(id -u):$(id -g)"
+        td Files written to #[code /work] stay owned by the Client user, so the workspace can be cleaned up.
       tr
         td: code --device /dev/thub/dut1-uart
         td HW: gives the container the DUT's UART (#[code "$THUB_DUT_UART"]). Use #[code --privileged] only if you must.
-      tr
-        td: code --user "$(id -u):$(id -g)"
-        td Files written to #[code /work] stay owned by the Client user, so the workspace can be cleaned up.
+
+  h3.h6 An emulator as the DUT
+  p.small.
+    Start it in the background in the command, talk to it, and stop it whatever the result:
+  +code('SW job with an emulator container').
+    thub run --type sw \
+      --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.elf \
+      --env DOCKER_REGISTRY=registry.lab.local:5000,DOCKER_USER=ci --env DOCKER_PASSWORD \
+      --command 'export DOCKER_CONFIG="$THUB_WORK_DIR/.docker" &&
+                 echo "$DOCKER_PASSWORD" | docker login "$DOCKER_REGISTRY" -u "$DOCKER_USER" --password-stdin &&
+                 dut="thub-$THUB_JOB_ID" && trap "docker rm -f $dut >/dev/null" EXIT &&
+                 docker run -d --name "$dut" -p 127.0.0.1:5555:5555 -v "$THUB_DOWNLOADS_DIR:/downloads:ro" \
+                   "$DOCKER_REGISTRY/dut-emulator:2026.08" &&
+                 ./ci/test.sh --dut 127.0.0.1:5555' \
+      --wait
   +note('info').
-    Docker access is effectively root access on that host. The Client host must have Docker and the service user must be in the
-    #[code docker] group. The runner card's #[strong Capabilities] tab shows whether a Client can use Docker, and why not.
+    Docker access is effectively root access on that host. The service user needs the #[code docker] group: install Docker
+    before the Client (#[code sudo npm i -g …] adds the group), or re-run the install afterwards.

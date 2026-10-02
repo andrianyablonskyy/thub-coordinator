@@ -8,8 +8,8 @@
   +code('Lab machine, as the user the Client should run as (via sudo)').
     # Node.js and HW tools (stlink-tools/openocd only for HW Clients)
     sudo apt install -y nodejs npm stlink-tools openocd usbutils
-    # Docker: needed on SW Clients, and on HW Clients whose jobs use docker.
-    # Install it BEFORE thub-client so the service gets the docker group.
+    # Optional — the Client doesn't need it. Only if your jobs' commands run docker;
+    # install it BEFORE thub-client so the service gets the docker group.
     sudo apt install -y docker.io
     sudo npm i -g @andrian.yablonskyy/thub-client
   p.small.
@@ -66,7 +66,7 @@
         tr
           td: code type
           td Yes
-          td #[code hw] (physical DUT) or #[code sw] (DUT image in Docker).
+          td #[code hw] (physical DUT) or #[code sw] (software-only: jobs run just their command).
         tr
           td: code joinKey
           td Yes
@@ -100,7 +100,7 @@
           td No
           td An explicit identity UUID (or #[code THUB_CLIENT_ID]). Normally generated once and kept in #[code .client-id].
   p.small.
-    SW Clients have no settings of their own: they run whatever DUT image a job brings (#[code --docker-image]).
+    SW Clients have no settings of their own: a job's #[code --command] starts whatever it needs (a container, an emulator).
     Admins can also edit an HW Client's devices from its runner card (#[strong ST-Link | UART | DUT USB]
     tabs). The tabs show the config the Client runs, as it reported it at its last start, or a saved
     change it hasn't applied yet. #[strong USB devices → Import to config] fills them from the host's #[code lsusb].

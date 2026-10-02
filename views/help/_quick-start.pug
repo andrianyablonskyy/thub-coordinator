@@ -14,7 +14,7 @@
       strong Install a Client
       |  on each lab machine, with the same join key (#[a(href="#client-setup") Client setup]):
       +code('Lab machine (Ubuntu 26.04)').
-        sudo apt install -y nodejs npm docker.io      # + stlink-tools openocd for HW
+        sudo apt install -y nodejs npm                # + your jobs' tools: stlink-tools openocd, git, docker.io…
         sudo npm i -g @andrian.yablonskyy/thub-client
         nano ~/.config/thub/client.json               # coordinatorUrl, type, joinKey
         sudo systemctl enable --now thub-client@client

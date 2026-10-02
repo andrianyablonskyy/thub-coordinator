@@ -532,12 +532,16 @@ test('a removed Client re-registers as a fresh resource under the same name', ()
   assert.equal(again.name, 'lab-back');
 });
 
-test('a job-supplied Docker image runs on any matching SW Client (no opt-in any more)', () => {
+test('an SW job is just its command: git / --docker-image from an older Agent are refused, saying what to do', () => {
   const { registry, agents, jobs, scheduler } = buildTestServices(),
     { agent } = agents.create({ name: 'dev', kind: 'cli' }),
     r = registerResource(registry, { name: 'sw-any', type: 'sw' });
   registry.heartbeat(r.id, { state: 'idle' });
-  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: { target: { type: 'sw', labels: [] }, image: 'alpine', command: './run.sh' } });
+  for (const extra of [{ image: 'alpine' }, { git: { url: 'https://git.lab/t.git' } }]){
+    assert.throws(() => jobs.create({ agentId: agent.id, source: 'cli', spec: { target: { type: 'sw', labels: [] }, command: './run.sh', ...extra } }),
+      /no longer supported — clone the repository or run docker in --command, passing credentials with --env/);
+  }
+  const job = jobs.create({ agentId: agent.id, source: 'cli', spec: { target: { type: 'sw', labels: [] }, command: 'docker run --rm alpine ./run.sh' } });
   scheduler.runPass();
   assert.equal(jobs.get(job.id).resource_id, r.id);
   // An older Client still reporting its sw settings: they're dropped.

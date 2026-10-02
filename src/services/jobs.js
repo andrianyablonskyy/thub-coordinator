@@ -106,7 +106,7 @@ function createJobsService(db, { bus, events, registry, config }){
     // anyone who can see the list guess a secret one character at a time.
     SEARCH_SQL = [
       'jobs.id', 'jobs.state', 'jobs.source', 'jobs.message', 'r.name', 'jobs.resource_name', 'a.name',
-      ...['user', 'command', 'suite', 'image', 'git.url', 'git.ref', 'target.group', 'target.labels', 'downloads', 'args', 'meta']
+      ...['user', 'command', 'suite', 'target.group', 'target.labels', 'downloads', 'args', 'meta']
         .map((path) => `json_extract(jobs.spec, '$.${path}')`)
     ];
 
@@ -142,6 +142,12 @@ function createJobsService(db, { bus, events, registry, config }){
     return { rows: rows.map(rowToJob), pagination };
   }
 
+  // A job's user: the key's user's username, else the CI token's name.
+  function agentOwner(agentId){
+    const row = db.prepare('SELECT a.name, u.username FROM agents a LEFT JOIN users u ON u.id = a.user_id WHERE a.id = ?').get(agentId);
+    return row ? row.username || row.name : null;
+  }
+
   // The group an agent's jobs run in: its user's, or the CI token's own.
   function agentGroup(agentId){
     return db.prepare(
@@ -173,6 +179,13 @@ function createJobsService(db, { bus, events, registry, config }){
       throw Object.assign(new Error(`Invalid label: ${badLabels.join(', ')} — ${LABEL_RULE}`), { status: 400 });
     }
     spec.source = source;
+    // Who submitted it, from the key itself (never the Agent's say): the
+    // user's username, or the CI token's name.
+    const owner = agentOwner(agentId);
+    delete spec.user;
+    if (owner){
+      spec.user = owner;
+    }
     // The group is the agent's, set on the dashboard (§13.1) — whatever an
     // older Agent sent as `target.group` is replaced.
     const group = agentGroup(agentId);

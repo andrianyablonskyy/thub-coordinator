@@ -135,12 +135,12 @@ mixin capDevice(d, detail)
       ) missing
 
 //- What the Client reported it can drive at registration (HW: udev
-//- devices; SW: nothing of its own — it runs each job's DUT image).
+//- devices; SW: nothing of its own — a job's command brings what it runs).
 mixin capabilitiesList(caps)
   if !caps
     span.text-body-secondary —
   else if caps.sw
-    span.text-body-secondary Runs each job's own DUT image (--docker-image), 2 CPUs / 2 GB
+    span.text-body-secondary Runs each job's command — nothing of its own to drive
   else if caps.hw
     - const kinds = [['stlinks', 'ST-Link'], ['uarts', 'UART'], ['usbs', 'USB']]
     - const empty = kinds.every(([k]) => !(caps.hw[k] || []).length)

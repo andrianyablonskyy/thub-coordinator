@@ -438,3 +438,17 @@ test('audit log: Timestamp, User (who did it — always), Action — from the da
     ['system', 'Unblocked dev']
   ]);
 });
+
+test('a job\'s user comes from its key: the username, or the CI token\'s name — never what the Agent sends', async (t) => {
+  const { services } = await start(t),
+    u = services.adminUsers,
+    dev = u.create({ username: 'dev', email: 'd@example.com', role: 'user' }, { by: 't' });
+  services.registry.registerAuto({ clientId: 'c', name: 'lab-sw-01', type: 'sw', labels: [] });
+  u.issueKey(dev.id, { by: 't' });
+  const devAgent = services.agents.list().find((a) => a.user_id === dev.id),
+    ci = services.agents.create({ name: 'ci-nightly', kind: 'ci' }).agent,
+    spec = { target: { type: 'sw' }, command: './t.sh', user: 'someone else' }, // an older Agent's --user
+    userOf = (agentId) => services.jobs.get(services.jobs.create({ agentId, source: 'cli', spec: { ...spec } }).id).spec.user;
+  assert.equal(userOf(devAgent.id), 'dev');
+  assert.equal(userOf(ci.id), 'ci-nightly');
+});

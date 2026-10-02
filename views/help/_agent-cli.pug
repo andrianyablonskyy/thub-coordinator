@@ -23,20 +23,15 @@
         ['--client <name|id>', 'Only this Client; waits for it even if others are idle.', '--client lab-hw-01']
       ] },
       { title: 'What to run', rows: [
-        ['--command <string>', 'Required. Run with sh -c in the work directory. Exit code 0 = PASSED.', "--command './ci/test.sh'"],
+        ['--command <string>', 'Required. Run with sh -c in the work directory. Exit code 0 = PASSED. It clones repositories and runs containers itself (see Using git / Using Docker).', "--command './ci/test.sh'"],
         ['--arg <value>', 'Argument for the command, as "$@" (repeatable).', '--arg --junit --arg -v'],
         ['--suite <name>', 'Passed as THUB_SUITE (default: default).', '--suite smoke'],
         ['--download-file <url>', 'File downloaded before the command (repeatable, http(s), no credentials). THUB_DOWNLOAD_1…', '--download-file https://…/app.bin'],
-        ['--git-repo <url> [ref]', 'Repository cloned first; the command runs in it.', '--git-repo git@github.com:org/tests.git v1.4.0'],
-        ['--depth <n>', 'Commits to fetch with --git-repo (default 1, 0 = full).', '--depth 0'],
-        ['--git-options <string>', 'Extra git options between git and its subcommand. Stored with the job.', '--git-options \'-c core.sshCommand="ssh -i ~/.ssh/k"\''],
-        ['--docker-image <ref>', 'SW only: DUT container image, pulled with the Client host’s Docker login.', '--docker-image registry.lab:5000/emu:1'],
-        ['--env <vars>', 'NAME=value[,NAME=value] for git and the command (repeatable). --env NAME takes the value from your shell. Masked, dropped at job end.', '--env TARGET=staging --env API_TOKEN']
+        ['--env <vars>', 'NAME=value[,NAME=value] for the command (repeatable): how data and secrets reach the job (git tokens, registry passwords). --env NAME takes the value from your shell. Masked, dropped at job end.', '--env TARGET=staging --env API_TOKEN']
       ] },
       { title: 'Job settings', rows: [
         ['--timeout <dur>', 'e.g. 30m, 1h (default 30m, capped by the Coordinator).', '--timeout 1h'],
         ['--priority <n>', '0–100. Defaults: ci 50, cli 60.', '--priority 80'],
-        ['--user <name>', 'Free-text owner label. Default: THUB_USER / config.', '--user alice'],
         ['--meta <key=value>', 'Metadata stored on the job (repeatable). The command sees THUB_META_<KEY>.', '--meta ciJobId=$GITHUB_RUN_ID'],
         ['--dry-run', 'Schedule for real, but only log what the Client would run.', '--dry-run']
       ] },
@@ -74,12 +69,13 @@
   +code('Flash and test a board, fail CI on failure').
     thub run --type hw --label board:nucleo-f401re \
       --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
-      --git-repo https://github.com/yourorg/firmware-tests.git v1.4.0 \
-      --command 'st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh "$@"' \
+      --env GH_TOKEN \
+      --command 'git clone --depth 1 --branch v1.4.0 "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" . &&
+                 st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh "$@"' \
       --arg --junit --timeout 45m --wait
-  +code('Reproduce a failure on the exact bench, labeled with your name').
-    thub run --type hw --label board:nucleo-f401re --client lab-hw-01 --user "$USER" \
-      --download-file "$IMAGE_URL" --git-repo "$TESTS_REPO" --command ./ci/test.sh
+  +code('Reproduce a failure on the exact bench (the job carries your username)').
+    thub run --type hw --label board:nucleo-f401re --client lab-hw-01 \
+      --download-file "$IMAGE_URL" --env GH_TOKEN --command 'git clone --depth 1 "https://x-access-token:$GH_TOKEN@$TESTS_REPO" . && ./ci/test.sh'
     # Ctrl-C detaches; the job keeps running. Re-attach:
     thub status M-00126
   +code('Verify a download before using it').
@@ -87,14 +83,14 @@
       --command 'echo "8f15bf27…  $THUB_DOWNLOAD_1" | sha256sum -c && ./flash.sh "$THUB_DOWNLOAD_1"' --wait
   +code('Secrets and parameters').
     export API_TOKEN=…
-    thub run --type sw --git-repo "$TESTS_REPO" \
+    thub run --type sw \
       --env TARGET=staging,LOG_LEVEL=debug --env API_TOKEN \
       --command './run-tests.sh --target "$TARGET"' --suite regression --wait
   +code('Preview exactly what would run (nothing is executed)').
-    thub run --type sw --docker-image alpine --git-repo https://example.invalid/tests.git main \
+    thub run --type sw --download-file https://example.invalid/app.bin \
       --command ./ci/test.sh --dry-run --wait
   +code('Scripting: submit, poll, read the result').
-    JOB=$(thub run --type sw --git-repo "$TESTS_REPO" --command ./ci/test.sh --detach --json | jq -r .jobId)
+    JOB=$(thub run --type sw --command ./ci/test.sh --detach --json | jq -r .jobId)
     while thub status "$JOB" --json > job.json; [ $? -eq 5 ]; do sleep 10; done
     jq -r '"\(.state) exit=\(.exit_code) tests=\(.summary.total // 0) failed=\(.summary.failed // 0)"' job.json
   +code('Lists').

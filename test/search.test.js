@@ -65,8 +65,7 @@ test('jobs.page searches ids, users, resources, agents and spec fields — never
       source: 'ci',
       spec: {
         target: { type: 'sw' },
-        command: './ci/smoke.sh',
-        git: { url: 'git@github.com:yourorg/firmware-tests.git', ref: 'release/1.4' },
+        command: 'git clone --branch release/1.4 git@github.com:yourorg/firmware-tests.git . && ./ci/smoke.sh',
         meta: { ciJobId: '9165432107' },
         env: { API_TOKEN: 'hunter2-secret' }
       }
@@ -82,7 +81,7 @@ test('jobs.page searches ids, users, resources, agents and spec fields — never
   assert.deepEqual(ids(a.toLowerCase()), [a]); // job id, any case
   assert.deepEqual(ids('alice'), [m]); // user and agent name
   assert.deepEqual(ids('ci-firmware'), [a]); // agent name
-  assert.deepEqual(ids('firmware-tests release/1.4'), [a]); // git url + ref, both words
+  assert.deepEqual(ids('firmware-tests release/1.4'), [a]); // words of the command (its git clone), both
   assert.deepEqual(ids('9165432107'), [a]); // meta
   assert.deepEqual(ids('smoke alice'), []); // words must all match the same job
   assert.deepEqual(ids('regression_50%'), [m]); // % and _ are literal…

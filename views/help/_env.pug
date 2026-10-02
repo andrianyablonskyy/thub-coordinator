@@ -10,17 +10,14 @@
     const thubVars = [
       ['THUB_JOB_ID', 'The job id, e.g. M-00125'],
       ['THUB_ARTIFACTS_FILE', 'Where the command may list the artifacts it published elsewhere: a JSON array of {"name", "size", "link", "timestamp"}, shown on the job page'],
-      ['THUB_WORK_DIR', 'The directory the command runs in: the --git-repo checkout, else empty. JUnit XML in results/ or artifacts/ gives the test counts; deleted when the job ends'],
+      ['THUB_WORK_DIR', 'The directory the command runs in, empty at the start (clone into it if you need a repository). JUnit XML in results/ or artifacts/ gives the test counts; deleted when the job ends'],
       ['THUB_SUITE', '--suite (default: default)'],
-      ['THUB_GIT_COMMIT', 'The exact commit checked out for --git-repo'],
       ['THUB_DOWNLOADS_DIR', 'Where the --download-file files are'],
       ['THUB_DOWNLOADS / THUB_DOWNLOAD_<n>', 'Local paths of the downloads: all, one per line / each one'],
       ['THUB_META_<KEY>', '--meta values; camelCase keys become SNAKE_CASE (ciJobId → THUB_META_CI_JOB_ID)'],
       ['THUB_DUT_STLINK / _<n>', 'HW: ST-Link serials (device path if the serial couldn\'t be read); unsuffixed = the first'],
       ['THUB_DUT_UART / _<n>', 'HW: UART device paths (/dev/thub/dut<N>-uart); unsuffixed = the first'],
-      ['THUB_DUT_USB / _<n>', 'HW: DUT USB device paths'],
-      ['THUB_DUT_HOST', 'SW with --docker-image: 127.0.0.1:<port> of the DUT container\'s port 5555'],
-      ['THUB_DUT_CONTAINER', 'SW with --docker-image: the DUT container\'s name (docker exec / docker logs)']
+      ['THUB_DUT_USB / _<n>', 'HW: DUT USB device paths']
     ]
   .table-responsive
     table.table.table-sm.small
@@ -38,14 +35,9 @@
       ['JOB_LABEL / JOB_LABEL_<n>', '--label', 'all labels, comma-separated / each'],
       ['JOB_GROUP', '(dashboard)', 'the submitting agent\'s group, if it has one'],
       ['JOB_CLIENT', '--client', 'this Client\'s name'],
-      ['JOB_USER', '--user', 'as given'],
+      ['JOB_USER', '(your key)', 'the submitting user\'s username, or the CI token\'s name'],
       ['JOB_COMMAND', '--command', 'the command itself'],
       ['JOB_DOWNLOAD_FILE / _<n>', '--download-file', 'the URLs (the local files are THUB_DOWNLOAD_<n>)'],
-      ['JOB_DOCKER_IMAGE', '--docker-image', 'the image reference'],
-      ['JOB_GIT_REPO_URL', '--git-repo <url>', 'the repository URL'],
-      ['JOB_GIT_BRANCH', '--git-repo <url> <ref>', 'branch, tag or commit as given (unset = default branch)'],
-      ['JOB_GIT_DEPTH', '--depth', 'commits fetched (1 by default, 0 = full)'],
-      ['JOB_GIT_OPTIONS', '--git-options', 'as given'],
       ['JOB_SUITE', '--suite', 'as given, default when not'],
       ['JOB_ARG / JOB_ARG_<n>', '--arg', 'all, space-separated / each (also "$@")'],
       ['JOB_TIMEOUT', '--timeout', 'seconds'],
@@ -74,8 +66,8 @@
   ul.small
     li #[code --env NAME=value[,NAME=value]], repeatable. A comma starts a new variable only when #[code NAME=] follows it, so values may contain commas.
     li #[code --env NAME] alone takes the value from the Agent's environment. That keeps secrets off the command line, out of shell history and out of CI logs.
-    li Any names except #[code THUB_*], #[code JOB_*], #[code GIT_TERMINAL_PROMPT] and #[code GIT_ALLOW_PROTOCOL].
-    li They apply to every command the Client runs for the job: the #[code --git-repo] git commands and #[code --command].
+    li Any names except #[code THUB_*] and #[code JOB_*].
+    li They're how every piece of data and every secret reaches the job: a git token for its #[code git clone], a registry password for its #[code docker login], an API key for its tests.
     li
       | Every value is treated as a secret. It's sent only to the Client running the job, shown as #[code ***] by the API,
       | #[code thub status --json] and #[code --dry-run], and wiped from the Coordinator's database when the job ends.
@@ -88,11 +80,11 @@
   +code('ci/test.sh (shell)').
     #!/bin/sh
     set -eu
-    echo "Job $THUB_JOB_ID on $(hostname), suite ${THUB_SUITE}, commit ${THUB_GIT_COMMIT:-n/a}"
+    echo "Job $THUB_JOB_ID on $(hostname), suite ${THUB_SUITE}"
 
     # optional parameters with defaults
     TARGET="${TARGET:-staging}"
-    BRANCH="${JOB_GIT_BRANCH:-main}"
+    BRANCH="${BRANCH:-main}"          # from --env BRANCH=…
 
     # every downloaded file
     printf '%s\n' "$THUB_DOWNLOADS" | while read -r f; do echo "downloaded: $f"; done
@@ -106,7 +98,6 @@
   +code('conftest.py (Python)').
     import os
 
-    DUT_HOST  = os.environ.get("THUB_DUT_HOST", "127.0.0.1:5555")   # SW DUT container
     UARTS     = [v for k, v in sorted(os.environ.items()) if k.startswith("THUB_DUT_UART_")]
     FIRMWARE  = os.environ.get("THUB_DOWNLOAD_1")
     RESULTS   = os.path.join(os.environ.get("THUB_WORK_DIR", "."), "results")
@@ -119,9 +110,10 @@
     export API_TOKEN=…
     thub run --type hw --label board:nucleo-f401re \
       --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
-      --git-repo git@github.com:yourorg/firmware-tests.git main \
-      --env TARGET=production --env API_TOKEN \
+      --env TARGET=production,BRANCH=main --env API_TOKEN --env GH_TOKEN \
       --meta ciJobId="$GITHUB_RUN_ID" --meta sha="$GITHUB_SHA" \
-      --suite smoke --command ./ci/test.sh --wait
+      --suite smoke \
+      --command 'git clone --depth 1 --branch "$BRANCH" "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" . &&
+                 ./ci/test.sh' --wait
   p.small.text-body-secondary.mb-0.
     Tip: #[code thub run … --dry-run] lists every variable the command would get on the chosen Client, with #[code --env] values as #[code ***].
