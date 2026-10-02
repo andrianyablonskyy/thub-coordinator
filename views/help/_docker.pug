@@ -13,11 +13,10 @@
     thub run --type sw \
       --env DOCKER_REGISTRY=registry.lab.local:5000,DOCKER_USER=ci --env DOCKER_PASSWORD \
       --env TARGET=staging \
-      --command 'export DOCKER_CONFIG="$THUB_WORK_DIR/.docker" &&
-                 echo "$DOCKER_PASSWORD" | docker login "$DOCKER_REGISTRY" -u "$DOCKER_USER" --password-stdin &&
-                 docker run --rm \
-                   -v "$THUB_WORK_DIR:/work" -w /work --user "$(id -u):$(id -g)" \
-                   -e TARGET -e THUB_SUITE -e THUB_JOB_ID \
+      --command 'echo "$DOCKER_PASSWORD" | docker login "$DOCKER_REGISTRY" -u "$DOCKER_USER" --password-stdin &&
+                 docker run --rm --user "$(id -u):$(id -g)" \
+                   -v "$THUB_WORK_DIR/src:/work" -w /work \
+                   -e TARGET -e JOB_SUITE -e THUB_JOB_ID \
                    "$DOCKER_REGISTRY/team/test-runner:1.4" ./run-tests.sh --junit results/junit.xml' \
       --wait
   table.table.table-sm.small
@@ -30,8 +29,8 @@
         td: code --rm
         td Removes the container when the tests end.
       tr
-        td: code -v "$THUB_WORK_DIR:/work" -w /work
-        td The work directory, where the Client reads JUnit XML under #[code results/] and #[code artifacts/] for the test counts.
+        td: code -v "$THUB_WORK_DIR/src:/work" -w /work
+        td Only the clone (#[code src/]), not the job directory, which holds the registry login in #[code .docker/]. The Client reads JUnit XML from #[code src/results/] or #[code src/artifacts/] for the test counts.
       tr
         td: code -e NAME
         td Passes a job variable (#[code --env], #[code THUB_*], #[code JOB_*]) into the container.
@@ -40,7 +39,37 @@
         td Files written to #[code /work] stay owned by the Client user, so the workspace can be cleaned up.
       tr
         td: code --device /dev/thub/dut1-uart
-        td HW: gives the container the DUT's UART (#[code "$THUB_DUT_UART"]). Use #[code --privileged] only if you must.
+        td HW: gives the container the DUT's UART (#[code /dev/thub/dut1-uart]). Use #[code --privileged] only if you must.
+
+  h3.h6 Clone and test inside a container, with a deploy key and a registry login from the job
+  p.small.
+    Everything comes from the Agent as #[code --env]: the registry and its credentials, and the private key the
+    container clones with. Nothing is set up on the Client host beforehand.
+  +code('Reference example').
+    # In CI, from its secret store — never typed on the command line:
+    export THUB_KEY=…                              # a CI token (dashboard → CI tokens)
+    export DOCKER_PASSWORD=…                       # the registry password
+    export GIT_KEY="$(cat ~/.ssh/thub_deploy)"     # a private deploy key with read access to the repository
+    
+    thub run --type sw \
+      --env DOCKER_REGISTRY=registry.lab:5000,DOCKER_USERNAME=ci-reader \
+      --env DOCKER_PASSWORD --env GIT_KEY \
+      --command 'echo "$DOCKER_PASSWORD" | docker login "$DOCKER_REGISTRY" --username "$DOCKER_USERNAME" --password-stdin &&
+                 mkdir -p "$THUB_WORK_DIR/src" &&
+                 docker run --rm -e GIT_KEY -e HOME=/tmp --user "$(id -u):$(id -g)" \
+                   -v "$THUB_WORK_DIR/src:/work" -w /work --entrypoint sh alpine/git -c "
+                   eval \$(ssh-agent -s) > /dev/null &&
+                   printf \"%s\n\" \"\$GIT_KEY\" | ssh-add - &&
+                   GIT_SSH_COMMAND=\"ssh -o StrictHostKeyChecking=accept-new\" git clone --depth 1 git@bitbucket.org:yourorg/web-ui-tests.git . &&
+                   ./run-tests.sh"' \
+      --wait
+  ul.small
+    li Plain values go as #[code --env NAME=value]. Secrets go as #[code --env NAME] alone: the Agent takes the value from its own environment, so it never appears on the command line, in shell history or in CI logs. A multi-line value, such as the key, arrives intact.
+    li The Client sets #[code DOCKER_CONFIG=$THUB_WORK_DIR/.docker]: the registry login lands in the job's directory, deleted with the job. Only #[code src/] is mounted into the container, so the login isn't visible in it.
+    li #[code -e GIT_KEY] hands the key to the container. #[code --entrypoint sh] is needed because #[code alpine/git]'s own entrypoint is #[code git]. #[code --user "$(id -u):$(id -g)"] (with #[code HOME=/tmp]) keeps the clone owned by the Client user, so it can be deleted with the job; #[code mkdir -p] first so Docker doesn't create #[code src/] as root.
+    li In the inner script, #[code \$] is escaped, so the #[strong container] expands the variables, not the Client's shell. #[code ssh-agent] holds the key in memory: it's never written to a file. #[code accept-new] trusts the git server's host key on first use.
+    li #[code alpine/git] comes from Docker Hub. The #[code docker login] is for private images such as #[code $DOCKER_REGISTRY/team/test-runner:1.4].
+    li Never #[code echo] a secret: the command's output is the job log, which is stored and visible.
 
   h3.h6 An emulator as the DUT
   p.small.
@@ -49,8 +78,7 @@
     thub run --type sw \
       --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.elf \
       --env DOCKER_REGISTRY=registry.lab.local:5000,DOCKER_USER=ci --env DOCKER_PASSWORD \
-      --command 'export DOCKER_CONFIG="$THUB_WORK_DIR/.docker" &&
-                 echo "$DOCKER_PASSWORD" | docker login "$DOCKER_REGISTRY" -u "$DOCKER_USER" --password-stdin &&
+      --command 'echo "$DOCKER_PASSWORD" | docker login "$DOCKER_REGISTRY" -u "$DOCKER_USER" --password-stdin &&
                  dut="thub-$THUB_JOB_ID" && trap "docker rm -f $dut >/dev/null" EXIT &&
                  docker run -d --name "$dut" -p 127.0.0.1:5555:5555 -v "$THUB_DOWNLOADS_DIR:/downloads:ro" \
                    "$DOCKER_REGISTRY/dut-emulator:2026.08" &&

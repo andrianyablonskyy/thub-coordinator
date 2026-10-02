@@ -25,7 +25,7 @@
       { title: 'What to run', rows: [
         ['--command <string>', 'Required. Run with sh -c in the work directory. Exit code 0 = PASSED. It clones repositories and runs containers itself (see Using git / Using Docker).', "--command './ci/test.sh'"],
         ['--arg <value>', 'Argument for the command, as "$@" (repeatable).', '--arg --junit --arg -v'],
-        ['--suite <name>', 'Passed as THUB_SUITE (default: default).', '--suite smoke'],
+        ['--suite <name>', 'Passed as JOB_SUITE (default: default).', '--suite smoke'],
         ['--download-file <url>', 'File downloaded before the command (repeatable, http(s), no credentials). THUB_DOWNLOAD_1…', '--download-file https://…/app.bin'],
         ['--env <vars>', 'NAME=value[,NAME=value] for the command (repeatable): how data and secrets reach the job (git tokens, registry passwords). --env NAME takes the value from your shell. Masked, dropped at job end.', '--env TARGET=staging --env API_TOKEN']
       ] },
@@ -70,12 +70,12 @@
     thub run --type hw --label board:nucleo-f401re \
       --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
       --env GH_TOKEN \
-      --command 'git clone --depth 1 --branch v1.4.0 "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" . &&
-                 st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh "$@"' \
+      --command 'git clone --depth 1 --branch v1.4.0 "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" src && cd src &&
+                 st-flash --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh "$@"' \
       --arg --junit --timeout 45m --wait
   +code('Reproduce a failure on the exact bench (the job carries your username)').
     thub run --type hw --label board:nucleo-f401re --client lab-hw-01 \
-      --download-file "$IMAGE_URL" --env GH_TOKEN --command 'git clone --depth 1 "https://x-access-token:$GH_TOKEN@$TESTS_REPO" . && ./ci/test.sh'
+      --download-file "$IMAGE_URL" --env GH_TOKEN --command 'git clone --depth 1 "https://x-access-token:$GH_TOKEN@$TESTS_REPO" src && cd src && ./ci/test.sh'
     # Ctrl-C detaches; the job keeps running. Re-attach:
     thub status M-00126
   +code('Verify a download before using it').

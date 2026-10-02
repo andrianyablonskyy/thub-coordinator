@@ -11,7 +11,7 @@
     export GH_TOKEN=…      # GitHub: a fine-grained PAT with read access; GitLab: oauth2 token; Bitbucket: x-token-auth
     thub run --type sw \
       --env GH_TOKEN \
-      --command 'git clone --depth 1 --branch main "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" . &&
+      --command 'git clone --depth 1 --branch main "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" src && cd src &&
                  ./ci/test.sh' \
       --wait
   p.small.
@@ -23,19 +23,23 @@
     export DEPLOY_KEY_B64="$(base64 &lt; ~/.ssh/thub_deploy | tr -d '\n')"
     thub run --type hw --label board:nucleo-f401re \
       --env DEPLOY_KEY_B64 \
-      --command 'umask 077 && echo "$DEPLOY_KEY_B64" | base64 -d > "$THUB_WORK_DIR/../key" &&
-                 GIT_SSH_COMMAND="ssh -i $THUB_WORK_DIR/../key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-                   git clone --depth 1 git@github.com:yourorg/firmware-tests.git . &&
+      --command 'umask 077 && echo "$DEPLOY_KEY_B64" | base64 -d > "$THUB_WORK_DIR/key" &&
+                 GIT_SSH_COMMAND="ssh -i $THUB_WORK_DIR/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+                   git clone --depth 1 git@github.com:yourorg/firmware-tests.git src && cd src &&
                  ./ci/test.sh' \
       --wait
   p.small.
     The job directory, key included, is deleted when the job ends. Add the public key as a read-only deploy key: GitHub,
     Repository → Settings → Deploy keys; GitLab, Settings → Repository → Deploy keys; Bitbucket, Repository settings → Access keys.
 
+  p.small.
+    To clone #[em inside a container] with a key passed the same way (held by #[code ssh-agent], never written to disk), see
+    #[a(href="#docker") Using Docker → Clone and test inside a container].
+
   h3.h6 Branch, tag, commit, submodules, LFS
   +code('All in the command').
-    git clone --depth 1 --branch v1.4.0 "$REPO" .                            # a branch or tag
-    git init -q . && git remote add origin "$REPO" && git fetch -q --depth 1 origin a1b2c3d && git checkout -q FETCH_HEAD   # a commit
+    git clone --depth 1 --branch v1.4.0 "$REPO" src                            # a branch or tag
+    git init -q src && cd src && git remote add origin "$REPO" && git fetch -q --depth 1 origin a1b2c3d && git checkout -q FETCH_HEAD   # a commit
     git submodule update --init --recursive --depth 1 && git lfs pull        # submodules / LFS
   p.small.
     Pass the repository and ref as #[code --env REPO=…,REF=…] (or #[code --meta]) so the same command works for every branch.

@@ -106,8 +106,8 @@
     change it hasn't applied yet. #[strong USB devices → Import to config] fills them from the host's #[code lsusb].
     The card's #[strong Export] and #[strong Import] icons download a Client's config file (never its
     #[code joinKey]) and apply one to it. An older HW Client takes only the file's #[code hw-devices].
-    There's no ST-Link serial field: the job's #[code --command] picks the probe
-    (#[code $THUB_DUT_STLINK_&lt;n&gt;]), and the Client reads each serial from its udev symlink.
+    There's no ST-Link serial field: the job's #[code --command] picks the probe (#[code st-flash] alone uses the
+    only one; with several, #[code st-flash --serial] with a serial from #[code st-info --probe]).
 
   h3.h6 Several DUT slots on one machine
   +code('One instance per slot').

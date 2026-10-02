@@ -53,8 +53,8 @@
     thub run --type hw --label board:nucleo-f401re \
       --download-file https://artifactory.example.com/fw-local/app/1.4.0-42/app.bin \
       --env GH_TOKEN \
-      --command 'git clone --depth 1 --branch v1.4.0 "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" . &&
-                 st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh' \
+      --command 'git clone --depth 1 --branch v1.4.0 "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" src && cd src &&
+                 st-flash --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/test.sh' \
       --wait
 
   +note('warning').
@@ -74,10 +74,9 @@
   +code('A typical SW job').
     thub run --type sw \
       --env GH_TOKEN --env DOCKER_PASSWORD \
-      --command 'git clone --depth 1 "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" . &&
-                 export DOCKER_CONFIG="$THUB_WORK_DIR/.docker" &&
+      --command 'git clone --depth 1 "https://x-access-token:$GH_TOKEN@github.com/yourorg/firmware-tests.git" src && cd src &&
                  echo "$DOCKER_PASSWORD" | docker login registry.lab.local:5000 -u ci --password-stdin &&
-                 docker run --rm -v "$PWD:/work" -w /work registry.lab.local:5000/dut-emulator:2026.08 make test' --wait
+                 docker run --rm --user "$(id -u):$(id -g)" -v "$THUB_WORK_DIR/src:/work" -w /work registry.lab.local:5000/dut-emulator:2026.08 make test' --wait
 
   h3.h6 Checklist for any Client machine
   ul.small.mb-0

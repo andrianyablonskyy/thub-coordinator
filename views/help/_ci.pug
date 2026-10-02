@@ -34,8 +34,8 @@
                 --type hw --label board:nucleo-f401re \
                 --download-file "${{ needs.build.outputs.image_url }}" \
                 --env GH_TOKEN="${{ secrets.TESTS_READ_TOKEN }}",SHA="$GITHUB_SHA",REPO="$GITHUB_REPOSITORY" \
-                --command 'git init -q . && git fetch -q --depth 1 "https://x-access-token:$GH_TOKEN@github.com/$REPO.git" "$SHA" && git checkout -q FETCH_HEAD &&
-                           st-flash --serial "$THUB_DUT_STLINK" --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/hw-tests.sh' \
+                --command 'git init -q src && cd src && git fetch -q --depth 1 "https://x-access-token:$GH_TOKEN@github.com/$REPO.git" "$SHA" && git checkout -q FETCH_HEAD &&
+                           st-flash --reset write "$THUB_DOWNLOAD_1" 0x08000000 && ./ci/hw-tests.sh' \
                 --suite smoke --timeout 30m --wait \
                 --meta runUrl="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
   ul.small.mb-0

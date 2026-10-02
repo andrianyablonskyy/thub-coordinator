@@ -249,7 +249,7 @@ mixin configPanes(r, returnTo, groupsById)
         +configPane(p, 'stlinks')
           +capabilitiesStatus(r)
           +deviceTable('stlinks', 'ST-Link probes', current.stlinks || [], ['Device', 'udev devpath'])
-          .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-stlink) or a /dev path. Which probe a job uses is up to its #[code --command] (#[code $THUB_DUT_STLINK_&lt;n&gt;]).
+          .form-text Device: a udev index 1–8 (→ /dev/thub/dut&lt;N&gt;-stlink) or a /dev path. Which probe a job uses is up to its #[code --command] (st-flash, by serial with several probes).
           +saveCapabilities(canEdit)
         +configPane(p, 'uarts')
           +capabilitiesStatus(r)
